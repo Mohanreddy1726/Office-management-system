@@ -751,6 +751,21 @@ function EmployeeDashboard({ me }: { me: any }) {
               </div>
               <StatusBadge status={todayRec?.confirmation ?? "Awaiting Employee"} />
             </div>
+
+            {/* Assigned Shift with dynamic timings */}
+            {(() => {
+              const userShift =
+                data.shifts.find((s) => s.id === todayRec?.shiftId) ||
+                data.shifts.find((s) => s.id === "SH-GEN") ||
+                data.shifts[0];
+              return userShift ? (
+                <div className="mt-3 flex items-center justify-between rounded-lg bg-primary/5 px-3 py-2 text-xs border border-primary/10">
+                  <span className="font-medium text-foreground">{userShift.name}</span>
+                  <span className="font-semibold text-primary">{userShift.start} - {userShift.end}</span>
+                </div>
+              ) : null;
+            })()}
+
             <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-md bg-muted/60 px-3 py-2">
                 <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Check-in</p>

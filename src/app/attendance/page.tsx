@@ -223,7 +223,18 @@ export default function AttendancePage() {
     {
       key: "shift",
       header: "Shift",
-      render: (r) => data.shifts.find((s) => s.id === r.shiftId)?.name ?? r.shiftId,
+      render: (r) => {
+        const s =
+          data.shifts.find((s) => s.id === r.shiftId) ||
+          data.shifts.find((s) => s.id === "SH-GEN") ||
+          data.shifts.find((s) => s.name.toLowerCase().includes("general")) ||
+          data.shifts[0];
+        return (
+          <span className="font-medium text-foreground">
+            {s ? `${s.name} (${s.start} - ${s.end})` : r.shiftId}
+          </span>
+        );
+      },
       hideOnMobile: true,
     },
     { key: "in", header: "Check In", render: (r) => r.checkIn ?? "—" },
@@ -237,10 +248,52 @@ export default function AttendancePage() {
     {
       key: "late",
       header: "Late",
-      render: (r) =>
-        r.lateMinutes ? <span className="font-semibold text-amber-600 dark:text-amber-400">+{r.lateMinutes}m</span> : "—",
+      render: (r) => {
+        const s =
+          data.shifts.find((sh) => sh.id === r.shiftId) ||
+          data.shifts.find((sh) => sh.id === "SH-GEN") ||
+          data.shifts[0];
+        let lateM = r.lateMinutes;
+        if (r.checkIn && s?.start && !["Leave", "Absent", "Holiday", "Week Off"].includes(r.status)) {
+          const [inH, inM] = r.checkIn.split(":").map(Number);
+          const [shH, shM] = s.start.split(":").map(Number);
+          if (!isNaN(inH) && !isNaN(inM) && !isNaN(shH) && !isNaN(shM)) {
+            const inMins = inH * 60 + inM;
+            const startMins = shH * 60 + shM;
+            const grace = s.graceMinutes ?? 10;
+            lateM = inMins > startMins + grace ? inMins - startMins : 0;
+          }
+        }
+        return lateM ? (
+          <span className="font-semibold text-amber-600 dark:text-amber-400">+{lateM}m</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        );
+      },
     },
-    { key: "status", header: "Status", render: (r) => <StatusBadge status={r.status} /> },
+    {
+      key: "status",
+      header: "Status",
+      render: (r) => {
+        const s =
+          data.shifts.find((sh) => sh.id === r.shiftId) ||
+          data.shifts.find((sh) => sh.id === "SH-GEN") ||
+          data.shifts[0];
+        let st = r.status;
+        if (r.checkIn && s?.start && !["Leave", "Absent", "Holiday", "Week Off"].includes(r.status)) {
+          const [inH, inM] = r.checkIn.split(":").map(Number);
+          const [shH, shM] = s.start.split(":").map(Number);
+          if (!isNaN(inH) && !isNaN(inM) && !isNaN(shH) && !isNaN(shM)) {
+            const inMins = inH * 60 + inM;
+            const startMins = shH * 60 + shM;
+            const grace = s.graceMinutes ?? 10;
+            if (inMins > startMins + grace) st = "Late";
+            else if (st === "Late") st = "Present";
+          }
+        }
+        return <StatusBadge status={st} />;
+      },
+    },
     { key: "confirm", header: "Confirmation", render: (r) => <StatusBadge status={r.confirmation} /> },
     { key: "src", header: "Source", render: (r) => r.source, hideOnMobile: true },
     {
@@ -309,7 +362,13 @@ export default function AttendancePage() {
                       r.employeeId,
                       nameOf(r.employeeId),
                       r.date,
-                      data.shifts.find((s) => s.id === r.shiftId)?.name ?? r.shiftId,
+                      (() => {
+                        const s =
+                          data.shifts.find((sh) => sh.id === r.shiftId) ||
+                          data.shifts.find((sh) => sh.id === "SH-GEN") ||
+                          data.shifts[0];
+                        return s ? `${s.name} (${s.start}-${s.end})` : r.shiftId;
+                      })(),
                       r.checkIn ?? "",
                       r.checkOut ?? "",
                       r.workedMinutes ?? "",
@@ -812,11 +871,35 @@ function AttendanceRecordCard({
 }) {
   const { data } = useStore();
   const emp = data.employees.find((e) => e.id === record.employeeId);
-  const shift = data.shifts.find((s) => s.id === record.shiftId);
+  const shift =
+    data.shifts.find((s) => s.id === record.shiftId) ||
+    data.shifts.find((s) => s.id === "SH-GEN") ||
+    data.shifts.find((s) => s.name.toLowerCase().includes("general")) ||
+    data.shifts[0];
 
   const workedHours = record.workedMinutes ? (record.workedMinutes / 60).toFixed(1) : "0.0";
-  const targetHours = 8.0;
+  const targetHours = shift?.minFullDayHours || 8.0;
   const quotaPercent = Math.min(100, Math.round((Number(workedHours) / targetHours) * 100));
+
+  // Dynamically evaluate effective late minutes and status against assigned shift
+  let effectiveLateMinutes = record.lateMinutes || 0;
+  let effectiveStatus = record.status;
+  if (record.checkIn && shift?.start && !["Leave", "Absent", "Holiday", "Week Off"].includes(record.status)) {
+    const [inH, inM] = record.checkIn.split(":").map(Number);
+    const [shH, shM] = shift.start.split(":").map(Number);
+    if (!isNaN(inH) && !isNaN(inM) && !isNaN(shH) && !isNaN(shM)) {
+      const inMins = inH * 60 + inM;
+      const startMins = shH * 60 + shM;
+      const grace = shift.graceMinutes ?? 10;
+      if (inMins > startMins + grace) {
+        effectiveLateMinutes = inMins - startMins;
+        effectiveStatus = "Late";
+      } else {
+        effectiveLateMinutes = 0;
+        if (effectiveStatus === "Late") effectiveStatus = "Present";
+      }
+    }
+  }
 
   // Presence dot color
   const dotColor = {
@@ -828,7 +911,7 @@ function AttendanceRecordCard({
     Holiday: "bg-purple-500",
     "Week Off": "bg-slate-400",
     "Pending Review": "bg-slate-400",
-  }[record.status] ?? "bg-slate-400";
+  }[effectiveStatus] ?? "bg-slate-400";
 
   return (
     <div
@@ -886,11 +969,11 @@ function AttendanceRecordCard({
             <span
               className={cn(
                 "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold border",
-                attColor(record.status)
+                attColor(effectiveStatus)
               )}
             >
               <span className={cn("h-1.5 w-1.5 rounded-full", dotColor)} />
-              {record.status}
+              {effectiveStatus}
             </span>
 
             {!isEmployee && (
@@ -907,11 +990,14 @@ function AttendanceRecordCard({
         {/* Divider */}
         <div className="my-3.5 border-t border-slate-100 dark:border-slate-800" />
 
-        {/* Punch Timing Highlight Banner */}
-        <div className="mb-3.5 flex items-center justify-between rounded-xl bg-slate-50 px-3.5 py-2.5 text-xs text-foreground dark:bg-muted/30">
-          <div className="flex items-center gap-2">
-            <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="font-medium">
+        {/* Punch Timing Highlight Banner with Dynamic Shift Info */}
+        <div className="mb-3.5 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3.5 py-2.5 text-xs text-foreground dark:bg-muted/30">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+              <Clock className="h-3 w-3" />
+              Shift: {shift?.start || "09:30"} - {shift?.end || "18:30"}
+            </span>
+            <span className="font-medium text-xs text-muted-foreground">
               In: <strong className="text-foreground">{record.checkIn || "—"}</strong>
               {"  "}•{"  "}
               Out: <strong className="text-foreground">{record.checkOut || "—"}</strong>
@@ -939,10 +1025,10 @@ function AttendanceRecordCard({
             <p
               className={cn(
                 "mt-0.5 text-base font-bold",
-                record.lateMinutes > 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"
+                effectiveLateMinutes > 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"
               )}
             >
-              {record.lateMinutes > 0 ? `+${record.lateMinutes}m` : "On Time"}
+              {effectiveLateMinutes > 0 ? `+${effectiveLateMinutes}m` : "On Time"}
             </p>
           </div>
 
@@ -958,7 +1044,7 @@ function AttendanceRecordCard({
         {/* Quota Progress Bar */}
         <div className="mt-3.5 space-y-1">
           <div className="flex justify-between text-[11px]">
-            <span className="text-muted-foreground">Daily Shift Quota (8.0h)</span>
+            <span className="text-muted-foreground">Daily Shift Quota ({targetHours.toFixed(1)}h)</span>
             <span className="font-semibold text-foreground">
               {workedHours} / {targetHours.toFixed(1)}h ({quotaPercent}%)
             </span>
@@ -986,7 +1072,8 @@ function AttendanceRecordCard({
         <div className="text-[11px] text-muted-foreground">
           <span className="font-medium text-foreground">{fmtDate(record.date)}</span>
           {" · "}
-          <span>{shift?.name || "General Shift"}</span>
+          <span className="font-medium text-foreground">{shift?.name || "General Shift"}</span>{" "}
+          <span className="font-normal text-muted-foreground">({shift?.start || "09:30"} - {shift?.end || "18:30"})</span>
         </div>
 
         <div className="flex items-center gap-1.5">
@@ -1216,6 +1303,23 @@ function ConfirmationCard({
 }) {
   const { data } = useStore();
   const emp = data.employees.find((e) => e.id === record.employeeId);
+  const shift =
+    data.shifts.find((s) => s.id === record.shiftId) ||
+    data.shifts.find((s) => s.id === "SH-GEN") ||
+    data.shifts.find((s) => s.name.toLowerCase().includes("general")) ||
+    data.shifts[0];
+
+  let effectiveLateMinutes = record.lateMinutes || 0;
+  if (record.checkIn && shift?.start && !["Leave", "Absent", "Holiday", "Week Off"].includes(record.status)) {
+    const [inH, inM] = record.checkIn.split(":").map(Number);
+    const [shH, shM] = shift.start.split(":").map(Number);
+    if (!isNaN(inH) && !isNaN(inM) && !isNaN(shH) && !isNaN(shM)) {
+      const inMins = inH * 60 + inM;
+      const startMins = shH * 60 + shM;
+      const grace = shift.graceMinutes ?? 10;
+      effectiveLateMinutes = inMins > startMins + grace ? inMins - startMins : 0;
+    }
+  }
 
   return (
     <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm dark:bg-card dark:border-border hover:shadow-md transition-shadow">
@@ -1244,6 +1348,12 @@ function ConfirmationCard({
           <span className="font-semibold text-foreground">{fmtDate(record.date)}</span>
         </div>
         <div className="flex justify-between">
+          <span className="text-muted-foreground">Assigned Shift:</span>
+          <span className="font-semibold text-foreground">
+            {shift?.name || "General Shift"} ({shift?.start || "09:30"} - {shift?.end || "18:30"})
+          </span>
+        </div>
+        <div className="flex justify-between">
           <span className="text-muted-foreground">Recorded Punches:</span>
           <span className="font-semibold text-foreground">
             {record.checkIn || "—"} → {record.checkOut || "—"}
@@ -1255,10 +1365,10 @@ function ConfirmationCard({
             {record.workedMinutes ? `${Math.floor(record.workedMinutes / 60)}h ${record.workedMinutes % 60}m` : "—"}
           </span>
         </div>
-        {record.lateMinutes > 0 && (
+        {effectiveLateMinutes > 0 && (
           <div className="flex justify-between text-amber-600 font-medium">
             <span>Late Arrival:</span>
-            <span>+{record.lateMinutes} mins</span>
+            <span>+{effectiveLateMinutes} mins</span>
           </div>
         )}
       </div>
@@ -1566,24 +1676,34 @@ function CorrectionDialog({
   const { data } = useStore();
   const { isEmployee, uid, inScope } = useScope();
 
+  const genShift =
+    data.shifts.find((s) => s.id === "SH-GEN") ||
+    data.shifts.find((s) => s.name.toLowerCase().includes("general")) ||
+    data.shifts[0];
+  const defaultIn = genShift?.start || "09:30";
+  const defaultOut = genShift?.end || "18:30";
+
   const [emp, setEmp] = useState(prefill?.empId || uid);
   const [date, setDate] = useState(prefill?.date || TODAY);
-  const [inT, setIn] = useState(prefill?.checkIn || "09:30");
-  const [outT, setOut] = useState(prefill?.checkOut || "18:30");
+  const [inT, setIn] = useState(prefill?.checkIn || defaultIn);
+  const [outT, setOut] = useState(prefill?.checkOut || defaultOut);
   const [workMode, setWorkMode] = useState<"Office" | "WFH" | "Client Site" | "Tour">("Office");
   const [corrType, setCorrType] = useState("Missed In / Out Punch");
   const [ticketRef, setTicketRef] = useState("");
   const [reason, setReason] = useState("");
 
-  // Sync when prefill changes
-  useMemo(() => {
+  // Sync when prefill or shift changes or dialog opens
+  useEffect(() => {
     if (prefill) {
       if (prefill.empId) setEmp(prefill.empId);
       if (prefill.date) setDate(prefill.date);
-      if (prefill.checkIn) setIn(prefill.checkIn);
-      if (prefill.checkOut) setOut(prefill.checkOut);
+      setIn(prefill.checkIn || defaultIn);
+      setOut(prefill.checkOut || defaultOut);
+    } else {
+      setIn(defaultIn);
+      setOut(defaultOut);
     }
-  }, [prefill]);
+  }, [prefill, defaultIn, defaultOut, open]);
 
   const rec = data.attendance.find((a) => a.employeeId === emp && a.date === date);
   const valid = reason.trim().length >= 4 && inT < outT;

@@ -301,7 +301,13 @@ export default function EmployeeDetailPage() {
                 <Stat label="Employment type" value={e.employmentType} />
                 <Stat label="Probation" value={`${e.probationMonths} months`} />
                 <Stat label="Status" value={<StatusBadge status={e.status} />} />
-                <Stat label="Shift" value={data.shifts[0]?.name ?? "General"} />
+                <Stat
+                  label="Shift"
+                  value={(() => {
+                    const s = data.shifts.find((sh) => sh.id === "SH-GEN") || data.shifts[0];
+                    return s ? `${s.name} (${s.start} - ${s.end})` : "General";
+                  })()}
+                />
               </Grid>
             </Card>
           )}

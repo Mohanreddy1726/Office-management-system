@@ -106,7 +106,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const raw = window.localStorage.getItem(KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed?.data) setData(parsed.data);
+        if (parsed?.data) {
+          if (Array.isArray(parsed.data.shifts) && Array.isArray(parsed.data.attendance)) {
+            const shifts = parsed.data.shifts;
+            const genShift = shifts.find((s: any) => s.id === "SH-GEN") || shifts[0];
+            parsed.data.attendance = parsed.data.attendance.map((rec: any) => {
+              const recShift = shifts.find((s: any) => s.id === rec.shiftId) || genShift;
+              if (rec.checkIn && recShift?.start && !["Leave", "Absent", "Holiday", "Week Off"].includes(rec.status)) {
+                const [inH, inM] = rec.checkIn.split(":").map(Number);
+                const [shH, shM] = recShift.start.split(":").map(Number);
+                if (!isNaN(inH) && !isNaN(inM) && !isNaN(shH) && !isNaN(shM)) {
+                  const checkInMins = inH * 60 + inM;
+                  const shiftStartMins = shH * 60 + shM;
+                  const grace = recShift.graceMinutes ?? 10;
+                  const isLate = checkInMins > shiftStartMins + grace;
+                  const lateMinutes = isLate ? checkInMins - shiftStartMins : 0;
+                  const status = isLate ? "Late" : (rec.status === "Late" ? "Present" : rec.status);
+                  return { ...rec, lateMinutes, status };
+                }
+              }
+              return rec;
+            });
+          }
+          setData(parsed.data);
+        }
         setSession(parsed?.session ?? null);
         setPrefs(parsed?.prefs ?? prefs);
       }
@@ -393,10 +416,47 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         audit({ user: session ? nameOf(data, session.userId) : "Demo", action: "Created shift", module: "Attendance", record: sh.name, outcome: "Success" });
       },
       updateShift: (id, patch) => {
-        setData((d) => ({
-          ...d,
-          shifts: d.shifts.map((s) => (s.id === id ? { ...s, ...patch } : s)),
-        }));
+        setData((d) => {
+          const updatedShifts = d.shifts.map((s) => (s.id === id ? { ...s, ...patch } : s));
+          const targetShift = updatedShifts.find((s) => s.id === id);
+
+          // Recalculate attendance records belonging to this shift when timing parameters change
+          let updatedAttendance = d.attendance;
+          if (targetShift && (patch.start !== undefined || patch.end !== undefined || patch.graceMinutes !== undefined)) {
+            const [shH, shM] = targetShift.start.split(":").map(Number);
+            const shiftStartMins = (shH || 0) * 60 + (shM || 0);
+            const grace = targetShift.graceMinutes ?? 10;
+
+            updatedAttendance = d.attendance.map((rec) => {
+              const recShiftId = rec.shiftId || "SH-GEN";
+              if (recShiftId !== id && !(id === "SH-GEN" && (recShiftId === "SH-GEN" || recShiftId.includes("GEN")))) {
+                return rec;
+              }
+              if (!rec.checkIn || ["Leave", "Absent", "Holiday", "Week Off"].includes(rec.status)) {
+                return rec;
+              }
+
+              const [inH, inM] = rec.checkIn.split(":").map(Number);
+              if (isNaN(inH) || isNaN(inM)) return rec;
+              const checkInMins = inH * 60 + inM;
+              const isLate = checkInMins > shiftStartMins + grace;
+              const lateMinutes = isLate ? checkInMins - shiftStartMins : 0;
+              const status = isLate ? "Late" : (rec.status === "Late" ? "Present" : rec.status);
+
+              return {
+                ...rec,
+                lateMinutes,
+                status,
+              };
+            });
+          }
+
+          return {
+            ...d,
+            shifts: updatedShifts,
+            attendance: updatedAttendance,
+          };
+        });
         const s = data.shifts.find((x) => x.id === id);
         audit({
           user: session ? nameOf(data, session.userId) : "Demo",
