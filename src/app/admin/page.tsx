@@ -1055,7 +1055,7 @@ function InviteDialog({
   const { data } = useStore();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("GvkUser@123");
+  const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [role, setRole] = useState<Role>("employee");
   const [branch, setBranch] = useState("Headquarters");
@@ -1078,7 +1078,7 @@ function InviteDialog({
       });
       setName("");
       setEmail("");
-      setPassword("GvkUser@123");
+      setPassword("");
     } finally {
       setSubmitting(false);
     }
@@ -1124,7 +1124,7 @@ function InviteDialog({
           <Field label="Initial Password" required hint="User can change later">
             <Input
               type="text"
-              placeholder="Initial password"
+              placeholder="Enter initial password (e.g. GvkUser@123)"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="h-9"

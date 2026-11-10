@@ -99,6 +99,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Create JWT Token
+    const originalRole = user.role;
+    const originalUserId = user.employeeId || user._id?.toString() || "u-1";
+    const originalName = user.name;
+    const originalEmail = user.email;
+
     const token = await signSessionToken({
       userId: user._id?.toString() || "u-1",
       employeeId: user.employeeId,
@@ -106,6 +111,10 @@ export async function POST(req: NextRequest) {
       name: user.name,
       role: user.role,
       branch: user.branch || "Headquarters",
+      originalRole,
+      originalUserId,
+      originalName,
+      originalEmail,
     });
 
     const response = NextResponse.json({
@@ -117,6 +126,9 @@ export async function POST(req: NextRequest) {
         role: user.role,
         employeeId: user.employeeId,
         branch: user.branch,
+        originalRole,
+        originalUserId,
+        originalName,
       },
     });
 

@@ -499,7 +499,16 @@ export interface AppState {
   audit: AuditEntry[];
 }
 
-export interface Session { userId: string; role: Role }
+export interface Session {
+  userId: string;
+  role: Role;
+  name?: string;
+  email?: string;
+  employeeId?: string;
+  originalRole?: Role;
+  originalUserId?: string;
+  originalName?: string;
+}
 
 export interface Prefs { sidebarCollapsed: boolean; branch: Branch | "All Branches" }
 

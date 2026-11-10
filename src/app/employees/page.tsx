@@ -135,6 +135,47 @@ export default function EmployeesPage() {
     },
     { key: "tenure", header: "Tenure", render: (r) => tenure(r.joiningDate), hideOnMobile: true },
     { key: "status", header: "Status", render: (r) => <StatusBadge status={r.status} /> },
+    {
+      key: "actions",
+      header: "Actions",
+      render: (r) => (
+        <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              try {
+                toast.loading(`Sending verification mail to ${r.name}...`, { id: `resend-${r.id}` });
+                const res = await fetch("/api/employees/resend-verification", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    employeeId: r.id,
+                    email: r.personalEmail || r.workEmail,
+                  }),
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                  toast.error(data.error || "Failed to resend verification link", { id: `resend-${r.id}` });
+                } else {
+                  toast.success(`Verification link sent to ${data.recipient || r.personalEmail || r.workEmail}`, {
+                    id: `resend-${r.id}`,
+                    description: "Employee can now activate their account and receive login credentials.",
+                  });
+                }
+              } catch (err: any) {
+                toast.error(err.message || "Failed to resend verification link", { id: `resend-${r.id}` });
+              }
+            }}
+            className="h-7 gap-1 border-amber-300 bg-amber-50 text-[11px] font-semibold text-amber-900 hover:bg-amber-100"
+          >
+            <Mail className="h-3 w-3 text-amber-700" />
+            <span>Resend Link</span>
+          </Button>
+        </div>
+      ),
+    },
   ];
 
   return (
@@ -376,6 +417,35 @@ function EmployeeCard({
 }) {
   const router = useRouter();
   const { data } = useStore();
+  const [isResending, setIsResending] = useState(false);
+
+  const handleResendVerification = async (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (isResending) return;
+    setIsResending(true);
+    try {
+      const res = await fetch("/api/employees/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employeeId: emp.id,
+          email: emp.personalEmail || emp.workEmail,
+        }),
+      });
+      const resData = await res.json();
+      if (!res.ok) {
+        toast.error(resData.error || "Failed to resend verification link");
+      } else {
+        toast.success(`Verification link sent to ${resData.recipient || emp.personalEmail || emp.workEmail}`, {
+          description: "Employee can now click the link to activate their account and receive login credentials.",
+        });
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to resend verification link");
+    } finally {
+      setIsResending(false);
+    }
+  };
 
   // Calculate deterministic metrics for this employee
   const attRecords = data.attendance.filter((a) => a.employeeId === emp.id);
@@ -474,6 +544,19 @@ function EmployeeCard({
             <div className="flex items-center gap-1 text-muted-foreground">
               <button
                 type="button"
+                onClick={handleResendVerification}
+                disabled={isResending}
+                className="rounded-md p-1 hover:bg-amber-100 hover:text-amber-800 text-amber-600 transition-colors"
+                title="Resend Verification Mail"
+              >
+                {isResending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-600" />
+                ) : (
+                  <Mail className="h-3.5 w-3.5" />
+                )}
+              </button>
+              <button
+                type="button"
                 onClick={onResetPassword}
                 className="rounded-md p-1 hover:bg-amber-50 hover:text-amber-700 transition-colors"
                 title="Reset Password"
@@ -516,6 +599,32 @@ function EmployeeCard({
             </a>
           </div>
         </div>
+
+        {/* Verification Status Banner if Pending */}
+        {emp.status === "Pending Verification" && (
+          <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50/90 px-3 py-2 text-xs text-amber-900 shadow-xs">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+              <span className="truncate font-medium text-[11px]">
+                Pending Verification ({emp.personalEmail || emp.workEmail})
+              </span>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleResendVerification}
+              disabled={isResending}
+              className="h-7 shrink-0 gap-1.5 border border-amber-400 bg-amber-600 px-2.5 text-[11px] font-semibold text-white hover:bg-amber-700 shadow-xs"
+            >
+              {isResending ? (
+                <Loader2 className="h-3 w-3 animate-spin text-white" />
+              ) : (
+                <Mail className="h-3 w-3 text-white" />
+              )}
+              <span>Resend Link</span>
+            </Button>
+          </div>
+        )}
 
         {/* Responsibility / Activity Banner */}
         <div className="mt-3 flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50/50 px-3 py-2 text-xs text-blue-900">
@@ -565,15 +674,32 @@ function EmployeeCard({
             Joined {fmtDate(emp.joiningDate)}
           </span>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleResendVerification}
+              disabled={isResending}
+              className="h-8 gap-1.5 border-amber-400 bg-amber-50 text-xs font-semibold text-amber-900 hover:bg-amber-100 shadow-sm"
+              title="Resend verification and login details email"
+            >
+              {isResending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-700" />
+              ) : (
+                <Mail className="h-3.5 w-3.5 text-amber-700" />
+              )}
+              <span>Resend Verification Link</span>
+            </Button>
+
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={onResetPassword}
-              className="h-8 gap-1 border-amber-300 bg-amber-50/40 text-xs font-medium text-amber-800 hover:bg-amber-100"
+              className="h-8 gap-1 border-slate-200 bg-slate-50/60 text-xs font-medium text-slate-700 hover:bg-slate-100"
             >
-              <Key className="h-3.5 w-3.5 text-amber-600" />
+              <Key className="h-3.5 w-3.5 text-slate-600" />
               <span>Reset Password</span>
             </Button>
 
@@ -665,11 +791,11 @@ function AddEmployeeDialog({
 
   // 1. Personal Details
   const [name, setName] = useState("");
-  const [dob, setDob] = useState("1996-05-15");
-  const [gender, setGender] = useState("Female");
-  const [bloodGroup, setBloodGroup] = useState("O+");
-  const [maritalStatus, setMaritalStatus] = useState<"Single" | "Married" | "Other">("Single");
-  const [phone, setPhone] = useState("+91 98490 12345");
+  const [dob, setDob] = useState("");
+  const [gender, setGender] = useState("");
+  const [bloodGroup, setBloodGroup] = useState("");
+  const [maritalStatus, setMaritalStatus] = useState<string>("");
+  const [phone, setPhone] = useState("");
   const [personalEmail, setPersonalEmail] = useState("");
   const [emergencyContact, setEmergencyContact] = useState("");
   const [address, setAddress] = useState("");
@@ -678,38 +804,38 @@ function AddEmployeeDialog({
 
   // 2. Job & Organization
   const [designation, setDesignation] = useState("");
-  const [department, setDepartment] = useState(DEPARTMENTS[0]!);
-  const [team, setTeam] = useState("Frontend Platform");
-  const [branch, setBranch] = useState(BRANCHES[0]!);
-  const [employmentType, setEmploymentType] = useState<"Full-time" | "Part-time" | "Contract" | "Intern">("Full-time");
+  const [department, setDepartment] = useState("");
+  const [team, setTeam] = useState("");
+  const [branch, setBranch] = useState("");
+  const [employmentType, setEmploymentType] = useState<string>("");
   const [managerId, setManagerId] = useState<string>("");
-  const [joining, setJoining] = useState("2026-11-15");
-  const [probationMonths, setProbationMonths] = useState("6");
+  const [joining, setJoining] = useState("");
+  const [probationMonths, setProbationMonths] = useState("");
   const [workEmail, setWorkEmail] = useState("");
 
   // 3. Education & Qualification
-  const [qualification, setQualification] = useState("B.Tech in Computer Science");
-  const [institution, setInstitution] = useState("JNTU Hyderabad");
-  const [graduationYear, setGraduationYear] = useState("2022");
-  const [grade, setGrade] = useState("8.2 CGPA");
+  const [qualification, setQualification] = useState("");
+  const [institution, setInstitution] = useState("");
+  const [graduationYear, setGraduationYear] = useState("");
+  const [grade, setGrade] = useState("");
 
   // 4. Prior Experience
-  const [experienceYears, setExperienceYears] = useState("2.5");
+  const [experienceYears, setExperienceYears] = useState("");
   const [previousCompany, setPreviousCompany] = useState("");
   const [previousDesignation, setPreviousDesignation] = useState("");
-  const [skills, setSkills] = useState("React, TypeScript, Next.js, Node.js");
+  const [skills, setSkills] = useState("");
 
   // 5. Compensation & Banking (No PF & No ESI)
-  const [ctc, setCtc] = useState("900000");
-  const [salaryStructureId, setSalaryStructureId] = useState("SS-STANDARD");
-  const [bankName, setBankName] = useState("HDFC Bank");
+  const [ctc, setCtc] = useState("");
+  const [salaryStructureId, setSalaryStructureId] = useState("");
+  const [bankName, setBankName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
-  const [ifscCode, setIfscCode] = useState("HDFC0001844");
-  const [paymentMethod, setPaymentMethod] = useState("Corporate NEFT");
+  const [ifscCode, setIfscCode] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("");
 
   // 6. Login Credentials & Access
   const [loginEmail, setLoginEmail] = useState("");
-  const [loginPassword, setLoginPassword] = useState("GvkEmp@2026");
+  const [loginPassword, setLoginPassword] = useState("");
   const [userRole, setUserRole] = useState<Role>("employee");
   const [sendVerification, setSendVerification] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
@@ -767,7 +893,7 @@ function AddEmployeeDialog({
     }
 
     const emailToUse = workEmail.trim() || `${name.toLowerCase().replace(/[^a-z0-9]+/g, ".")}@gvkedutech.com`;
-    const acc = accountNumber.trim() || `501004${Math.floor(10000000 + Math.random() * 90000000)}`;
+    const acc = accountNumber.trim();
 
     setSubmitting(true);
     try {
@@ -776,50 +902,50 @@ function AddEmployeeDialog({
         workEmail: emailToUse,
         personalEmail: personalEmail.trim() || `${name.toLowerCase().replace(/[^a-z0-9]+/g, ".")}@gmail.com`,
         phone: phone.trim(),
-        dob,
-        gender,
-        bloodGroup,
-        maritalStatus,
-        address: address.trim() || "Hyderabad, Telangana, India",
-        emergencyContact: emergencyContact.trim() || "Family Contact: +91 98490 00000",
-        pan: pan.trim().toUpperCase() || "ABCDE1234F",
+        dob: dob || "2000-01-01",
+        gender: gender || "Other",
+        bloodGroup: bloodGroup || undefined,
+        maritalStatus: (maritalStatus as any) || "Single",
+        address: address.trim(),
+        emergencyContact: emergencyContact.trim(),
+        pan: pan.trim().toUpperCase(),
         aadhaarNumber: cleanAadhaar,
         aadharLast4: cleanAadhaar.slice(-4),
 
         // Job Details
         designation: designation.trim(),
-        department,
-        team: team.trim() || "Frontend Platform",
-        branch,
-        employmentType,
+        department: department || DEPARTMENTS[0] || "Operations",
+        team: team.trim() || "Operations",
+        branch: (branch as any) || BRANCHES[0] || "Headquarters",
+        employmentType: (employmentType as any) || "Full-time",
         managerId: managerId || null,
-        joiningDate: joining,
-        probationMonths: Number(probationMonths),
-        status: sendVerification ? "Pending Verification" : (Number(probationMonths) > 0 ? "Probation" : "Active"),
+        joiningDate: joining || new Date().toISOString().slice(0, 10),
+        probationMonths: probationMonths ? Number(probationMonths) : 3,
+        status: sendVerification ? "Pending Verification" : (probationMonths && Number(probationMonths) > 0 ? "Probation" : "Active"),
 
         // Education
         qualification: qualification.trim(),
         institution: institution.trim(),
-        graduationYear: graduationYear ? Number(graduationYear) : 2022,
+        graduationYear: graduationYear ? Number(graduationYear) : undefined,
         grade: grade.trim(),
 
         // Prior Experience
         experienceYears: experienceYears ? Number(experienceYears) : 0,
-        previousCompany: previousCompany.trim() || "Fresher / None",
-        previousDesignation: previousDesignation.trim() || "Graduate Trainee",
+        previousCompany: previousCompany.trim(),
+        previousDesignation: previousDesignation.trim(),
         skills: skills.trim(),
 
         // Compensation & Banking (No PF & No ESI)
-        annualCTC: Number(ctc),
+        annualCTC: Number(ctc) || 0,
         monthlyGross: calculatedMonthly,
         salaryStructureId:
           salaryStructureId ||
           (Number(ctc) > 1500000 ? "SS-EXEC" : Number(ctc) > 800000 ? "SS-SENIOR" : "SS-STANDARD"),
-        bankName,
+        bankName: bankName.trim(),
         accountNumber: acc,
-        bankLast4: acc.slice(-4),
+        bankLast4: acc ? acc.slice(-4) : undefined,
         ifscCode: ifscCode.trim().toUpperCase(),
-        paymentMethod,
+        paymentMethod: paymentMethod || "Corporate NEFT",
 
         // Login & Credentials
         loginEmail: loginEmail.trim() || emailToUse,
@@ -896,7 +1022,7 @@ function AddEmployeeDialog({
 
               <Field label="Gender" required>
                 <Select value={gender} onValueChange={setGender}>
-                  <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select gender" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Female">Female</SelectItem>
                     <SelectItem value="Male">Male</SelectItem>
@@ -908,7 +1034,7 @@ function AddEmployeeDialog({
 
               <Field label="Blood Group">
                 <Select value={bloodGroup} onValueChange={setBloodGroup}>
-                  <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select blood group" /></SelectTrigger>
                   <SelectContent>
                     {["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"].map((bg) => (
                       <SelectItem key={bg} value={bg}>{bg}</SelectItem>
@@ -919,7 +1045,7 @@ function AddEmployeeDialog({
 
               <Field label="Marital Status">
                 <Select value={maritalStatus} onValueChange={(v) => setMaritalStatus(v as any)}>
-                  <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select marital status" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Single">Single</SelectItem>
                     <SelectItem value="Married">Married</SelectItem>
@@ -932,7 +1058,7 @@ function AddEmployeeDialog({
                 <Input
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+91 98490 12345"
+                  placeholder="e.g. +91 98765 43210"
                   className="h-9 text-xs"
                 />
               </Field>
@@ -942,7 +1068,7 @@ function AddEmployeeDialog({
                   type="email"
                   value={personalEmail}
                   onChange={(e) => setPersonalEmail(e.target.value)}
-                  placeholder="meera.iyer@gmail.com"
+                  placeholder="e.g. name@gmail.com"
                   className="h-9 text-xs"
                 />
               </Field>
@@ -951,7 +1077,7 @@ function AddEmployeeDialog({
                 <Input
                   value={emergencyContact}
                   onChange={(e) => setEmergencyContact(e.target.value)}
-                  placeholder="Ramesh Iyer (+91 98490 54321)"
+                  placeholder="e.g. Contact Person (+91 98765 43210)"
                   className="h-9 text-xs"
                 />
               </Field>
@@ -960,7 +1086,7 @@ function AddEmployeeDialog({
                 <Input
                   value={pan}
                   onChange={(e) => setPan(e.target.value.toUpperCase())}
-                  placeholder="ABCDE1234F"
+                  placeholder="e.g. ABCDE1234F"
                   className="h-9 text-xs font-mono uppercase"
                   maxLength={10}
                 />
@@ -970,7 +1096,7 @@ function AddEmployeeDialog({
                 <Input
                   value={aadhaarNumber}
                   onChange={(e) => handleAadhaarChange(e.target.value)}
-                  placeholder="1234 5678 9012"
+                  placeholder="e.g. 1234 5678 9012"
                   className="h-9 text-xs font-mono font-semibold tracking-wider"
                   maxLength={14}
                 />
@@ -981,7 +1107,7 @@ function AddEmployeeDialog({
                   <Textarea
                     value={address}
                     onChange={(e) => setAddress(e.target.value)}
-                    placeholder="Flat 402, Lotus Towers, Madhapur, Hyderabad - 500081"
+                    placeholder="Enter complete residential address"
                     className="text-xs min-h-[60px]"
                   />
                 </Field>
@@ -1016,7 +1142,7 @@ function AddEmployeeDialog({
 
               <Field label="Department" required>
                 <Select value={department} onValueChange={setDepartment}>
-                  <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select department" /></SelectTrigger>
                   <SelectContent>
                     {DEPARTMENTS.map((d) => (
                       <SelectItem key={d} value={d}>{d}</SelectItem>
@@ -1027,7 +1153,7 @@ function AddEmployeeDialog({
 
               <Field label="Assigned Team" required>
                 <Select value={team} onValueChange={setTeam}>
-                  <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select team" /></SelectTrigger>
                   <SelectContent>
                     {[
                       "Frontend Platform",
@@ -1048,7 +1174,7 @@ function AddEmployeeDialog({
 
               <Field label="Branch Office" required>
                 <Select value={branch} onValueChange={(v) => setBranch(v as typeof branch)}>
-                  <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select branch office" /></SelectTrigger>
                   <SelectContent>
                     {BRANCHES.map((b) => (
                       <SelectItem key={b} value={b}>{b}</SelectItem>
@@ -1059,7 +1185,7 @@ function AddEmployeeDialog({
 
               <Field label="Employment Type">
                 <Select value={employmentType} onValueChange={(v) => setEmploymentType(v as any)}>
-                  <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select employment type" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Full-time">Full-time Permanent</SelectItem>
                     <SelectItem value="Part-time">Part-time</SelectItem>
@@ -1073,9 +1199,9 @@ function AddEmployeeDialog({
                 <select
                   value={managerId}
                   onChange={(e) => setManagerId(e.target.value)}
-                  className="w-full h-9 rounded-md border border-input bg-background px-3 py-1.5 text-xs"
+                  className="w-full h-9 rounded-md border border-input bg-background px-3 py-1.5 text-xs text-foreground"
                 >
-                  <option value="">Directly to Leadership (No Lead)</option>
+                  <option value="">Select reporting manager (or None)</option>
                   {data.employees
                     .filter((emp) => emp.designation.includes("Lead") || emp.designation.includes("Manager") || emp.designation.includes("Director"))
                     .map((m) => (
@@ -1097,7 +1223,7 @@ function AddEmployeeDialog({
 
               <Field label="Probation Duration">
                 <Select value={probationMonths} onValueChange={setProbationMonths}>
-                  <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select duration" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="3">3 Months</SelectItem>
                     <SelectItem value="6">6 Months</SelectItem>
@@ -1112,7 +1238,7 @@ function AddEmployeeDialog({
                     type="email"
                     value={workEmail}
                     onChange={(e) => setWorkEmail(e.target.value)}
-                    placeholder="meera.iyer@gvkedutech.com"
+                    placeholder="e.g. firstname.lastname@gvkedutech.com"
                     className="h-9 text-xs"
                   />
                 </Field>
@@ -1299,14 +1425,15 @@ function AddEmployeeDialog({
                   type="number"
                   value={ctc}
                   onChange={(e) => setCtc(e.target.value)}
-                  placeholder="900000"
+                  placeholder="e.g. 600000"
                   className="h-9 text-xs font-mono font-semibold"
                 />
               </Field>
 
               <Field label="Calculated Monthly Gross (₹)" hint="Auto-computed: Annual CTC ÷ 12">
                 <Input
-                  value={inr(calculatedMonthly)}
+                  value={calculatedMonthly ? inr(calculatedMonthly) : ""}
+                  placeholder="₹0"
                   disabled
                   className="h-9 text-xs bg-muted/40 font-mono font-bold text-foreground"
                 />
@@ -1314,7 +1441,7 @@ function AddEmployeeDialog({
 
               <Field label="Salary Structure Template">
                 <Select value={salaryStructureId} onValueChange={setSalaryStructureId}>
-                  <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select salary template" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="SS-STANDARD">Standard (No PF / No ESI) — Up to ₹8 LPA</SelectItem>
                     <SelectItem value="SS-SENIOR">Senior Staff (No PF / No ESI) — ₹8 to ₹15 LPA</SelectItem>
@@ -1324,23 +1451,32 @@ function AddEmployeeDialog({
               </Field>
 
               <Field label="Beneficiary Bank Name" required>
-                <Select value={bankName} onValueChange={setBankName}>
-                  <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="HDFC Bank">HDFC Bank</SelectItem>
-                    <SelectItem value="ICICI Bank">ICICI Bank</SelectItem>
-                    <SelectItem value="State Bank of India">State Bank of India</SelectItem>
-                    <SelectItem value="Axis Bank">Axis Bank</SelectItem>
-                    <SelectItem value="Kotak Mahindra Bank">Kotak Mahindra Bank</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Input
+                  list="bank-suggestions"
+                  value={bankName}
+                  onChange={(e) => setBankName(e.target.value)}
+                  placeholder="e.g. ICICI Bank, State Bank of India, HDFC Bank, Axis Bank"
+                  className="h-9 text-xs"
+                />
+                <datalist id="bank-suggestions">
+                  <option value="State Bank of India" />
+                  <option value="ICICI Bank" />
+                  <option value="HDFC Bank" />
+                  <option value="Axis Bank" />
+                  <option value="Kotak Mahindra Bank" />
+                  <option value="Punjab National Bank" />
+                  <option value="Bank of Baroda" />
+                  <option value="Canara Bank" />
+                  <option value="Union Bank of India" />
+                  <option value="IndusInd Bank" />
+                </datalist>
               </Field>
 
               <Field label="Bank Account Number" required>
                 <Input
                   value={accountNumber}
                   onChange={(e) => setAccountNumber(e.target.value)}
-                  placeholder="50100412345678"
+                  placeholder="e.g. 436201502494"
                   className="h-9 text-xs font-mono"
                 />
               </Field>
@@ -1349,14 +1485,14 @@ function AddEmployeeDialog({
                 <Input
                   value={ifscCode}
                   onChange={(e) => setIfscCode(e.target.value.toUpperCase())}
-                  placeholder="HDFC0001844"
+                  placeholder="e.g. ICIC0004362, SBIN0001234"
                   className="h-9 text-xs font-mono uppercase"
                 />
               </Field>
 
               <Field label="Payment Disbursement Mode">
                 <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                  <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select payment mode" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Corporate NEFT">Corporate NEFT</SelectItem>
                     <SelectItem value="RTGS Direct">RTGS Direct</SelectItem>
@@ -1410,14 +1546,14 @@ function AddEmployeeDialog({
                   type="email"
                   value={loginEmail || workEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
-                  placeholder="employee@gvkedutech.com"
+                  placeholder="e.g. employee@gvkedutech.com"
                   className="h-9 text-xs font-mono"
                 />
               </Field>
 
               <Field label="Assigned System Role" required hint="Controls permissions & dashboard view">
                 <Select value={userRole} onValueChange={(v) => setUserRole(v as Role)}>
-                  <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select system role" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="employee">Employee (Standard Portal Access)</SelectItem>
                     <SelectItem value="manager">Manager (Attendance & Leave Approver)</SelectItem>
@@ -1438,7 +1574,7 @@ function AddEmployeeDialog({
                         type={showPassword ? "text" : "password"}
                         value={loginPassword}
                         onChange={(e) => setLoginPassword(e.target.value)}
-                        placeholder="Enter password"
+                        placeholder="e.g. GvkEmp@2026 (or auto-generate)"
                         className="h-9 text-xs font-mono pr-9"
                       />
                       <button

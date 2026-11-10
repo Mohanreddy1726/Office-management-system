@@ -65,7 +65,15 @@ export default function LoginPage() {
 
       // 2. Update local state store
       const userRole = (data.user?.role as Role) || role || "super_admin";
-      signIn(userRole);
+      signIn(userRole, {
+        userId: data.user?.employeeId || data.user?.id,
+        name: data.user?.name,
+        email: data.user?.email,
+        employeeId: data.user?.employeeId,
+        originalRole: (data.user?.originalRole as Role) || userRole,
+        originalUserId: data.user?.originalUserId || data.user?.employeeId || data.user?.id,
+        originalName: data.user?.originalName || data.user?.name,
+      });
       toast.success(`Signed in as ${ROLE_LABELS[userRole] || "Super Admin"}`);
       router.push("/dashboard");
       router.refresh();

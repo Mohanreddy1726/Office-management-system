@@ -734,17 +734,6 @@ function EmployeeDashboard({ me }: { me: any }) {
             {me.designation} · {me.department} · {me.branch} · {fmtDate(TODAY)}
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-2 text-xs"
-          onClick={() => {
-            switchRole("employee");
-            router.push("/dashboard");
-          }}
-        >
-          <Send className="h-3.5 w-3.5" /> Demo role: {ROLE_LABELS[session?.role ?? "employee"]}
-        </Button>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">

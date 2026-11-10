@@ -18,9 +18,9 @@ export interface Store {
   prefs: Prefs;
   hydrated: boolean;
   // session & prefs
-  signIn: (role: Role) => void;
+  signIn: (role: Role, details?: Partial<Session>) => void;
   signOut: () => void;
-  switchRole: (role: Role) => void;
+  switchRole: (role: Role, targetUser?: { userId: string; name?: string; email?: string; role?: Role }) => void;
   setPref: (patch: Partial<Prefs>) => void;
   resetDemo: () => void;
   // helpers
@@ -117,6 +117,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    fetch("/api/auth/me")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((resData) => {
+        if (resData?.authenticated && resData.user) {
+          const u = resData.user;
+          const origRole = (u.originalRole || u.role) as Role;
+          const origUserId = u.originalUserId || u.employeeId || u.userId;
+          const origName = u.originalName || u.name;
+          const currentUserId = u.employeeId || u.userId;
+
+          setSession({
+            userId: currentUserId,
+            role: u.role as Role,
+            name: u.name,
+            email: u.email,
+            employeeId: u.employeeId,
+            originalRole: origRole,
+            originalUserId: origUserId,
+            originalName: origName,
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     fetch("/api/employees")
       .then((res) => (res.ok ? res.json() : null))
       .then((resData) => {
@@ -126,6 +152,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             resData.employees.forEach((dbEmp: any) => {
               const id = dbEmp.employeeId;
               const prev = existingMap.get(id);
+              const b = dbEmp.bankDetails;
               existingMap.set(id, {
                 id,
                 name: dbEmp.name,
@@ -145,10 +172,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 managerId: null,
                 probationMonths: 3,
                 status: dbEmp.status || "Active",
-                annualCTC: dbEmp.salary?.ctc || 600000,
-                monthlyGross: dbEmp.salary?.basic ? dbEmp.salary.basic * 2 : 50000,
+                annualCTC: dbEmp.salary?.annualCtc || dbEmp.salary?.ctc || 600000,
+                monthlyGross: dbEmp.salary?.monthlyGross || (dbEmp.salary?.basic ? dbEmp.salary.basic * 2 : 50000),
                 aadhaarNumber: dbEmp.aadhaarNumber,
+                pan: dbEmp.panNumber || b?.panNumber,
+                bloodGroup: dbEmp.bloodGroup,
+                bankName: b?.bankName || dbEmp.bankName,
+                accountNumber: b?.accountNumber || dbEmp.accountNumber,
+                ifscCode: b?.ifscCode || dbEmp.ifscCode,
+                bankLast4: b?.bankLast4 || (b?.accountNumber ? b.accountNumber.slice(-4) : undefined) || dbEmp.bankLast4,
+                paymentMethod: dbEmp.paymentMethod || "Corporate NEFT",
                 ...prev,
+                // Ensure real DB values overwrite empty/stale cached fields
+                ...(b?.bankName ? { bankName: b.bankName } : {}),
+                ...(b?.accountNumber ? { accountNumber: b.accountNumber, bankLast4: b.accountNumber.slice(-4) } : {}),
+                ...(b?.ifscCode ? { ifscCode: b.ifscCode } : {}),
+                ...(b?.bankLast4 ? { bankLast4: b.bankLast4 } : {}),
+                ...(dbEmp.bankName ? { bankName: dbEmp.bankName } : {}),
+                ...(dbEmp.accountNumber ? { accountNumber: dbEmp.accountNumber, bankLast4: dbEmp.accountNumber.slice(-4) } : {}),
+                ...(dbEmp.ifscCode ? { ifscCode: dbEmp.ifscCode } : {}),
               });
             });
             return { ...d, employees: Array.from(existingMap.values()) };
@@ -174,9 +216,79 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     const s: Store = {
       data, session, prefs, hydrated,
-      signIn: (role) => setSession({ userId: DEMO_EMPLOYEES[role], role }),
+      signIn: (role, details) => {
+        const origRole = (details?.originalRole || role) as Role;
+        const origUserId = details?.originalUserId || details?.userId || details?.employeeId || DEMO_EMPLOYEES[role];
+        const origName = details?.originalName || details?.name;
+        setSession({
+          userId: details?.userId || details?.employeeId || DEMO_EMPLOYEES[role],
+          role,
+          name: details?.name,
+          email: details?.email,
+          employeeId: details?.employeeId,
+          originalRole: origRole,
+          originalUserId: origUserId,
+          originalName: origName,
+        });
+      },
       signOut: () => setSession(null),
-      switchRole: (role) => setSession({ userId: DEMO_EMPLOYEES[role], role }),
+      switchRole: (role, targetUser) => {
+        setSession((prev) => {
+          const origRole = prev?.originalRole || prev?.role || "super_admin";
+          const origUserId = prev?.originalUserId || prev?.userId || "ADM-001";
+          const origName = prev?.originalName || prev?.name;
+          const origEmail = prev?.email;
+
+          if (targetUser) {
+            return {
+              userId: targetUser.userId,
+              role: targetUser.role || role,
+              name: targetUser.name,
+              email: targetUser.email,
+              employeeId: targetUser.userId,
+              originalRole: origRole,
+              originalUserId: origUserId,
+              originalName: origName,
+            };
+          }
+
+          // If switching back to original role
+          if (role === origRole) {
+            return {
+              userId: origUserId,
+              role: origRole,
+              name: origName,
+              email: origEmail,
+              employeeId: origUserId,
+              originalRole: origRole,
+              originalUserId: origUserId,
+              originalName: origName,
+            };
+          }
+
+          // If HR Admin or Manager switching to their own employee account
+          if (role === "employee" && (origRole === "hr_admin" || origRole === "manager")) {
+            return {
+              userId: origUserId,
+              role: "employee",
+              name: origName,
+              email: origEmail,
+              employeeId: origUserId,
+              originalRole: origRole,
+              originalUserId: origUserId,
+              originalName: origName,
+            };
+          }
+
+          return {
+            userId: prev?.userId || DEMO_EMPLOYEES[role],
+            role,
+            originalRole: origRole,
+            originalUserId: origUserId,
+            originalName: origName,
+          };
+        });
+      },
       setPref: (patch) => setPrefs((p) => ({ ...p, ...patch })),
       resetDemo: () => {
         if (typeof window !== "undefined") {

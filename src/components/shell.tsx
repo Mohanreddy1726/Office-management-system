@@ -8,7 +8,9 @@ import {
   LayoutDashboard, Users, UserPlus, Building2, CalendarCheck, Fingerprint, CalendarDays, Wallet,
   FileText, Mails, Boxes, Bell, BarChart3, Settings, ScrollText, PanelLeftClose,
   PanelLeftOpen, Menu, Search, Plus, ChevronDown, LogOut, RefreshCcw, UserCog, MapPin,
+  ShieldCheck, UserCheck, Eye, Undo2, Briefcase,
 } from "lucide-react";
+import { AccountSelectorModal, type AccountOption } from "@/components/account-selector-modal";
 import { useStore } from "@/lib/data/store";
 import { ROLE_LABELS, BRANCHES, type Role } from "@/lib/data/types";
 import { cn } from "@/lib/utils";
@@ -148,30 +150,68 @@ function SidebarContent({ collapsed, onNavigate, mobile }: { collapsed: boolean;
 }
 
 function ProfileArea({ collapsed }: { collapsed: boolean }) {
-  const { session, emp, signOut, switchRole, resetDemo } = useStore();
+  const { session, emp, signOut, switchRole } = useStore();
   const router = useRouter();
+  const [modalOpen, setModalOpen] = useState(false);
+  const [targetRoleForModal, setTargetRoleForModal] = useState<Role | null>(null);
+
   if (!session) return null;
 
   const foundEmp = emp(session.userId ?? "");
   const me = foundEmp || {
-    id: session.userId || "ADM-001",
-    name: session.role === "super_admin" ? "Super Admin" : "User",
-    workEmail: session.role === "super_admin" ? "superadmin@gvkedutech.com" : "",
+    id: session.userId || (session.role === "super_admin" ? "ADM-001" : "USER"),
+    name: session.name || (session.role === "super_admin" ? "Super Admin" : "User"),
+    workEmail: session.email || (session.role === "super_admin" ? "superadmin@gvkedutech.com" : ""),
     designation: session.role === "super_admin" ? "Super Administrator" : "Staff",
   };
 
-  const handleRoleSwitch = async (r: Role) => {
-    switchRole(r);
+  const originalRole: Role = (session.originalRole || session.role) as Role;
+
+  const handleSwitchAccount = async (targetRole: Role, targetAccount?: AccountOption) => {
     try {
-      await fetch("/api/auth/login", {
+      const res = await fetch("/api/auth/switch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ demoRole: r }),
+        body: JSON.stringify({
+          targetRole,
+          targetUserId: targetAccount?.employeeId || targetAccount?.userId,
+          targetEmail: targetAccount?.email,
+          targetName: targetAccount?.name,
+        }),
       });
-    } catch {}
-    toast.success(`Switched to ${ROLE_LABELS[r]}`);
-    router.push("/dashboard");
-    router.refresh();
+
+      const resData = await res.json();
+      if (!res.ok) {
+        toast.error(resData.error || "Failed to switch account");
+        return;
+      }
+
+      if (targetAccount) {
+        switchRole(targetRole, {
+          userId: targetAccount.employeeId || targetAccount.userId,
+          name: targetAccount.name,
+          email: targetAccount.email,
+          role: targetRole,
+        });
+      } else {
+        switchRole(targetRole);
+      }
+
+      toast.success(
+        targetAccount
+          ? `Switched to ${targetAccount.name} (${ROLE_LABELS[targetRole]})`
+          : `Switched to ${ROLE_LABELS[targetRole]}`
+      );
+      router.push("/dashboard");
+      router.refresh();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to switch account");
+    }
+  };
+
+  const handleOpenAccountModal = (r: Role) => {
+    setTargetRoleForModal(r);
+    setModalOpen(true);
   };
 
   const handleSignOut = async () => {
@@ -185,45 +225,134 @@ function ProfileArea({ collapsed }: { collapsed: boolean }) {
   };
 
   const menu = (
-    <DropdownMenuContent side="top" align="start" className="w-56">
+    <DropdownMenuContent side="top" align="start" className="w-64">
       <DropdownMenuLabel>
-        <p className="text-xs font-semibold">{me.name}</p>
+        <p className="text-xs font-semibold truncate">{me.name}</p>
         <p className="truncate text-[11px] font-normal text-muted-foreground">{me.workEmail}</p>
+        <p className="text-[10px] font-medium text-primary mt-0.5">{ROLE_LABELS[session.role]} ({me.id})</p>
       </DropdownMenuLabel>
       <DropdownMenuSeparator />
-      <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">Switch demo role</DropdownMenuLabel>
-      {(Object.keys(ROLE_LABELS) as Role[]).map((r) => (
-        <DropdownMenuItem key={r} onClick={() => handleRoleSwitch(r)}>
-          <UserCog className="mr-2 h-3.5 w-3.5" /> {ROLE_LABELS[r]}
-        </DropdownMenuItem>
-      ))}
-      <DropdownMenuSeparator />
-      <DropdownMenuItem onClick={() => { resetDemo(); toast.success("Demo data reset"); }}>
-        <RefreshCcw className="mr-2 h-3.5 w-3.5" /> Reset demo data
+
+      {/* SUPER ADMIN SWITCHING LOGIC */}
+      {originalRole === "super_admin" && (
+        <>
+          {session.role !== "super_admin" && (
+            <>
+              <DropdownMenuItem
+                onClick={() => handleSwitchAccount("super_admin")}
+                className="text-primary font-medium focus:bg-primary/10"
+              >
+                <Undo2 className="mr-2 h-3.5 w-3.5" /> Return to Super Admin
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+            </>
+          )}
+          <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Switch Account
+          </DropdownMenuLabel>
+          <DropdownMenuItem onClick={() => handleOpenAccountModal("hr_admin")}>
+            <UserCog className="mr-2 h-3.5 w-3.5 text-blue-600" /> Switch to HR Admin...
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => handleOpenAccountModal("manager")}>
+            <Briefcase className="mr-2 h-3.5 w-3.5 text-amber-600" /> Switch to Manager...
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => handleOpenAccountModal("employee")}>
+            <Users className="mr-2 h-3.5 w-3.5 text-emerald-600" /> Switch to Employee...
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+        </>
+      )}
+
+      {/* HR ADMIN SWITCHING LOGIC */}
+      {originalRole === "hr_admin" && (
+        <>
+          {session.role === "hr_admin" ? (
+            <DropdownMenuItem
+              onClick={() => handleSwitchAccount("employee")}
+              className="text-emerald-700 dark:text-emerald-300 font-medium"
+            >
+              <UserCheck className="mr-2 h-3.5 w-3.5" /> Switch to My Employee Account
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem
+              onClick={() => handleSwitchAccount("hr_admin")}
+              className="text-primary font-medium"
+            >
+              <ShieldCheck className="mr-2 h-3.5 w-3.5" /> Switch back to HR Admin
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuSeparator />
+        </>
+      )}
+
+      {/* MANAGER SWITCHING LOGIC */}
+      {originalRole === "manager" && (
+        <>
+          {session.role === "manager" ? (
+            <DropdownMenuItem
+              onClick={() => handleSwitchAccount("employee")}
+              className="text-emerald-700 dark:text-emerald-300 font-medium"
+            >
+              <UserCheck className="mr-2 h-3.5 w-3.5" /> Switch to My Employee Account
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem
+              onClick={() => handleSwitchAccount("manager")}
+              className="text-amber-700 dark:text-amber-300 font-medium"
+            >
+              <Briefcase className="mr-2 h-3.5 w-3.5" /> Switch back to Manager
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuSeparator />
+        </>
+      )}
+
+      {/* REGULAR EMPLOYEE: NO SWITCH OPTIONS ARE RENDERED */}
+
+      <DropdownMenuItem asChild>
+        <Link href={`/employees/${me.id}`}>My profile</Link>
       </DropdownMenuItem>
-      <DropdownMenuItem onClick={handleSignOut}>
+      <DropdownMenuItem asChild>
+        <Link href="/notifications">Notifications</Link>
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem onClick={handleSignOut} className="text-danger focus:bg-danger/10">
         <LogOut className="mr-2 h-3.5 w-3.5" /> Sign out
       </DropdownMenuItem>
     </DropdownMenuContent>
   );
+
   return (
-    <div className={cn("border-t border-border p-3", collapsed && "px-2")}>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button className={cn("flex w-full items-center gap-2.5 rounded-md p-1.5 text-left hover:bg-sidebar-accent/60", collapsed && "justify-center")}>
-            <EmployeeAvatar id={me.id} name={me.name} size={30} />
-            {!collapsed && (
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-xs font-semibold text-foreground">{me.name}</span>
-                <span className="block truncate text-[10px] text-muted-foreground">{ROLE_LABELS[session.role]}</span>
-              </span>
-            )}
-            {!collapsed && <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
-          </button>
-        </DropdownMenuTrigger>
-        {menu}
-      </DropdownMenu>
-    </div>
+    <>
+      <div className={cn("border-t border-border p-3", collapsed && "px-2")}>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className={cn("flex w-full items-center gap-2.5 rounded-md p-1.5 text-left hover:bg-sidebar-accent/60", collapsed && "justify-center")}>
+              <EmployeeAvatar id={me.id} name={me.name} size={30} />
+              {!collapsed && (
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-semibold text-foreground">{me.name}</span>
+                  <span className="block truncate text-[10px] text-muted-foreground">{ROLE_LABELS[session.role]}</span>
+                </span>
+              )}
+              {!collapsed && <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+            </button>
+          </DropdownMenuTrigger>
+          {menu}
+        </DropdownMenu>
+      </div>
+
+      <AccountSelectorModal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        targetRole={targetRoleForModal}
+        onSelectAccount={(acc) => {
+          if (targetRoleForModal) {
+            handleSwitchAccount(targetRoleForModal, acc);
+          }
+        }}
+      />
+    </>
   );
 }
 
@@ -395,10 +524,41 @@ function UserMenu() {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { prefs, setPref } = useStore();
+  const { prefs, setPref, session, emp, switchRole } = useStore();
+  const router = useRouter();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const crumbs = BREADCRUMBS[pathname] ?? (pathname.startsWith("/employees/") ? ["People", "Employees", "Profile"] : ["RenDesk", "Workspace"]);
+
+  const originalRole = (session?.originalRole || session?.role) as Role;
+  const isSuperAdminImpersonating = originalRole === "super_admin" && session?.role !== "super_admin";
+  const isHrInEmployeeMode = originalRole === "hr_admin" && session?.role === "employee";
+  const isManagerInEmployeeMode = originalRole === "manager" && session?.role === "employee";
+
+  const me = emp(session?.userId ?? "") || {
+    id: session?.userId || "User",
+    name: session?.name || "User",
+  };
+
+  const handleReturnToRole = async (targetRole: Role) => {
+    try {
+      await fetch("/api/auth/switch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetRole }),
+      });
+      switchRole(targetRole);
+      toast.success(
+        targetRole === "super_admin"
+          ? "Returned to Super Admin"
+          : targetRole === "hr_admin"
+          ? "Returned to HR Admin"
+          : "Returned to Manager"
+      );
+      router.push("/dashboard");
+      router.refresh();
+    } catch {}
+  };
 
   return (
     <TooltipProvider delayDuration={100}>
@@ -440,6 +600,64 @@ export function AppShell({ children }: { children: ReactNode }) {
               <UserMenu />
             </div>
           </header>
+
+          {isSuperAdminImpersonating && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs font-medium text-amber-900 dark:text-amber-200">
+              <div className="flex items-center gap-2">
+                <Eye className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <span>
+                  Viewing system as <strong>{ROLE_LABELS[session?.role || "employee"]}</strong>: <strong>{me.name}</strong> ({me.id})
+                </span>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 border-amber-500/40 bg-background text-xs font-semibold hover:bg-amber-500/20"
+                onClick={() => handleReturnToRole("super_admin")}
+              >
+                <Undo2 className="mr-1.5 h-3.5 w-3.5" /> Return to Super Admin
+              </Button>
+            </div>
+          )}
+
+          {isHrInEmployeeMode && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-blue-500/30 bg-blue-500/10 px-4 py-2 text-xs font-medium text-blue-900 dark:text-blue-200">
+              <div className="flex items-center gap-2">
+                <UserCheck className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <span>
+                  Viewing your personal <strong>Employee Account</strong> ({me.name} · {me.id})
+                </span>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 border-blue-500/40 bg-background text-xs font-semibold hover:bg-blue-500/20"
+                onClick={() => handleReturnToRole("hr_admin")}
+              >
+                <ShieldCheck className="mr-1.5 h-3.5 w-3.5" /> Switch back to HR Admin
+              </Button>
+            </div>
+          )}
+
+          {isManagerInEmployeeMode && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs font-medium text-amber-900 dark:text-amber-200">
+              <div className="flex items-center gap-2">
+                <UserCheck className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <span>
+                  Viewing your personal <strong>Employee Account</strong> ({me.name} · {me.id})
+                </span>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 border-amber-500/40 bg-background text-xs font-semibold hover:bg-amber-500/20"
+                onClick={() => handleReturnToRole("manager")}
+              >
+                <Briefcase className="mr-1.5 h-3.5 w-3.5" /> Switch back to Manager
+              </Button>
+            </div>
+          )}
+
           <main className="flex-1 p-4 md:p-6"><RoleGate pathname={pathname}>{children}</RoleGate></main>
           <footer className="px-6 pb-4 text-center text-[10px] text-muted-foreground">
             RenDesk Workplace Operations OS · Unified workforce lifecycle platform.
@@ -464,7 +682,7 @@ function RoleGate({ pathname, children }: { pathname: string; children: ReactNod
   return (
     <div className="mx-auto mt-16 max-w-md rounded-lg border border-border bg-card p-8 text-center">
       <p className="text-lg font-semibold text-foreground">You don't have access to this page</p>
-      <p className="mt-1 text-sm text-muted-foreground">Your role ({ROLE_LABELS[session.role]}) can't open {item.label}. Switch roles from the profile menu to explore it.</p>
+      <p className="mt-1 text-sm text-muted-foreground">Your role ({ROLE_LABELS[session.role]}) is not authorized to open {item.label}.</p>
       <Link href="/dashboard" className="mt-4 inline-block text-sm font-medium text-primary hover:underline">Go to dashboard</Link>
     </div>
   );

@@ -27,7 +27,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { ArrowLeft, Mail, Phone, MapPin, Pencil, GraduationCap, Briefcase, Landmark, ShieldCheck, User, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Mail, Phone, MapPin, Pencil, GraduationCap, Briefcase, Landmark, ShieldCheck, User, AlertTriangle, Loader2 } from "lucide-react";
 import type { Employee, EmploymentStatus } from "@/lib/data/types";
 import { AppShell } from "@/components/shell";
 
@@ -39,8 +39,36 @@ export default function EmployeeDetailPage() {
   const { isAdmin, isEmployee, uid } = useScope();
   const [tab, setTab] = useState("overview");
   const [edit, setEdit] = useState(false);
+  const [isResending, setIsResending] = useState(false);
 
   const e = data.employees.find((x) => x.id === id);
+
+  const handleResendVerification = async () => {
+    if (!e || isResending) return;
+    setIsResending(true);
+    try {
+      const res = await fetch("/api/employees/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employeeId: e.id,
+          email: e.personalEmail || e.workEmail,
+        }),
+      });
+      const resData = await res.json();
+      if (!res.ok) {
+        toast.error(resData.error || "Failed to resend verification link");
+      } else {
+        toast.success(`Verification email sent to ${resData.recipient || e.personalEmail || e.workEmail}`, {
+          description: "Employee can now click the link to verify and receive login credentials.",
+        });
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to resend verification link");
+    } finally {
+      setIsResending(false);
+    }
+  };
 
   if (!e) {
     return (
@@ -110,14 +138,30 @@ export default function EmployeeDetailPage() {
               description={`${e.designation} · ${e.department} · ${e.team}`}
               actions={
                 isAdmin ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="gap-1.5 text-xs"
-                    onClick={() => setEdit(true)}
-                  >
-                    <Pencil className="h-3.5 w-3.5" /> Edit Profile
-                  </Button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 text-xs border-amber-300 bg-amber-50/80 text-amber-900 hover:bg-amber-100 font-medium"
+                      onClick={handleResendVerification}
+                      disabled={isResending}
+                    >
+                      {isResending ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-700" />
+                      ) : (
+                        <Mail className="h-3.5 w-3.5 text-amber-700" />
+                      )}
+                      <span>Resend Verification Link</span>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 text-xs"
+                      onClick={() => setEdit(true)}
+                    >
+                      <Pencil className="h-3.5 w-3.5" /> Edit Profile
+                    </Button>
+                  </div>
                 ) : undefined
               }
             />
@@ -154,9 +198,25 @@ export default function EmployeeDetailPage() {
                 </p>
               </div>
             </div>
-            <span className="rounded-full bg-amber-200 px-3 py-1 text-xs font-semibold text-amber-900">
-              Awaiting Employee Verification
-            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleResendVerification}
+                disabled={isResending}
+                className="gap-1.5 border border-amber-400 bg-amber-600 text-xs font-semibold text-white hover:bg-amber-700 shadow-sm"
+              >
+                {isResending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-white" />
+                ) : (
+                  <Mail className="h-3.5 w-3.5 text-white" />
+                )}
+                <span>Resend Verification Link</span>
+              </Button>
+              <span className="rounded-full bg-amber-200 px-3 py-1 text-xs font-semibold text-amber-900">
+                Awaiting Verification
+              </span>
+            </div>
           </div>
         )}
 
@@ -323,7 +383,7 @@ export default function EmployeeDetailPage() {
                   <h4 className="font-semibold text-sm text-foreground">Beneficiary Banking Details</h4>
                 </div>
                 <Grid>
-                  <Stat label="Bank Name" value={e.bankName || "HDFC Bank"} />
+                  <Stat label="Bank Name" value={e.bankName || "—"} />
                   <Stat
                     label="Account Number"
                     value={
@@ -331,10 +391,10 @@ export default function EmployeeDetailPage() {
                         ? `•••• •••• ${e.accountNumber.slice(-4)}`
                         : e.bankLast4
                         ? `•••• •••• ${e.bankLast4}`
-                        : "•••• 4092"
+                        : "—"
                     }
                   />
-                  <Stat label="IFSC Code" value={e.ifscCode || "HDFC0001844"} />
+                  <Stat label="IFSC Code" value={e.ifscCode || "—"} />
                   <Stat label="Payment Method" value={e.paymentMethod || "Corporate NEFT"} />
                 </Grid>
               </Card>
@@ -441,6 +501,11 @@ export default function EmployeeDetailPage() {
             onClose={() => setEdit(false)}
             onSave={(patch) => {
               updateEmployee(e.id, patch, "Profile edited");
+              fetch("/api/employees", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ employeeId: e.id, patch }),
+              }).catch(() => {});
               setEdit(false);
               toast.success("Profile updated");
             }}
@@ -495,6 +560,9 @@ function EditDialog({
   const [phone, setPhone] = useState(e.phone);
   const [status, setStatus] = useState<string>(e.status);
   const [team, setTeam] = useState(e.team);
+  const [bankName, setBankName] = useState(e.bankName || "");
+  const [accountNumber, setAccountNumber] = useState(e.accountNumber || "");
+  const [ifscCode, setIfscCode] = useState(e.ifscCode || "");
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
@@ -507,16 +575,25 @@ function EditDialog({
             <Input
               value={designation}
               onChange={(x) => setDesignation(x.target.value)}
+              placeholder="e.g. Senior Software Engineer"
             />
           </Field>
           <Field label="Team">
-            <Input value={team} onChange={(x) => setTeam(x.target.value)} />
+            <Input
+              value={team}
+              onChange={(x) => setTeam(x.target.value)}
+              placeholder="e.g. Frontend Platform"
+            />
           </Field>
           <Field
             label="Phone"
             error={phone && !/^[+\d\s-]{8,}$/.test(phone) ? "Invalid phone" : undefined}
           >
-            <Input value={phone} onChange={(x) => setPhone(x.target.value)} />
+            <Input
+              value={phone}
+              onChange={(x) => setPhone(x.target.value)}
+              placeholder="+91 98765 43210"
+            />
           </Field>
           <Field label="Status">
             <Sel
@@ -525,6 +602,30 @@ function EditDialog({
               options={["Active", "Probation", "On Notice", "Resigned", "Inactive"]}
             />
           </Field>
+          <Field label="Bank Name">
+            <Input
+              value={bankName}
+              onChange={(x) => setBankName(x.target.value)}
+              placeholder="e.g. ICICI Bank, SBI, HDFC"
+            />
+          </Field>
+          <Field label="Account Number">
+            <Input
+              value={accountNumber}
+              onChange={(x) => setAccountNumber(x.target.value)}
+              placeholder="e.g. 436201502494"
+            />
+          </Field>
+          <div className="col-span-2">
+            <Field label="Bank IFSC Code">
+              <Input
+                value={ifscCode}
+                onChange={(x) => setIfscCode(x.target.value.toUpperCase())}
+                placeholder="e.g. ICIC0004362"
+                className="font-mono uppercase"
+              />
+            </Field>
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
@@ -538,6 +639,10 @@ function EditDialog({
                 phone,
                 team,
                 status: status as EmploymentStatus,
+                bankName: bankName.trim(),
+                accountNumber: accountNumber.trim(),
+                bankLast4: accountNumber ? accountNumber.trim().slice(-4) : e.bankLast4,
+                ifscCode: ifscCode.trim().toUpperCase(),
               })
             }
           >

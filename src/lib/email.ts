@@ -18,6 +18,54 @@ function getTransporter() {
 
 const FROM_EMAIL = process.env.SMTP_FROM || '"GVK EduTech HR" <gvkdigital01@gmail.com>';
 
+/**
+ * Resolves the absolute application URL.
+ * Prioritizes:
+ * 1. Request origin / forwarded-host if available (e.g. from incoming HTTPS request)
+ * 2. NEXT_PUBLIC_APP_URL environment variable
+ * 3. Vercel deployment URL (VERCEL_URL)
+ * 4. Production fallback: https://rendesk.vercel.app
+ */
+export function getAppUrl(req?: Request | any): string {
+  if (req) {
+    try {
+      const origin = typeof req.headers?.get === "function" ? req.headers.get("origin") : req.headers?.origin;
+      if (origin && typeof origin === "string" && origin.startsWith("http") && !origin.includes("localhost")) {
+        return origin.replace(/\/+$/, "");
+      }
+
+      const forwardedHost = typeof req.headers?.get === "function" ? req.headers.get("x-forwarded-host") : req.headers?.["x-forwarded-host"];
+      if (forwardedHost && typeof forwardedHost === "string" && !forwardedHost.includes("localhost")) {
+        const proto = (typeof req.headers?.get === "function" ? req.headers.get("x-forwarded-proto") : req.headers?.["x-forwarded-proto"]) || "https";
+        return `${proto}://${forwardedHost}`.replace(/\/+$/, "");
+      }
+
+      const host = typeof req.headers?.get === "function" ? req.headers.get("host") : req.headers?.host;
+      if (host && typeof host === "string" && !host.includes("localhost")) {
+        const proto = host.includes("vercel.app") || process.env.NODE_ENV === "production" ? "https" : "http";
+        return `${proto}://${host}`.replace(/\/+$/, "");
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  const envUrl = process.env.NEXT_PUBLIC_APP_URL;
+  if (envUrl && envUrl.startsWith("http") && !envUrl.includes("localhost")) {
+    return envUrl.replace(/\/+$/, "");
+  }
+
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`.replace(/\/+$/, "");
+  }
+
+  if (envUrl && envUrl.startsWith("http")) {
+    return envUrl.replace(/\/+$/, "");
+  }
+
+  return "https://rendesk.vercel.app";
+}
+
 export async function sendVerificationEmail({
   name,
   toEmail,
@@ -31,6 +79,13 @@ export async function sendVerificationEmail({
 }): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
     const transporter = getTransporter();
+
+    // Ensure link uses production URL if deployed
+    const targetBase = getAppUrl();
+    let cleanVerificationUrl = verificationUrl;
+    if (cleanVerificationUrl.startsWith("http://localhost:3000") && targetBase !== "http://localhost:3000") {
+      cleanVerificationUrl = cleanVerificationUrl.replace("http://localhost:3000", targetBase);
+    }
 
     const subject = "Verify Your Email Address - GVK EduTech RenDesk";
     const html = `
@@ -50,14 +105,14 @@ export async function sendVerificationEmail({
           </p>
 
           <div style="text-align: center; margin: 32px 0;">
-            <a href="${verificationUrl}" style="background-color: #2563eb; color: #ffffff; padding: 14px 32px; font-size: 15px; font-weight: 600; text-decoration: none; border-radius: 8px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);">
+            <a href="${cleanVerificationUrl}" style="background-color: #2563eb; color: #ffffff; padding: 14px 32px; font-size: 15px; font-weight: 600; text-decoration: none; border-radius: 8px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);">
               Verify Email & Activate Account
             </a>
           </div>
 
           <p style="color: #64748b; font-size: 12px; line-height: 1.5;">
             Or copy and paste this verification URL into your browser:<br/>
-            <a href="${verificationUrl}" style="color: #2563eb; word-break: break-all;">${verificationUrl}</a>
+            <a href="${cleanVerificationUrl}" style="color: #2563eb; word-break: break-all;">${cleanVerificationUrl}</a>
           </p>
 
           <div style="margin-top: 24px; padding: 12px 16px; background-color: #eff6ff; border-radius: 8px; border-left: 4px solid #3b82f6;">
@@ -132,6 +187,13 @@ export async function sendCredentialsEmail({
   try {
     const transporter = getTransporter();
 
+    // Ensure link uses production URL if deployed
+    const targetBase = getAppUrl();
+    let cleanPortalUrl = portalUrl;
+    if (cleanPortalUrl.startsWith("http://localhost:3000") && targetBase !== "http://localhost:3000") {
+      cleanPortalUrl = cleanPortalUrl.replace("http://localhost:3000", targetBase);
+    }
+
     const subject = "Welcome to GVK EduTech - Your RenDesk Login Credentials";
     const html = `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background-color: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0;">
@@ -162,7 +224,7 @@ export async function sendCredentialsEmail({
               ` : ""}
               <tr>
                 <td style="padding: 8px 0; color: #64748b; width: 140px;">Portal Login URL:</td>
-                <td style="padding: 8px 0;"><a href="${portalUrl}" style="color: #2563eb; font-weight: 600;">${portalUrl}</a></td>
+                <td style="padding: 8px 0;"><a href="${cleanPortalUrl}" style="color: #2563eb; font-weight: 600;">${cleanPortalUrl}</a></td>
               </tr>
               <tr>
                 <td style="padding: 8px 0; color: #64748b;">Username (Email):</td>
@@ -180,7 +242,7 @@ export async function sendCredentialsEmail({
           </div>
 
           <div style="text-align: center; margin: 28px 0;">
-            <a href="${portalUrl}" style="background-color: #10b981; color: #ffffff; padding: 14px 32px; font-size: 15px; font-weight: 600; text-decoration: none; border-radius: 8px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2);">
+            <a href="${cleanPortalUrl}" style="background-color: #10b981; color: #ffffff; padding: 14px 32px; font-size: 15px; font-weight: 600; text-decoration: none; border-radius: 8px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2);">
               Sign in to RenDesk
             </a>
           </div>

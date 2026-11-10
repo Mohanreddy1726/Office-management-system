@@ -5,7 +5,7 @@ import { User } from "@/models/User";
 import { AuditLog } from "@/models/AuditLog";
 import { getCurrentUser } from "@/lib/auth";
 import { getMockStore } from "@/lib/mock-db";
-import { sendVerificationEmail } from "@/lib/email";
+import { sendVerificationEmail, getAppUrl } from "@/lib/email";
 import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
 
@@ -147,10 +147,10 @@ export async function POST(req: NextRequest) {
         bankDetails: {
           accountNumber: body.accountNumber || body.bankDetails?.accountNumber || "",
           ifscCode: (body.ifscCode || body.bankDetails?.ifscCode || "").toUpperCase(),
-          bankName: body.bankName || body.bankDetails?.bankName || "HDFC Bank",
+          bankName: body.bankName || body.bankDetails?.bankName || "",
           panNumber: (body.pan || body.panNumber || "").toUpperCase().trim(),
           aadhaarNumber: cleanAadhaar,
-          bankLast4: (body.accountNumber || "").slice(-4),
+          bankLast4: (body.accountNumber || body.bankDetails?.accountNumber || "").slice(-4),
         },
 
         salary: {
@@ -202,7 +202,7 @@ export async function POST(req: NextRequest) {
       // Send Verification Email via Gmail SMTP
       let emailResult = null;
       if (shouldSendVerification) {
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+        const appUrl = getAppUrl(req);
         const verificationUrl = `${appUrl}/verify-email?token=${verificationToken}`;
         const recipient = personalEmail || workEmail || loginEmail;
 
@@ -261,5 +261,49 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     console.error("[Create Employee API Error]", error);
     return NextResponse.json({ error: error.message || "Failed to create employee" }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const session = await getCurrentUser();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await req.json();
+    const { employeeId, patch } = body;
+
+    if (!employeeId) {
+      return NextResponse.json({ error: "employeeId is required" }, { status: 400 });
+    }
+
+    const conn = await connectToDatabase();
+    if (conn) {
+      const updateData: any = {};
+      if (patch.designation) updateData.designation = patch.designation.trim();
+      if (patch.department) updateData.department = patch.department;
+      if (patch.team) updateData.team = patch.team;
+      if (patch.phone) updateData.phone = patch.phone.trim();
+      if (patch.status) updateData.status = patch.status;
+      if (patch.branch) updateData.branch = patch.branch;
+
+      if (patch.bankName !== undefined) updateData["bankDetails.bankName"] = patch.bankName.trim();
+      if (patch.accountNumber !== undefined) {
+        updateData["bankDetails.accountNumber"] = patch.accountNumber.trim();
+        updateData["bankDetails.bankLast4"] = patch.accountNumber.trim().slice(-4);
+      }
+      if (patch.ifscCode !== undefined) updateData["bankDetails.ifscCode"] = patch.ifscCode.trim().toUpperCase();
+
+      const updated = await Employee.findOneAndUpdate(
+        { employeeId },
+        { $set: updateData },
+        { new: true }
+      );
+      return NextResponse.json({ success: true, employee: updated });
+    }
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

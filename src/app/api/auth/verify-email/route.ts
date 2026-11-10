@@ -3,7 +3,7 @@ import { connectToDatabase } from "@/lib/db";
 import { User } from "@/models/User";
 import { Employee } from "@/models/Employee";
 import { AuditLog } from "@/models/AuditLog";
-import { sendCredentialsEmail } from "@/lib/email";
+import { sendCredentialsEmail, getAppUrl } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
@@ -68,7 +68,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Trigger dispatch of Login Credentials Email to the registered personal email
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const appUrl = getAppUrl(req);
     const portalUrl = `${appUrl}/login`;
     const recipientEmail = employee?.personalEmail || user.email;
 

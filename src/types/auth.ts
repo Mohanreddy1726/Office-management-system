@@ -7,6 +7,10 @@ export interface SessionPayload {
   name: string;
   role: UserRole;
   branch: string;
+  originalRole?: UserRole;
+  originalUserId?: string;
+  originalName?: string;
+  originalEmail?: string;
 }
 
 export const AUTH_COOKIE_NAME = "rendesk_token";

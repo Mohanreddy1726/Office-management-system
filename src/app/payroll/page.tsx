@@ -86,21 +86,28 @@ interface LopOverride {
 
 // Deterministic bank details generator for realistic statement
 function getBankDetails(e: Employee) {
-  const bankNames = ["HDFC Bank", "ICICI Bank", "State Bank of India", "Axis Bank", "Kotak Mahindra Bank"];
+  if (e.bankName) {
+    const accNo = e.accountNumber || (e.bankLast4 ? `•••• •••• ${e.bankLast4}` : "50100412345678");
+    const ifsc = e.ifscCode || "ICIC0004362";
+    return { bankName: e.bankName, accNo, ifsc };
+  }
+  const bankNames = ["ICICI Bank", "State Bank of India", "HDFC Bank", "Axis Bank", "Kotak Mahindra Bank"];
   const numId = parseInt(e.id.replace(/\D/g, "")) || 1000;
   const bankName = bankNames[numId % bankNames.length];
   const last4 = e.bankLast4 ?? String(1000 + (numId % 9000));
-  const accNo = `501004${String(numId).padStart(4, "0")}${last4}`;
+  const accNo = e.accountNumber || `501004${String(numId).padStart(4, "0")}${last4}`;
   const ifsc =
-    bankName === "HDFC Bank"
-      ? "HDFC0001844"
-      : bankName === "ICICI Bank"
-      ? "ICIC0000047"
-      : bankName === "State Bank of India"
-      ? "SBIN0001234"
-      : bankName === "Axis Bank"
-      ? "UTIB0000123"
-      : "KKBK0000456";
+    e.ifscCode || (
+      bankName === "HDFC Bank"
+        ? "HDFC0001844"
+        : bankName === "ICICI Bank"
+        ? "ICIC0000047"
+        : bankName === "State Bank of India"
+        ? "SBIN0001234"
+        : bankName === "Axis Bank"
+        ? "UTIB0000123"
+        : "KKBK0000456"
+    );
 
   return { bankName, accNo, ifsc };
 }
