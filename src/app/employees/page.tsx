@@ -39,49 +39,29 @@ export default function EmployeesPage() {
   const [resetEmp, setResetEmp] = useState<Employee | null>(null);
   const [deleteEmp, setDeleteEmp] = useState<Employee | null>(null);
 
-  // Sync employees from MongoDB API to ensure real status and new employees are always up-to-date
+  // Sync employees from MongoDB API to ensure real status is immediately enforced
   useEffect(() => {
-    fetch("/api/employees")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((resData) => {
-        if (resData?.success && Array.isArray(resData.employees)) {
-          resData.employees.forEach((dbEmp: any) => {
-            const id = dbEmp.employeeId;
-            const existing = data.employees.find((e) => e.id === id);
-            if (existing) {
-              if (existing.status !== dbEmp.status) {
-                updateEmployee(id, { status: dbEmp.status });
-              }
-            } else {
-              addEmployee({
-                id,
-                name: dbEmp.name,
-                workEmail: dbEmp.workEmail || dbEmp.email,
-                personalEmail: dbEmp.personalEmail || "",
-                phone: dbEmp.phone || "+91 90000 00000",
-                dob: dbEmp.dateOfBirth || "2000-01-01",
-                gender: dbEmp.gender || "Other",
-                address: dbEmp.address || "",
-                emergencyContact: dbEmp.emergencyContact?.phone || "+91 90000 00000",
-                joiningDate: dbEmp.joiningDate || new Date().toISOString().slice(0, 10),
-                branch: dbEmp.branch || "Hyderabad",
-                department: dbEmp.department || "Operations",
-                team: dbEmp.team || "Operations",
-                designation: dbEmp.designation,
-                employmentType: "Full-time",
-                managerId: dbEmp.reportingManagerId || null,
-                probationMonths: dbEmp.probationEndDate ? 6 : 0,
+    const syncStatus = () => {
+      fetch("/api/employees")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((resData) => {
+          if (resData?.success && Array.isArray(resData.employees)) {
+            resData.employees.forEach((dbEmp: any) => {
+              const id = dbEmp.employeeId;
+              updateEmployee(id, {
                 status: dbEmp.status,
-                annualCTC: dbEmp.salary?.annualCtc || 600000,
-                monthlyGross: dbEmp.salary?.monthlyGross || 50000,
-                aadhaarNumber: dbEmp.aadhaarNumber,
-                pan: dbEmp.panNumber,
+                workEmail: dbEmp.workEmail || dbEmp.email,
+                personalEmail: dbEmp.personalEmail,
               });
-            }
-          });
-        }
-      })
-      .catch((err) => console.warn("Failed to sync employees from DB:", err));
+            });
+          }
+        })
+        .catch((err) => console.warn("Failed to sync employees from DB:", err));
+    };
+
+    syncStatus();
+    const interval = setInterval(syncStatus, 4000);
+    return () => clearInterval(interval);
   }, []);
 
   const isManager = role === "manager";

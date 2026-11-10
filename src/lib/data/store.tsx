@@ -10,7 +10,7 @@ import type {
   BiometricDevice, BiometricMapping, Shift, Holiday, OnboardingTask, Review, ImportBatch, Joiner, Resignation,
 } from "./types";
 
-const KEY = "rendesk-v3";
+const KEY = "rendesk-v4";
 
 export interface Store {
   data: AppState;
@@ -97,8 +97,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     try {
-      // Clear legacy demo storage if present so old mock data does not linger
+      // Clear legacy storage if present so stale cached statuses do not linger
       if (typeof window !== "undefined") {
+        window.localStorage.removeItem("rendesk-v3");
         window.localStorage.removeItem("rendesk-v2");
         window.localStorage.removeItem("rendesk-demo-v1");
       }
@@ -143,61 +144,64 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    fetch("/api/employees")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((resData) => {
-        if (resData?.success && Array.isArray(resData.employees)) {
-          setData((d) => {
-            const existingMap = new Map(d.employees.map((e) => [e.id, e]));
-            resData.employees.forEach((dbEmp: any) => {
-              const id = dbEmp.employeeId;
-              const prev = existingMap.get(id);
-              const b = dbEmp.bankDetails;
-              existingMap.set(id, {
-                id,
-                name: dbEmp.name,
-                workEmail: dbEmp.workEmail || dbEmp.email,
-                personalEmail: dbEmp.personalEmail || "",
-                phone: dbEmp.phone || "+91 90000 00000",
-                dob: dbEmp.dateOfBirth || "2000-01-01",
-                gender: dbEmp.gender || "Other",
-                address: dbEmp.address || "",
-                emergencyContact: dbEmp.emergencyContact?.phone || "+91 90000 00000",
-                joiningDate: dbEmp.joiningDate || new Date().toISOString().slice(0, 10),
-                branch: dbEmp.branch || "Hyderabad",
-                department: dbEmp.department || "Operations",
-                team: dbEmp.team || "Operations",
-                designation: dbEmp.designation || "Staff",
-                employmentType: "Full-time",
-                managerId: null,
-                probationMonths: 3,
-                status: dbEmp.status || "Active",
-                annualCTC: dbEmp.salary?.annualCtc || dbEmp.salary?.ctc || 600000,
-                monthlyGross: dbEmp.salary?.monthlyGross || (dbEmp.salary?.basic ? dbEmp.salary.basic * 2 : 50000),
-                aadhaarNumber: dbEmp.aadhaarNumber,
-                pan: dbEmp.panNumber || b?.panNumber,
-                bloodGroup: dbEmp.bloodGroup,
-                bankName: b?.bankName || dbEmp.bankName,
-                accountNumber: b?.accountNumber || dbEmp.accountNumber,
-                ifscCode: b?.ifscCode || dbEmp.ifscCode,
-                bankLast4: b?.bankLast4 || (b?.accountNumber ? b.accountNumber.slice(-4) : undefined) || dbEmp.bankLast4,
-                paymentMethod: dbEmp.paymentMethod || "Corporate NEFT",
-                ...prev,
-                // Ensure real DB values overwrite empty/stale cached fields
-                ...(b?.bankName ? { bankName: b.bankName } : {}),
-                ...(b?.accountNumber ? { accountNumber: b.accountNumber, bankLast4: b.accountNumber.slice(-4) } : {}),
-                ...(b?.ifscCode ? { ifscCode: b.ifscCode } : {}),
-                ...(b?.bankLast4 ? { bankLast4: b.bankLast4 } : {}),
-                ...(dbEmp.bankName ? { bankName: dbEmp.bankName } : {}),
-                ...(dbEmp.accountNumber ? { accountNumber: dbEmp.accountNumber, bankLast4: dbEmp.accountNumber.slice(-4) } : {}),
-                ...(dbEmp.ifscCode ? { ifscCode: dbEmp.ifscCode } : {}),
+    const syncEmployees = () => {
+      fetch("/api/employees")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((resData) => {
+          if (resData?.success && Array.isArray(resData.employees)) {
+            setData((d) => {
+              const existingMap = new Map(d.employees.map((e) => [e.id, e]));
+              resData.employees.forEach((dbEmp: any) => {
+                const id = dbEmp.employeeId;
+                const prev = existingMap.get(id);
+                const b = dbEmp.bankDetails;
+                existingMap.set(id, {
+                  ...prev, // Base / mock defaults
+                  id,
+                  name: dbEmp.name || prev?.name,
+                  workEmail: dbEmp.workEmail || dbEmp.email || prev?.workEmail,
+                  personalEmail: dbEmp.personalEmail !== undefined ? dbEmp.personalEmail : (prev?.personalEmail || ""),
+                  phone: dbEmp.phone || prev?.phone || "+91 90000 00000",
+                  dob: dbEmp.dateOfBirth || prev?.dob || "2000-01-01",
+                  gender: dbEmp.gender || prev?.gender || "Other",
+                  address: dbEmp.address || prev?.address || "",
+                  emergencyContact: dbEmp.emergencyContact?.phone || prev?.emergencyContact || "+91 90000 00000",
+                  joiningDate: dbEmp.joiningDate || prev?.joiningDate || new Date().toISOString().slice(0, 10),
+                  branch: dbEmp.branch || prev?.branch || "Hyderabad",
+                  department: dbEmp.department || prev?.department || "Operations",
+                  team: dbEmp.team || prev?.team || "Operations",
+                  designation: dbEmp.designation || prev?.designation || "Staff",
+                  employmentType: "Full-time",
+                  managerId: dbEmp.reportingManagerId || prev?.managerId || null,
+                  probationMonths: dbEmp.probationEndDate ? 6 : (prev?.probationMonths || 3),
+                  status: dbEmp.status || "Active", // Authoritative status from database
+                  annualCTC: dbEmp.salary?.annualCtc || dbEmp.salary?.ctc || prev?.annualCTC || 600000,
+                  monthlyGross: dbEmp.salary?.monthlyGross || (dbEmp.salary?.basic ? dbEmp.salary.basic * 2 : 50000),
+                  aadhaarNumber: dbEmp.aadhaarNumber || prev?.aadhaarNumber,
+                  pan: dbEmp.panNumber || b?.panNumber || prev?.pan,
+                  bloodGroup: dbEmp.bloodGroup || prev?.bloodGroup,
+                  bankName: b?.bankName || dbEmp.bankName || prev?.bankName,
+                  accountNumber: b?.accountNumber || dbEmp.accountNumber || prev?.accountNumber,
+                  ifscCode: b?.ifscCode || dbEmp.ifscCode || prev?.ifscCode,
+                  bankLast4: b?.bankLast4 || (b?.accountNumber ? b.accountNumber.slice(-4) : undefined) || dbEmp.bankLast4 || prev?.bankLast4,
+                  paymentMethod: dbEmp.paymentMethod || prev?.paymentMethod || "Corporate NEFT",
+                });
               });
+              return { ...d, employees: Array.from(existingMap.values()) };
             });
-            return { ...d, employees: Array.from(existingMap.values()) };
-          });
-        }
-      })
-      .catch(() => {});
+          }
+        })
+        .catch(() => {});
+    };
+
+    syncEmployees();
+    const interval = setInterval(syncEmployees, 5000);
+    const handleFocus = () => syncEmployees();
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+    };
   }, []);
 
   useEffect(() => {

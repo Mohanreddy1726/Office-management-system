@@ -34,6 +34,45 @@ export async function GET(req: NextRequest) {
       if (status && status !== "All") query.status = status;
 
       const employees = await Employee.find(query).sort({ employeeId: 1 });
+
+      // Auto-heal: If any employee is marked "Pending Verification", but their associated User account has verified email,
+      // heal the employee status to Probation (if probationEndDate exists) or Active, and persist to DB.
+      const pendingEmps = employees.filter((e) => e.status === "Pending Verification");
+      if (pendingEmps.length > 0) {
+        const empIds = pendingEmps.map((e) => e.employeeId).filter(Boolean);
+        const emails = pendingEmps
+          .flatMap((e) => [e.workEmail, e.email, e.personalEmail])
+          .filter((em): em is string => Boolean(em))
+          .map((em) => em.toLowerCase().trim());
+
+        const verifiedUsers = await User.find({
+          $or: [
+            { employeeId: { $in: empIds } },
+            { email: { $in: emails } },
+          ],
+          isEmailVerified: true,
+        });
+
+        if (verifiedUsers.length > 0) {
+          const verifiedEmpIds = new Set(verifiedUsers.map((u) => u.employeeId).filter(Boolean));
+          const verifiedEmails = new Set(verifiedUsers.map((u) => u.email.toLowerCase().trim()));
+
+          for (const emp of pendingEmps) {
+            const hasVerifiedId = emp.employeeId && verifiedEmpIds.has(emp.employeeId);
+            const hasVerifiedMail =
+              (emp.workEmail && verifiedEmails.has(emp.workEmail.toLowerCase().trim())) ||
+              (emp.email && verifiedEmails.has(emp.email.toLowerCase().trim())) ||
+              (emp.personalEmail && verifiedEmails.has(emp.personalEmail.toLowerCase().trim()));
+
+            if (hasVerifiedId || hasVerifiedMail) {
+              const newStatus = emp.probationEndDate ? "Probation" : "Active";
+              emp.status = newStatus;
+              await Employee.updateOne({ _id: emp._id }, { $set: { status: newStatus } });
+            }
+          }
+        }
+      }
+
       return NextResponse.json({ success: true, employees });
     } else {
       const store = getMockStore();

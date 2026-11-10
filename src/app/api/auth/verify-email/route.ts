@@ -50,22 +50,33 @@ export async function GET(req: NextRequest) {
       employee = await Employee.findOne({ employeeId: user.employeeId });
     }
     if (!employee && user.email) {
+      const emailPattern = new RegExp(`^${user.email.trim()}$`, "i");
       employee = await Employee.findOne({
-        $or: [{ workEmail: user.email }, { email: user.email }, { personalEmail: user.email }],
+        $or: [{ workEmail: emailPattern }, { email: emailPattern }, { personalEmail: emailPattern }],
       });
     }
 
-    // Also update Employee status: Probation if probationEndDate exists, else Active
+    // Determine post-verification status: Probation if probationEndDate exists, else Active
+    const postVerificationStatus = employee?.probationEndDate ? "Probation" : "Active";
+
     if (employee) {
-      const hasProbation = Boolean(employee.probationEndDate);
-      employee.status = hasProbation ? "Probation" : "Active";
+      employee.status = postVerificationStatus;
       await employee.save();
-    } else if (user.employeeId) {
-      await Employee.updateOne(
-        { employeeId: user.employeeId },
-        { $set: { status: "Active" } }
-      );
     }
+
+    // Also update any matching employee documents in the database
+    const emailPattern = new RegExp(`^${(user.email || "").trim()}$`, "i");
+    await Employee.updateMany(
+      {
+        $or: [
+          ...(user.employeeId ? [{ employeeId: user.employeeId }] : []),
+          { workEmail: emailPattern },
+          { email: emailPattern },
+          { personalEmail: emailPattern },
+        ],
+      },
+      { $set: { status: postVerificationStatus } }
+    );
 
     // Trigger dispatch of Login Credentials Email to the registered personal email
     const appUrl = getAppUrl(req);
