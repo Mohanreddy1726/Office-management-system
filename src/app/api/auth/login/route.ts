@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db";
 import { User } from "@/models/User";
+import { Employee } from "@/models/Employee";
 import { signSessionToken, AUTH_COOKIE_NAME, UserRole } from "@/lib/auth";
 import { getMockStore } from "@/lib/mock-db";
 import bcrypt from "bcryptjs";
@@ -73,6 +74,35 @@ export async function POST(req: NextRequest) {
     if (!user.isActive) {
       return NextResponse.json(
         { error: "Account has been deactivated. Please contact Super Admin." },
+        { status: 403 }
+      );
+    }
+
+    // Check linked Employee record status
+    let linkedEmployee = null;
+    if (conn) {
+      if (user.employeeId) {
+        linkedEmployee = await Employee.findOne({ employeeId: user.employeeId });
+      }
+      if (!linkedEmployee && user.email) {
+        const emailPattern = new RegExp(`^${user.email.trim()}$`, "i");
+        linkedEmployee = await Employee.findOne({
+          $or: [{ workEmail: emailPattern }, { email: emailPattern }, { personalEmail: emailPattern }],
+        });
+      }
+    } else {
+      const store = getMockStore();
+      linkedEmployee = store.employees.find(
+        (e) => e.employeeId === user.employeeId || e.email?.toLowerCase() === user.email?.toLowerCase()
+      );
+    }
+
+    if (linkedEmployee && (linkedEmployee.status === "Inactive" || (linkedEmployee.status as string) === "Resigned")) {
+      if (conn && user._id && user.isActive) {
+        await User.updateOne({ _id: user._id }, { $set: { isActive: false } });
+      }
+      return NextResponse.json(
+        { error: "Your employee account is marked as Inactive. Access to RenDesk has been revoked. Please contact HR or Super Admin." },
         { status: 403 }
       );
     }

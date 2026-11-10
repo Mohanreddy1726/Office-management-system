@@ -373,9 +373,21 @@ export default function EmployeesPage() {
         <DeleteEmployeeDialog
           emp={deleteEmp}
           onClose={() => setDeleteEmp(null)}
-          onConfirm={(emp) => {
+          onConfirm={async (emp) => {
             updateEmployee(emp.id, { status: "Inactive" }, "Deactivated by admin");
-            toast.success(`Employee ${emp.name} marked as Inactive`);
+            try {
+              await fetch("/api/employees", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  employeeId: emp.id,
+                  patch: { status: "Inactive" },
+                }),
+              });
+            } catch (err) {
+              console.error("Failed to deactivate employee via API:", err);
+            }
+            toast.success(`Employee ${emp.name} marked as Inactive and portal access revoked`);
             setDeleteEmp(null);
           }}
         />

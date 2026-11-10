@@ -339,6 +339,22 @@ export async function PATCH(req: NextRequest) {
         { $set: updateData },
         { new: true }
       );
+
+      // Synchronize User account active status with Employee status
+      if (patch.status) {
+        const isNowActive = patch.status !== "Inactive" && patch.status !== "Resigned";
+        const targetEmail = (updated?.workEmail || updated?.email || "").toLowerCase().trim();
+        await User.updateMany(
+          {
+            $or: [
+              { employeeId },
+              ...(targetEmail ? [{ email: targetEmail }] : []),
+            ],
+          },
+          { $set: { isActive: isNowActive } }
+        );
+      }
+
       return NextResponse.json({ success: true, employee: updated });
     }
     return NextResponse.json({ success: true });

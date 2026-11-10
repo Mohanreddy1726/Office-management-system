@@ -142,6 +142,19 @@ export async function POST(req: NextRequest) {
         targetEmp = store.employees.find((e) => e.employeeId === targetUserId || e.workEmail === targetEmail);
       }
 
+      if (targetEmp && (targetEmp.status === "Inactive" || (targetEmp.status as string) === "Resigned")) {
+        return NextResponse.json(
+          { error: "Cannot switch to an inactive employee account." },
+          { status: 403 }
+        );
+      }
+      if (targetUser && !targetUser.isActive) {
+        return NextResponse.json(
+          { error: "Cannot switch to a deactivated user account." },
+          { status: 403 }
+        );
+      }
+
       const resolvedName = targetUser?.name || targetEmp?.name || targetName || "User";
       const resolvedEmail = targetUser?.email || targetEmp?.workEmail || targetEmp?.email || targetEmail || "";
       const resolvedEmpId = targetUser?.employeeId || targetEmp?.employeeId || targetUserId || "";
