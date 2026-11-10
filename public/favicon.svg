@@ -1,0 +1,25 @@
+<svg width="32" height="32" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="rd-bg" x1="0" y1="0" x2="36" y2="36" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0B132B" />
+      <stop offset="60%" stop-color="#1C2541" />
+      <stop offset="100%" stop-color="#1E1B4B" />
+    </linearGradient>
+    <linearGradient id="rd-primary" x1="8" y1="8" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="50%" stop-color="#3B82F6" />
+      <stop offset="100%" stop-color="#6366F1" />
+    </linearGradient>
+    <linearGradient id="rd-glow" x1="22" y1="8" x2="28" y2="14" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#22D3EE" />
+      <stop offset="100%" stop-color="#06B6D4" />
+    </linearGradient>
+  </defs>
+  <rect width="36" height="36" rx="9" fill="url(#rd-bg)" />
+  <rect x="0.75" y="0.75" width="34.5" height="34.5" rx="8.25" stroke="white" stroke-opacity="0.16" stroke-width="0.75" />
+  <rect x="7.5" y="7.5" width="4.2" height="21" rx="2.1" fill="#FFFFFF" />
+  <path d="M11.7 7.5H18C21.6 7.5 24.2 9.8 24.2 13.2C24.2 16.6 21.6 18.9 18 18.9H11.7V7.5Z" fill="url(#rd-primary)" />
+  <path d="M11.7 11.2H17.2C18.9 11.2 20.1 12 20.1 13.2C20.1 14.4 18.9 15.2 17.2 15.2H11.7V11.2Z" fill="#0B132B" />
+  <path d="M15.8 17.2L22.6 26.6C23.2 27.4 24.4 27.5 25.1 26.8C25.8 26.1 25.7 25 25 24.2L19.4 17.2H15.8Z" fill="url(#rd-primary)" />
+  <circle cx="25.5" cy="10" r="2.2" fill="url(#rd-glow)" />
+</svg>
