@@ -90,7 +90,7 @@ function AdminDashboard() {
   const onLeave = today.filter((a) => a.status === "Leave").length;
   const pendingConfirm = data.attendance.filter((a) => a.confirmation.startsWith("Awaiting")).length;
   const pendingLeaves = data.leaves.filter((l) =>
-    ["Submitted", "Manager Review", "HR Review"].includes(l.status)
+    ["Submitted", "Manager Review", "HR Review", "Pending", "Pending Review"].includes(l.status)
   );
   const currentRun = data.payrollRuns.find((r) => r.period === CURRENT_PERIOD);
   const active = emps.filter((e) => e.status === "Active").length;

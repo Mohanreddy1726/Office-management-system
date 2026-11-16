@@ -268,15 +268,84 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         .catch(() => {});
     };
 
+    const syncLeaves = () => {
+      fetch("/api/leave")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((resData) => {
+          if (resData?.success && Array.isArray(resData.requests)) {
+            setData((d) => {
+              const existingMap = new Map<string, LeaveRequest>();
+              for (const l of d.leaves) {
+                existingMap.set(l.id, l);
+              }
+
+              // Auto-sync any local-only leaves that might exist in browser storage
+              const localOnlyLeaves = d.leaves.filter((l) => l.id && l.id.startsWith("LV-"));
+              if (localOnlyLeaves.length > 0) {
+                fetch("/api/leave", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ leaves: localOnlyLeaves }),
+                }).catch(() => {});
+              }
+
+              for (const req of resData.requests) {
+                existingMap.set(req.id, {
+                  id: req.id,
+                  employeeId: req.employeeId,
+                  type: req.type || req.leaveType || "Casual Leave",
+                  startDate: req.startDate,
+                  endDate: req.endDate,
+                  days: req.days || req.daysCount || 1,
+                  halfDay: req.halfDay,
+                  reason: req.reason || "Personal Leave",
+                  reasonCategory: req.reasonCategory,
+                  handoverEmployeeId: req.handoverEmployeeId,
+                  emergencyContact: req.emergencyContact,
+                  documentNote: req.documentNote,
+                  status: req.status || "Submitted",
+                  managerDecision: req.managerDecision,
+                  managerNote: req.managerNote,
+                  timeline: Array.isArray(req.timeline) ? req.timeline : [],
+                });
+              }
+
+              let updatedBalances = d.leaveBalances;
+              if (resData.balance?.employeeId) {
+                const b = resData.balance;
+                updatedBalances = {
+                  ...updatedBalances,
+                  [b.employeeId]: {
+                    "Casual Leave": b.casualLeave?.remaining ?? 12,
+                    "Sick Leave": b.sickLeave?.remaining ?? 10,
+                    "Comp-Off": b.compOff?.remaining ?? 2,
+                  },
+                };
+              }
+
+              return {
+                ...d,
+                leaves: Array.from(existingMap.values()).sort((a, b) => b.startDate.localeCompare(a.startDate)),
+                leaveBalances: updatedBalances,
+              };
+            });
+          }
+        })
+        .catch(() => {});
+    };
+
     syncEmployees();
     syncAttendance();
+    syncLeaves();
     const interval = setInterval(() => {
       syncEmployees();
       syncAttendance();
-    }, 10000);
+      syncLeaves();
+    }, 8000);
     const handleFocus = () => {
       syncEmployees();
       syncAttendance();
+      syncLeaves();
     };
     window.addEventListener("focus", handleFocus);
     return () => {
@@ -544,23 +613,86 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         audit({ user: session ? nameOf(data, session.userId) : "Demo", action: "Added company holiday", module: "Attendance", record: h.name, outcome: "Success" });
       },
       applyLeave: (l) => {
+        const tempId = `LV-${Date.now()}`;
+        const newLeave: LeaveRequest = {
+          ...l,
+          id: tempId,
+          status: "Submitted",
+          timeline: [{ stage: "Submitted", actor: l.employeeId, at: l.startDate }],
+        };
         setData((d) => ({
           ...d,
-          leaves: [{ ...l, id: `LV-${d.leaves.length + 1}`, status: "Submitted", timeline: [{ stage: "Submitted", actor: l.employeeId, at: l.startDate }] }, ...d.leaves],
+          leaves: [newLeave, ...d.leaves],
         }));
-        audit({ user: session ? nameOf(data, session.userId) : "Demo", action: "Applied for leave", module: "Leave", record: `${nameOf(data, l.employeeId)} ${l.type}`, outcome: "Success" });
+        audit({
+          user: session ? nameOf(data, session.userId) : "Demo",
+          action: "Applied for leave",
+          module: "Leave",
+          record: `${nameOf(data, l.employeeId)} ${l.type}`,
+          outcome: "Success",
+        });
+
+        // Immediately persist to backend MongoDB Atlas
+        fetch("/api/leave", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(l),
+        })
+          .then((res) => (res.ok ? res.json() : null))
+          .then((resData) => {
+            if (resData?.success && resData.leave?.id) {
+              setData((d) => ({
+                ...d,
+                leaves: d.leaves.map((item) =>
+                  item.id === tempId ? { ...item, id: resData.leave.id } : item
+                ),
+              }));
+            }
+          })
+          .catch((err) => {
+            console.error("Failed to persist leave request:", err);
+          });
       },
       decideLeave: (id, decision, note) => {
+        const stampTime = stamp();
         setData((d) => ({
           ...d,
           leaves: d.leaves.map((l) =>
             l.id === id
-              ? { ...l, status: decision, timeline: [...l.timeline, { stage: decision, actor: session ? nameOf(d, session.userId) : "Demo", at: stamp(), note }] }
+              ? {
+                  ...l,
+                  status: decision,
+                  timeline: [
+                    ...l.timeline,
+                    {
+                      stage: decision,
+                      actor: session ? nameOf(d, session.userId) : "Admin",
+                      at: stampTime,
+                      note,
+                    },
+                  ],
+                }
               : l,
           ),
         }));
         const l = data.leaves.find((x) => x.id === id);
-        audit({ user: session ? nameOf(data, session.userId) : "Demo", action: `Leave ${decision.toLowerCase()}`, module: "Leave", record: l ? `${nameOf(data, l.employeeId)} ${l.type}` : id, outcome: "Success", reason: decision === "Rejected" ? note : undefined });
+        audit({
+          user: session ? nameOf(data, session.userId) : "Demo",
+          action: `Leave ${decision.toLowerCase()}`,
+          module: "Leave",
+          record: l ? `${nameOf(data, l.employeeId)} ${l.type}` : id,
+          outcome: "Success",
+          reason: decision === "Rejected" ? note : undefined,
+        });
+
+        // Immediately persist decision to backend MongoDB Atlas
+        fetch("/api/leave", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ leaveId: id, decision, note }),
+        }).catch((err) => {
+          console.error("Failed to persist leave decision:", err);
+        });
       },
       createPayrollRun: (period) => {
         const eligible = data.employees.filter((e) => e.status !== "Inactive" && e.status !== "Resigned");

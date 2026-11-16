@@ -45,15 +45,22 @@ export function useScope() {
   const isAdmin = role === "super_admin" || role === "hr_admin";
   const isManager = role === "manager";
   const isEmployee = role === "employee";
-  const uid = session?.userId ?? "";
+  const uid = session?.employeeId || session?.userId || "";
   const inScope = (empId: string) => {
+    if (isAdmin) {
+      if (prefs.branch && prefs.branch !== "All Branches") {
+        const e = data.employees.find((x) => x.id === empId);
+        return !e || e.branch === prefs.branch;
+      }
+      return true;
+    }
     const e = data.employees.find((x) => x.id === empId);
     if (!e) {
-      if (isAdmin || !session) return true;
+      if (!session) return true;
       return false;
     }
-    if (prefs.branch !== "All Branches" && e.branch !== prefs.branch) return false;
-    if (isEmployee) return empId === uid;
+    if (prefs.branch && prefs.branch !== "All Branches" && e.branch !== prefs.branch) return false;
+    if (isEmployee) return empId === uid || empId === session?.employeeId;
     if (isManager) return e.managerId === uid || empId === uid;
     return true;
   };

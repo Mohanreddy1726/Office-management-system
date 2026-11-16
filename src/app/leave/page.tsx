@@ -32,7 +32,7 @@ const LEAVE_TYPES: LeaveType[] = [
 ];
 
 export default function LeavePage() {
-  const { data, applyLeave, decideLeave } = useStore();
+  const { data, session, applyLeave, decideLeave } = useStore();
   const { isAdmin, isManager, isEmployee, uid, inScope } = useScope();
   const nameOf = useNames();
 
@@ -56,15 +56,18 @@ export default function LeavePage() {
     return scopedLeaves.filter(
       (l) =>
         l.employeeId !== uid &&
-        ((isManager && ["Submitted", "Manager Review"].includes(l.status)) ||
-          (isAdmin && ["Submitted", "Manager Review", "HR Review"].includes(l.status)))
+        l.employeeId !== session?.employeeId &&
+        ((isManager && ["Submitted", "Manager Review", "Pending", "Pending Review"].includes(l.status)) ||
+          (isAdmin && ["Submitted", "Manager Review", "HR Review", "Pending", "Pending Review"].includes(l.status)))
     );
-  }, [scopedLeaves, uid, isManager, isAdmin]);
+  }, [scopedLeaves, uid, session?.employeeId, isManager, isAdmin]);
 
   // Employee's own leaves
   const myLeaves = useMemo(() => {
-    return data.leaves.filter((l) => l.employeeId === uid);
-  }, [data.leaves, uid]);
+    return data.leaves.filter(
+      (l) => l.employeeId === uid || (session?.employeeId && l.employeeId === session.employeeId)
+    );
+  }, [data.leaves, uid, session?.employeeId]);
 
   // All team requests with search & filter
   const filteredAll = useMemo(() => {
@@ -137,8 +140,9 @@ export default function LeavePage() {
       render: (r) => {
         const canApprove =
           r.employeeId !== uid &&
-          ((isManager && ["Submitted", "Manager Review"].includes(r.status)) ||
-            (isAdmin && ["Submitted", "Manager Review", "HR Review"].includes(r.status)));
+          r.employeeId !== session?.employeeId &&
+          ((isManager && ["Submitted", "Manager Review", "Pending", "Pending Review"].includes(r.status)) ||
+            (isAdmin && ["Submitted", "Manager Review", "HR Review", "Pending", "Pending Review"].includes(r.status)));
 
         return (
           <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
@@ -722,7 +726,7 @@ function LeaveRequestCard({
   onReject: () => void;
   onViewDetails: () => void;
 }) {
-  const { data } = useStore();
+  const { data, session } = useStore();
   const emp = data.employees.find((e) => e.id === request.employeeId);
 
   // Status dot color
@@ -988,14 +992,15 @@ function LeaveDetailSheetContent({
   onApprove: () => void;
   onReject: () => void;
 }) {
-  const { data } = useStore();
+  const { data, session } = useStore();
   const nameOf = useNames();
   const emp = data.employees.find((e) => e.id === request.employeeId);
 
   const canApprove =
     request.employeeId !== uid &&
-    ((isManager && ["Submitted", "Manager Review"].includes(request.status)) ||
-      (isAdmin && ["Submitted", "Manager Review", "HR Review"].includes(request.status)));
+    request.employeeId !== session?.employeeId &&
+    ((isManager && ["Submitted", "Manager Review", "Pending", "Pending Review"].includes(request.status)) ||
+      (isAdmin && ["Submitted", "Manager Review", "HR Review", "Pending", "Pending Review"].includes(request.status)));
 
   return (
     <div className="space-y-6 pt-4">
@@ -1107,7 +1112,7 @@ function ApplyLeaveDialog({
   onOpenChange: (v: boolean) => void;
   onSubmit: (l: Omit<LeaveRequest, "id" | "timeline" | "status">) => void;
 }) {
-  const { data } = useStore();
+  const { data, session } = useStore();
   const { uid, isEmployee, inScope } = useScope();
   const [applicant, setApplicant] = useState(uid);
   const [type, setType] = useState<string>("Casual Leave");
