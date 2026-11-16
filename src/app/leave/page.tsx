@@ -21,7 +21,7 @@ import {
   CalendarDays, Download, Hourglass, Plus, CheckCircle2, Clock,
   Calendar, Check, X, Search, LayoutGrid, List, Building2, Shield,
   ArrowUpRight, FileText, AlertCircle, Sparkles, Plane, HeartPulse,
-  Coffee, Baby, FileQuestion, UserCheck, AlertTriangle, ShieldCheck
+  Coffee, Baby, FileQuestion, UserCheck, AlertTriangle, ShieldCheck, Trash2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -726,7 +726,7 @@ function LeaveRequestCard({
   onReject: () => void;
   onViewDetails: () => void;
 }) {
-  const { data, session } = useStore();
+  const { data, session, deleteLeave } = useStore();
   const emp = data.employees.find((e) => e.id === request.employeeId);
 
   // Status dot color
@@ -992,7 +992,7 @@ function LeaveDetailSheetContent({
   onApprove: () => void;
   onReject: () => void;
 }) {
-  const { data, session } = useStore();
+  const { data, session, deleteLeave } = useStore();
   const nameOf = useNames();
   const emp = data.employees.find((e) => e.id === request.employeeId);
 
@@ -1083,17 +1083,33 @@ function LeaveDetailSheetContent({
         />
       </div>
 
-      {/* Action Buttons if can approve */}
-      {canApprove && (
-        <div className="flex items-center justify-end gap-2 pt-4 border-t border-border">
-          <Button variant="outline" size="sm" onClick={onReject} className="text-rose-600 border-rose-200">
-            Reject
+      {/* Action Buttons */}
+      <div className="flex items-center justify-between gap-2 pt-4 border-t border-border">
+        {(isAdmin || request.employeeId === uid || (session?.employeeId && request.employeeId === session.employeeId)) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              deleteLeave(request.id);
+              toast.success("Leave request deleted");
+            }}
+            className="text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+          >
+            <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete
           </Button>
-          <Button size="sm" onClick={onApprove} className="bg-emerald-600 hover:bg-emerald-700 text-white">
-            Approve Application
-          </Button>
-        </div>
-      )}
+        )}
+
+        {canApprove && (
+          <div className="flex items-center gap-2 ml-auto">
+            <Button variant="outline" size="sm" onClick={onReject} className="text-rose-600 border-rose-200">
+              Reject
+            </Button>
+            <Button size="sm" onClick={onApprove} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+              Approve Application
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1112,7 +1128,7 @@ function ApplyLeaveDialog({
   onOpenChange: (v: boolean) => void;
   onSubmit: (l: Omit<LeaveRequest, "id" | "timeline" | "status">) => void;
 }) {
-  const { data, session } = useStore();
+  const { data, session, deleteLeave } = useStore();
   const { uid, isEmployee, inScope } = useScope();
   const [applicant, setApplicant] = useState(uid);
   const [type, setType] = useState<string>("Casual Leave");

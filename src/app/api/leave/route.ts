@@ -124,63 +124,14 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
 
-    // Support batch sync of local offline leaves
-    if (Array.isArray(body.leaves)) {
-      const conn = await connectToDatabase();
-      if (!conn) {
-        return NextResponse.json({ success: true, synced: 0 });
-      }
-
-      let createdCount = 0;
-      for (const item of body.leaves) {
-        const applicantId = item.employeeId || session?.employeeId || session?.userId;
-        if (!applicantId) continue;
-
-        // Check if an identical leave request already exists
-        const exists = await LeaveRequest.findOne({
-          employeeId: applicantId,
-          startDate: item.startDate,
-          endDate: item.endDate,
-          reason: item.reason,
-        });
-
-        if (!exists) {
-          const emp = await Employee.findOne({ employeeId: applicantId });
-          await LeaveRequest.create({
-            employeeId: applicantId,
-            employeeName: emp?.name || item.employeeName || session?.name || "Employee",
-            department: emp?.department || "Operations",
-            branch: emp?.branch || "Headquarters",
-            leaveType: item.type || item.leaveType || "Casual Leave",
-            type: item.type || item.leaveType || "Casual Leave",
-            startDate: item.startDate,
-            endDate: item.endDate,
-            daysCount: item.days || 1,
-            days: item.days || 1,
-            isHalfDay: !!item.isHalfDay || !!item.halfDay,
-            halfDay: item.halfDay,
-            reason: item.reason,
-            reasonCategory: item.reasonCategory,
-            handoverEmployeeId: item.handoverEmployeeId,
-            emergencyContact: item.emergencyContact,
-            documentNote: item.documentNote,
-            status: item.status || "Submitted",
-            timeline: item.timeline || [
-              {
-                stage: "Submitted",
-                actor: emp?.name || session?.name || applicantId,
-                at: new Date(),
-                note: "Application submitted for review",
-              },
-            ],
-          });
-          createdCount++;
-        }
-      }
-      return NextResponse.json({ success: true, synced: createdCount });
+    // Ignore legacy batch leaves so stale localStorage cannot resurrect deleted records
+    if (body.leaves) {
+      return NextResponse.json({ success: true, message: "Batch recreation ignored" });
     }
 
-    // Single leave submission
+    if (!body.startDate) {
+      return NextResponse.json({ error: "startDate is required" }, { status: 400 });
+    }
     const applicantId = body.employeeId || session?.employeeId || session?.userId || "OF-1001";
     const leaveType = body.type || body.leaveType || "Casual Leave";
     const startDate = body.startDate;
@@ -331,7 +282,6 @@ export async function PATCH(req: NextRequest) {
         leave = await LeaveRequest.findById(targetId);
       }
       if (!leave) {
-        // Fallback search by string id or employeeId
         leave = await LeaveRequest.findOne({
           $or: [{ _id: targetId }, { employeeId: targetId }],
         }).sort({ createdAt: -1 });
@@ -401,6 +351,63 @@ export async function PATCH(req: NextRequest) {
         leave.decisionNote = noteText;
       }
       return NextResponse.json({ success: true, leave });
+    }
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const session = await getCurrentUser();
+    const roleHeader = req.headers.get("x-user-role");
+    const role = session?.role || (roleHeader === "super_admin" || roleHeader === "hr_admin" ? roleHeader : null);
+
+    if (!session && !role) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+
+    if (!id) {
+      return NextResponse.json({ error: "Leave ID is required" }, { status: 400 });
+    }
+
+    const conn = await connectToDatabase();
+    if (conn) {
+      let deletedDoc: any = null;
+      if (mongoose.Types.ObjectId.isValid(id)) {
+        deletedDoc = await LeaveRequest.findByIdAndDelete(id);
+      }
+      if (!deletedDoc) {
+        deletedDoc = await LeaveRequest.findOneAndDelete({
+          $or: [{ _id: id }, { employeeId: id }],
+        });
+      }
+
+      if (deletedDoc) {
+        try {
+          await AuditLog.create({
+            auditId: `AU-${Date.now()}`,
+            user: session?.name || "Admin",
+            userId: session?.userId || "ADM-001",
+            role: session?.role || "super_admin",
+            action: "Deleted Leave Application",
+            module: "Leave",
+            record: `${deletedDoc.employeeName} (${deletedDoc.employeeId}) - ${deletedDoc.leaveType}`,
+            outcome: "Success",
+          });
+        } catch (auditErr) {
+          console.warn("[Leave Delete Audit Warning]", auditErr);
+        }
+      }
+
+      return NextResponse.json({ success: true, deleted: true, id });
+    } else {
+      const store = getMockStore();
+      store.leaves = store.leaves.filter((l) => l._id !== id && l.id !== id);
+      return NextResponse.json({ success: true, deleted: true, id });
     }
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

@@ -50,6 +50,7 @@ export interface Store {
   // leave
   applyLeave: (l: Omit<LeaveRequest, "id" | "timeline" | "status">) => void;
   decideLeave: (id: string, decision: "Approved" | "Rejected" | "Clarification", note: string) => void;
+  deleteLeave: (id: string) => void;
   // payroll
   createPayrollRun: (period: string) => void;
   advancePayroll: (id: string, to: PayrollRun["status"], by: string, note?: string) => void;
@@ -158,6 +159,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               return updatedRec;
             });
           }
+          // Authoritative leaves always come from MongoDB Atlas
+          parsed.data.leaves = [];
           setData(parsed.data);
         }
         setSession(parsed?.session ?? null);
@@ -274,41 +277,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         .then((resData) => {
           if (resData?.success && Array.isArray(resData.requests)) {
             setData((d) => {
-              const existingMap = new Map<string, LeaveRequest>();
-              for (const l of d.leaves) {
-                existingMap.set(l.id, l);
-              }
-
-              // Auto-sync any local-only leaves that might exist in browser storage
-              const localOnlyLeaves = d.leaves.filter((l) => l.id && l.id.startsWith("LV-"));
-              if (localOnlyLeaves.length > 0) {
-                fetch("/api/leave", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ leaves: localOnlyLeaves }),
-                }).catch(() => {});
-              }
-
-              for (const req of resData.requests) {
-                existingMap.set(req.id, {
-                  id: req.id,
-                  employeeId: req.employeeId,
-                  type: req.type || req.leaveType || "Casual Leave",
-                  startDate: req.startDate,
-                  endDate: req.endDate,
-                  days: req.days || req.daysCount || 1,
-                  halfDay: req.halfDay,
-                  reason: req.reason || "Personal Leave",
-                  reasonCategory: req.reasonCategory,
-                  handoverEmployeeId: req.handoverEmployeeId,
-                  emergencyContact: req.emergencyContact,
-                  documentNote: req.documentNote,
-                  status: req.status || "Submitted",
-                  managerDecision: req.managerDecision,
-                  managerNote: req.managerNote,
-                  timeline: Array.isArray(req.timeline) ? req.timeline : [],
-                });
-              }
+              const serverLeaves: LeaveRequest[] = resData.requests.map((req: any) => ({
+                id: req.id || req._id,
+                employeeId: req.employeeId,
+                type: req.type || req.leaveType || "Casual Leave",
+                startDate: req.startDate,
+                endDate: req.endDate,
+                days: req.days || req.daysCount || 1,
+                halfDay: req.halfDay,
+                reason: req.reason || "Personal Leave",
+                reasonCategory: req.reasonCategory,
+                handoverEmployeeId: req.handoverEmployeeId,
+                emergencyContact: req.emergencyContact,
+                documentNote: req.documentNote,
+                status: req.status || "Submitted",
+                managerDecision: req.managerDecision,
+                managerNote: req.managerNote,
+                timeline: Array.isArray(req.timeline) ? req.timeline : [],
+              }));
 
               let updatedBalances = d.leaveBalances;
               if (resData.balance?.employeeId) {
@@ -325,7 +311,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
               return {
                 ...d,
-                leaves: Array.from(existingMap.values()).sort((a, b) => b.startDate.localeCompare(a.startDate)),
+                leaves: serverLeaves.sort((a, b) => b.startDate.localeCompare(a.startDate)),
                 leaveBalances: updatedBalances,
               };
             });
@@ -692,6 +678,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify({ leaveId: id, decision, note }),
         }).catch((err) => {
           console.error("Failed to persist leave decision:", err);
+        });
+      },
+      deleteLeave: (id) => {
+        setData((d) => ({
+          ...d,
+          leaves: d.leaves.filter((l) => l.id !== id && (l as any)._id !== id),
+        }));
+        fetch(`/api/leave?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch((err) => {
+          console.error("Failed to delete leave on server:", err);
+        });
+        const l = data.leaves.find((x) => x.id === id);
+        audit({
+          user: session ? nameOf(data, session.userId) : "Admin",
+          action: "Deleted leave request",
+          module: "Leave",
+          record: l ? `${nameOf(data, l.employeeId)} ${l.type}` : id,
+          outcome: "Success",
         });
       },
       createPayrollRun: (period) => {
