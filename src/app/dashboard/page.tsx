@@ -906,10 +906,11 @@ function EmployeeDashboard({ me }: { me: any }) {
                       </span>
                       <StatusBadge status={l.status} />
                     </div>
-                    {l.status === "Rejected" && (
-                      <p className="text-[11px] text-rose-600 dark:text-rose-400 italic">
-                        Reason: "{rejReason || "Operational constraints"}"
-                      </p>
+                    {l.status === "Rejected" && rejReason && (
+                      <div className="mt-1 rounded-md bg-rose-50 p-2 text-[11px] text-rose-800 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/80 dark:border-rose-900">
+                        <span className="font-semibold">Rejection Comment: </span>
+                        <span className="italic">"{rejReason}"</span>
+                      </div>
                     )}
                   </div>
                 );

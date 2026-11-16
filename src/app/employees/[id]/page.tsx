@@ -388,7 +388,7 @@ export default function EmployeeDetailPage() {
                     k: l.id,
                     left: `${l.type} · ${l.days} day(s)`,
                     sub: `${fmtDate(l.startDate)} → ${fmtDate(l.endDate)}${
-                      l.status === "Rejected" ? ` · Rejection: "${rejReason || "Operational constraints"}"` : ""
+                      l.status === "Rejected" && rejReason ? ` · Rejection Comment: "${rejReason}"` : ""
                     }`,
                     right: <StatusBadge status={l.status} />,
                   };

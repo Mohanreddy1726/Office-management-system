@@ -873,19 +873,19 @@ function LeaveRequestCard({
             request.timeline?.slice().reverse().find((t) => t.stage === "Rejected" && t.note?.trim())?.note?.trim();
           if (!rejectionReason) return null;
           return (
-            <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50/80 p-3 text-xs text-rose-950 dark:bg-rose-950/40 dark:border-rose-900/60 dark:text-rose-200">
-              <div className="flex items-center justify-between gap-1.5 mb-1 text-[11px] font-bold text-rose-800 dark:text-rose-300">
+            <div className="mt-3 rounded-xl border border-rose-300 bg-rose-50/90 p-3 text-xs text-rose-950 shadow-xs dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-200">
+              <div className="flex items-center justify-between gap-1.5 mb-1.5 text-xs font-bold text-rose-900 dark:text-rose-200">
                 <span className="flex items-center gap-1.5">
                   <XCircle className="h-4 w-4 text-rose-600 dark:text-rose-400 shrink-0" />
-                  <span>Rejection Reason:</span>
+                  <span>Rejection Comment:</span>
                 </span>
                 {request.reviewedBy && (
-                  <span className="text-[10px] font-normal text-rose-600/90 dark:text-rose-400">
+                  <span className="text-[11px] font-normal text-rose-700/90 dark:text-rose-300">
                     By {request.reviewedBy}
                   </span>
                 )}
               </div>
-              <div className="rounded-lg bg-white/90 p-2 text-xs font-medium text-rose-900 shadow-2xs border border-rose-100 dark:bg-rose-950/60 dark:text-rose-100 dark:border-rose-900/40">
+              <div className="rounded-lg bg-white/95 p-2.5 text-xs font-medium text-rose-950 shadow-2xs border border-rose-200/80 dark:bg-rose-950/80 dark:text-rose-100 dark:border-rose-900/60">
                 <p className="italic leading-relaxed">"{rejectionReason}"</p>
               </div>
             </div>
