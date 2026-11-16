@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { toast } from "sonner";
 import { AppShell } from "@/components/shell";
@@ -189,7 +189,10 @@ export default function LeavePage() {
                   size="sm"
                   variant="outline"
                   className="h-7 text-xs text-rose-600 border-rose-200 hover:bg-rose-50"
-                  onClick={() => setRejectItem(r)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setRejectItem(r);
+                  }}
                 >
                   Reject
                 </Button>
@@ -705,8 +708,11 @@ export default function LeavePage() {
                   setDetailItem(null);
                 }}
                 onReject={() => {
-                  setRejectItem(detailItem);
+                  const target = detailItem;
                   setDetailItem(null);
+                  setTimeout(() => {
+                    setRejectItem(target);
+                  }, 60);
                 }}
               />
             )}
@@ -863,9 +869,9 @@ function LeaveRequestCard({
         {/* Rejection Comment Box Display on Employee Leave Card */}
         {request.status === "Rejected" && (() => {
           const rejectionReason =
-            request.decisionNote ||
-            request.timeline?.slice().reverse().find((t) => t.stage === "Rejected" && t.note)?.note ||
-            "Operational / coverage constraints";
+            request.decisionNote?.trim() ||
+            request.timeline?.slice().reverse().find((t) => t.stage === "Rejected" && t.note?.trim())?.note?.trim();
+          if (!rejectionReason) return null;
           return (
             <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50/80 p-3 text-xs text-rose-950 dark:bg-rose-950/40 dark:border-rose-900/60 dark:text-rose-200">
               <div className="flex items-center justify-between gap-1.5 mb-1 text-[11px] font-bold text-rose-800 dark:text-rose-300">
@@ -909,7 +915,10 @@ function LeaveRequestCard({
               <Button
                 size="sm"
                 className="h-7 px-2.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
-                onClick={onApprove}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onApprove();
+                }}
               >
                 <Check className="mr-1 h-3 w-3" /> Approve
               </Button>
@@ -917,7 +926,10 @@ function LeaveRequestCard({
                 size="sm"
                 variant="outline"
                 className="h-7 px-2 text-xs text-rose-600 border-rose-200 hover:bg-rose-50 dark:border-rose-900"
-                onClick={onReject}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onReject();
+                }}
               >
                 Reject
               </Button>
@@ -1434,7 +1446,7 @@ function RejectLeaveDialog({
     "Exceeds permissible single-stretch absence quota",
   ];
 
-  const isValid = reason.trim().length >= 4;
+  const isValid = reason.trim().length >= 3;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1448,9 +1460,9 @@ function RejectLeaveDialog({
               <DialogTitle className="text-base font-bold text-foreground">
                 Leave Rejection Reason
               </DialogTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <DialogDescription className="text-xs text-muted-foreground mt-0.5">
                 Provide a reason or comment explaining why this leave is rejected. This reason will show on the employee's leave card.
-              </p>
+              </DialogDescription>
             </div>
           </div>
         </DialogHeader>
