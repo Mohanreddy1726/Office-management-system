@@ -231,9 +231,37 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         .catch(() => {});
     };
 
+    const syncAttendance = () => {
+      fetch("/api/attendance?all=true")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((resData) => {
+          if (resData?.success && Array.isArray(resData.records)) {
+            setData((d) => {
+              const map = new Map<string, AttendanceRecord>();
+              for (const r of d.attendance) {
+                map.set(`${r.employeeId}_${r.date}`, r);
+              }
+              for (const r of resData.records) {
+                const key = `${r.employeeId}_${r.date}`;
+                map.set(key, { ...(map.get(key) || {}), ...r });
+              }
+              return { ...d, attendance: Array.from(map.values()) };
+            });
+          }
+        })
+        .catch(() => {});
+    };
+
     syncEmployees();
-    const interval = setInterval(syncEmployees, 5000);
-    const handleFocus = () => syncEmployees();
+    syncAttendance();
+    const interval = setInterval(() => {
+      syncEmployees();
+      syncAttendance();
+    }, 10000);
+    const handleFocus = () => {
+      syncEmployees();
+      syncAttendance();
+    };
     window.addEventListener("focus", handleFocus);
     return () => {
       clearInterval(interval);

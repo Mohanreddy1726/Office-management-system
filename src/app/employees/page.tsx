@@ -22,12 +22,12 @@ import {
   Download, Plus, Users, LayoutGrid, List, Mail, Phone, Building2,
   ArrowUpRight, Key, Trash2, BarChart3, Activity, Shield, CheckCircle2,
   Lock, AlertTriangle, GraduationCap, Briefcase, CreditCard, User, Landmark,
-  ChevronRight, ChevronLeft, Check, Sparkles, FileText, ShieldCheck, Eye, EyeOff, Loader2
+  ChevronRight, ChevronLeft, Check, Sparkles, FileText, ShieldCheck, Eye, EyeOff, Loader2, Calendar
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function EmployeesPage() {
-  const { data, session, addEmployee, updateEmployee } = useStore();
+  const { data, session, addEmployee, updateEmployee, setAttendanceRecords } = useStore();
   const router = useRouter();
   const role = session?.role;
   const isAdmin = role === "super_admin" || role === "hr_admin";
@@ -39,10 +39,47 @@ export default function EmployeesPage() {
     }
   }, [session, router]);
 
+  // Load latest attendance records from API on mount
+  useEffect(() => {
+    fetch("/api/attendance?all=true")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((resData) => {
+        if (resData?.success && Array.isArray(resData.records)) {
+          setAttendanceRecords(resData.records);
+        }
+      })
+      .catch((err) => console.warn("Failed to load attendance records:", err));
+  }, [setAttendanceRecords]);
+
   const [q, setQ] = useState("");
   const [dept, setDept] = useState("all");
   const [branch, setBranch] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const currentIsoMonth = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  }, []);
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentIsoMonth);
+
+  const availableMonths = useMemo(() => {
+    const set = new Set<string>();
+    set.add(currentIsoMonth);
+    data.attendance.forEach((a) => {
+      if (a.date && a.date.length >= 7) {
+        set.add(a.date.slice(0, 7));
+      }
+    });
+    return Array.from(set).sort((a, b) => b.localeCompare(a));
+  }, [data.attendance, currentIsoMonth]);
+
+  const formatMonthLabel = (m: string) => {
+    const [y, mo] = m.split("-").map(Number);
+    const dateObj = new Date(y, (mo || 1) - 1, 1);
+    const formatted = !isNaN(dateObj.getTime())
+      ? dateObj.toLocaleDateString("en-US", { month: "short", year: "numeric" })
+      : m;
+    return m === currentIsoMonth ? `${formatted} (Current)` : formatted;
+  };
   const [view, setView] = useState<"cards" | "table">("cards");
   const [openAdd, setOpenAdd] = useState(false);
   const [resetEmp, setResetEmp] = useState<Employee | null>(null);
@@ -293,6 +330,19 @@ export default function EmployeesPage() {
                 <SelectItem value="Inactive">Inactive</SelectItem>
               </SelectContent>
             </Select>
+            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+              <SelectTrigger className="h-8 w-44 text-xs font-medium">
+                <Calendar className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
+                <SelectValue placeholder="Month" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableMonths.map((m) => (
+                  <SelectItem key={m} value={m}>
+                    {formatMonthLabel(m)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* View Switcher Toggle */}
@@ -331,6 +381,7 @@ export default function EmployeesPage() {
                   key={emp.id}
                   emp={emp}
                   isAdmin={isAdmin}
+                  month={selectedMonth}
                   onResetPassword={() => setResetEmp(emp)}
                   onDelete={() => setDeleteEmp(emp)}
                 />
@@ -423,14 +474,32 @@ export default function EmployeesPage() {
 
 /* ---------- Rich Employee Card Component (Matching Uploaded Design) ---------- */
 
+const parseTimeToMinutes = (t?: string): number | null => {
+  if (!t) return null;
+  const clean = t.toLowerCase().trim();
+  const isPm = clean.includes("pm");
+  const isAm = clean.includes("am");
+  const bare = clean.replace(/am|pm/g, "").trim();
+  const parts = bare.split(":");
+  if (parts.length < 2) return null;
+  let h = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  if (isNaN(h) || isNaN(m)) return null;
+  if (isPm && h < 12) h += 12;
+  else if (isAm && h === 12) h = 0;
+  return h * 60 + m;
+};
+
 function EmployeeCard({
   emp,
   isAdmin,
+  month,
   onResetPassword,
   onDelete,
 }: {
   emp: Employee;
   isAdmin?: boolean;
+  month?: string;
   onResetPassword: () => void;
   onDelete: () => void;
 }) {
@@ -466,12 +535,40 @@ function EmployeeCard({
     }
   };
 
-  // Calculate deterministic metrics for this employee
-  const attRecords = data.attendance.filter((a) => a.employeeId === emp.id);
+  // Calculate metrics for this employee scoped to that month only
+  const targetMonth = month || new Date().toISOString().slice(0, 7);
+  const attRecords = data.attendance.filter(
+    (a) => a.employeeId === emp.id && a.date && a.date.startsWith(targetMonth)
+  );
   const presentDays = attRecords.filter((a) => a.status === "Present" || a.status === "Late").length;
-  const attPct = Math.min(100, Math.max(78, Math.round(((presentDays || 19) / 22) * 100)));
-  const workHours = (presentDays || 19) * 8.5;
+  const halfDays = attRecords.filter((a) => a.status === "Half Day").length;
+  const effectivePresent = presentDays + halfDays * 0.5;
+
+  const totalWorkedMinutes = attRecords.reduce((acc, a) => {
+    if (a.workedMinutes && a.workedMinutes > 0) return acc + a.workedMinutes;
+    if (a.checkIn && a.checkOut) {
+      const inMins = parseTimeToMinutes(a.checkIn);
+      const outMins = parseTimeToMinutes(a.checkOut);
+      if (inMins !== null && outMins !== null && outMins > inMins) {
+        return acc + (outMins - inMins);
+      }
+    }
+    if (a.status === "Present" || a.status === "Late") return acc + 8.5 * 60;
+    if (a.status === "Half Day") return acc + 4.25 * 60;
+    return acc;
+  }, 0);
+  const workHours = Math.round(totalWorkedMinutes / 60);
+
+  const standardMonthlyDays = 22;
+  const attPct = Math.min(100, Math.round((effectivePresent / standardMonthlyDays) * 100));
   const leaveBalance = Object.values(data.leaveBalances[emp.id] ?? {}).reduce((acc, v) => acc + (v as number), 0) || 12;
+
+  const [yStr, mStr] = targetMonth.split("-");
+  const monthDate = new Date(Number(yStr), (Number(mStr) || 1) - 1, 1);
+  const monthLabel = !isNaN(monthDate.getTime())
+    ? monthDate.toLocaleDateString("en-US", { month: "short", year: "numeric" })
+    : targetMonth;
+  const formattedPresent = Number.isInteger(effectivePresent) ? effectivePresent : effectivePresent.toFixed(1);
 
   // Custom responsibility focus description
   const responsibility = getResponsibility(emp);
@@ -682,9 +779,9 @@ function EmployeeCard({
         {/* Quota / Progress Bar */}
         <div className="mt-3.5">
           <div className="flex items-center justify-between text-xs">
-            <span className="font-medium text-muted-foreground">Monthly Attendance Quota</span>
+            <span className="font-medium text-muted-foreground">{monthLabel} Attendance Quota</span>
             <span className="font-semibold text-foreground">
-              {presentDays || 19} / 22 ({attPct}%)
+              {formattedPresent} / 22 ({attPct}%)
             </span>
           </div>
           <Progress value={attPct} className="mt-1.5 h-1.5 bg-slate-100" />
