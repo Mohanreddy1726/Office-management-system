@@ -641,6 +641,7 @@ export default function AttendancePage() {
             <MonthCalendarSection
               records={isEmployee ? data.attendance.filter((a) => a.employeeId === uid) : data.attendance.filter((a) => inScope(a.employeeId))}
               isEmployee={isEmployee}
+              currentDate={date}
               onSelectDate={(d) => {
                 setDate(d);
                 setTab("daily");
@@ -1131,20 +1132,39 @@ function AttendanceRecordCard({
 function MonthCalendarSection({
   records,
   isEmployee,
+  currentDate,
   onSelectDate,
 }: {
   records: AttendanceRecord[];
   isEmployee: boolean;
+  currentDate?: string;
   onSelectDate: (d: string) => void;
 }) {
-  const days = Array.from({ length: 31 }, (_, i) => `2026-10-${String(i + 1).padStart(2, "0")}`);
-  const offset = new Date("2026-10-01T00:00:00Z").getUTCDay();
+  const activeMonth = (currentDate || new Date().toISOString().slice(0, 10)).slice(0, 7);
+  const [yStr, mStr] = activeMonth.split("-");
+  const year = Number(yStr);
+  const monthNum = Number(mStr) || 1;
+  const daysInMonth = new Date(year, monthNum, 0).getDate() || 30;
+  const days = Array.from({ length: daysInMonth }, (_, i) => `${activeMonth}-${String(i + 1).padStart(2, "0")}`);
+  const offset = new Date(year, monthNum - 1, 1).getDay();
+
+  const monthDate = new Date(year, monthNum - 1, 1);
+  const monthTitle = !isNaN(monthDate.getTime())
+    ? monthDate.toLocaleDateString("en-US", { month: "long", year: "numeric" })
+    : activeMonth;
+
+  // Working days (excluding Sundays)
+  const workingDays = days.filter((d) => {
+    const dayOfWeek = new Date(d + "T00:00:00").getDay();
+    return dayOfWeek !== 0;
+  }).length;
 
   // Summary counts for this month
-  const totalLogs = records.length;
-  const presentDays = records.filter((r) => ["Present", "Late"].includes(r.status)).length;
-  const lateDays = records.filter((r) => r.status === "Late").length;
-  const leaveDays = records.filter((r) => r.status === "Leave").length;
+  const monthRecords = records.filter((r) => r.date && r.date.startsWith(activeMonth));
+  const totalLogs = monthRecords.length;
+  const presentDays = monthRecords.filter((r) => ["Present", "Late"].includes(r.status)).length;
+  const lateDays = monthRecords.filter((r) => r.status === "Late").length;
+  const leaveDays = monthRecords.filter((r) => r.status === "Leave").length;
 
   return (
     <div className="space-y-4">
@@ -1152,11 +1172,11 @@ function MonthCalendarSection({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="rounded-xl border border-border bg-card p-3 shadow-sm text-center">
           <p className="text-[11px] font-medium text-muted-foreground">Month Days</p>
-          <p className="text-xl font-bold text-foreground mt-0.5">31 Days</p>
+          <p className="text-xl font-bold text-foreground mt-0.5">{daysInMonth} Days</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-3 shadow-sm text-center">
           <p className="text-[11px] font-medium text-muted-foreground">Working Days</p>
-          <p className="text-xl font-bold text-foreground mt-0.5">22 Days</p>
+          <p className="text-xl font-bold text-foreground mt-0.5">{workingDays} Days</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-3 shadow-sm text-center">
           <p className="text-[11px] font-medium text-muted-foreground">Attendance Rate</p>
@@ -1174,7 +1194,7 @@ function MonthCalendarSection({
       <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h3 className="font-semibold text-foreground text-sm">October 2026</h3>
+            <h3 className="font-semibold text-foreground text-sm">{monthTitle}</h3>
             <p className="text-xs text-muted-foreground">
               {isEmployee
                 ? "Your individual punch timeline for the month."

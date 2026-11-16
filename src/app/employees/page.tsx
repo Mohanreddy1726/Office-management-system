@@ -537,6 +537,11 @@ function EmployeeCard({
 
   // Calculate metrics for this employee scoped to that month only
   const targetMonth = month || new Date().toISOString().slice(0, 7);
+  const [yStr, mStr] = targetMonth.split("-");
+  const year = Number(yStr);
+  const monthNum = Number(mStr) || 1;
+  const daysInMonth = new Date(year, monthNum, 0).getDate() || 30;
+
   const attRecords = data.attendance.filter(
     (a) => a.employeeId === emp.id && a.date && a.date.startsWith(targetMonth)
   );
@@ -559,12 +564,10 @@ function EmployeeCard({
   }, 0);
   const workHours = Math.round(totalWorkedMinutes / 60);
 
-  const standardMonthlyDays = 22;
-  const attPct = Math.min(100, Math.round((effectivePresent / standardMonthlyDays) * 100));
+  const attPct = Math.min(100, Math.round((effectivePresent / daysInMonth) * 100));
   const leaveBalance = Object.values(data.leaveBalances[emp.id] ?? {}).reduce((acc, v) => acc + (v as number), 0) || 12;
 
-  const [yStr, mStr] = targetMonth.split("-");
-  const monthDate = new Date(Number(yStr), (Number(mStr) || 1) - 1, 1);
+  const monthDate = new Date(year, monthNum - 1, 1);
   const monthLabel = !isNaN(monthDate.getTime())
     ? monthDate.toLocaleDateString("en-US", { month: "short", year: "numeric" })
     : targetMonth;
@@ -781,7 +784,7 @@ function EmployeeCard({
           <div className="flex items-center justify-between text-xs">
             <span className="font-medium text-muted-foreground">{monthLabel} Attendance Quota</span>
             <span className="font-semibold text-foreground">
-              {formattedPresent} / 22 ({attPct}%)
+              {formattedPresent} / {daysInMonth} ({attPct}%)
             </span>
           </div>
           <Progress value={attPct} className="mt-1.5 h-1.5 bg-slate-100" />
