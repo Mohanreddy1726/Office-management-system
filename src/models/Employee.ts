@@ -73,6 +73,16 @@ export interface IEmployee extends Document {
     bankLast4?: string;
   };
 
+  // Work Shift
+  shift?: {
+    shiftName: string;
+    startTime: string;
+    endTime: string;
+    gracePeriodMinutes?: number;
+    halfDayThresholdHours?: number;
+    fullDayHours?: number;
+  };
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -170,6 +180,15 @@ const EmployeeSchema = new Schema<IEmployee>(
       panNumber: { type: String },
       aadhaarNumber: { type: String },
       bankLast4: { type: String },
+    },
+
+    shift: {
+      shiftName: { type: String, default: "General Shift" },
+      startTime: { type: String, default: "10:00" },
+      endTime: { type: String, default: "18:30" },
+      gracePeriodMinutes: { type: Number, default: 15 },
+      halfDayThresholdHours: { type: Number, default: 4.5 },
+      fullDayHours: { type: Number, default: 8.5 },
     },
   },
   { timestamps: true }

@@ -92,7 +92,8 @@ export async function reconcileEmployeePunches(
     }
 
     const firstMinutes = firstComp.hour24 * 60 + firstComp.minute;
-    const isLate = firstMinutes > (9 * 60 + 30);
+    // General Shift starts at 10:00 AM with 15 mins grace period (10:15 AM)
+    const isLate = firstMinutes > (10 * 60 + 15);
     let status = isLate ? "Late" : "Present";
     if (totalHours > 0 && totalHours < 4.5 && hasMultiplePunches) {
       status = "Half-day";
@@ -191,7 +192,8 @@ export async function reconcileAllActiveMappings(): Promise<{ processedPunches: 
     }
 
     const firstMinutes = firstComp.hour24 * 60 + firstComp.minute;
-    const isLate = firstMinutes > (9 * 60 + 30);
+    // General Shift starts at 10:00 AM with 15 mins grace period (10:15 AM)
+    const isLate = firstMinutes > (10 * 60 + 15);
     let status = isLate ? "Late" : "Present";
     if (totalHours > 0 && totalHours < 4.5 && hasMultiplePunches) {
       status = "Half-day";
@@ -315,7 +317,8 @@ export async function syncLiveBiometricHardware(
       }
 
       const firstMinutes = firstComp.hour24 * 60 + firstComp.minute;
-      const isLate = firstMinutes > (9 * 60 + 30);
+      // General Shift starts at 10:00 AM with 15 mins grace period (10:15 AM)
+      const isLate = firstMinutes > (10 * 60 + 15);
       let status = isLate ? "Late" : "Present";
       if (totalHours > 0 && totalHours < 4.5 && hasMultiplePunches) {
         status = "Half-day";

@@ -264,6 +264,15 @@ export async function POST(req: NextRequest) {
           esiDeduction: 0, // Zero ESI Policy
           tds: Math.round(monthlyGross * 0.05),
         },
+
+        shift: {
+          shiftName: "General Shift",
+          startTime: "10:00",
+          endTime: "18:30",
+          gracePeriodMinutes: 15,
+          halfDayThresholdHours: 4.5,
+          fullDayHours: 8.5,
+        },
       });
 
       // Generate verification token

@@ -75,10 +75,7 @@ export const DEMO_EMPLOYEES = {
 
 function buildShifts(): Shift[] {
   return [
-    { id: "SH-GEN", name: "General Shift", start: "09:30", end: "18:30", breakMinutes: 60, graceMinutes: 10, weeklyOffs: ["Sunday"], minFullDayHours: 7.5, minHalfDayHours: 4, overtimeEligible: false, branches: ["Hyderabad", "Warangal", "Vijayawada", "Visakhapatnam"], overnight: false },
-    { id: "SH-MORN", name: "Morning Support", start: "07:00", end: "15:30", breakMinutes: 45, graceMinutes: 10, weeklyOffs: ["Sunday"], minFullDayHours: 7, minHalfDayHours: 4, overtimeEligible: true, branches: ["Hyderabad", "Visakhapatnam"], overnight: false },
-    { id: "SH-EVE", name: "Evening Support", start: "14:00", end: "22:30", breakMinutes: 45, graceMinutes: 10, weeklyOffs: ["Sunday"], minFullDayHours: 7, minHalfDayHours: 4, overtimeEligible: true, branches: ["Hyderabad", "Vijayawada"], overnight: false },
-    { id: "SH-NIGHT", name: "Night Operations", start: "22:00", end: "06:30", breakMinutes: 45, graceMinutes: 15, weeklyOffs: ["Sunday"], minFullDayHours: 7, minHalfDayHours: 4, overtimeEligible: true, branches: ["Hyderabad"], overnight: true },
+    { id: "SH-GEN", name: "General Shift", start: "10:00", end: "18:30", breakMinutes: 60, graceMinutes: 15, weeklyOffs: ["Sunday"], minFullDayHours: 7.5, minHalfDayHours: 4, overtimeEligible: false, branches: ["Hyderabad", "Warangal", "Vijayawada", "Visakhapatnam"], overnight: false },
   ];
 }
 
@@ -100,7 +97,7 @@ function buildAttendance(): AttendanceRecord[] {
   const sunday = (d: string) => new Date(d + "T00:00:00Z").getUTCDay() === 0;
   let n = 0;
   for (const emp of EMPLOYEES) {
-    const shift = emp.department === "Customer Support" ? (emp.id.charCodeAt(6) % 2 ? "SH-EVE" : "SH-NIGHT") : "SH-GEN";
+    const shift = "SH-GEN";
     for (const date of DATES) {
       const id = `AR-${++n}`;
       if (sunday(date)) {
@@ -120,8 +117,8 @@ function buildAttendance(): AttendanceRecord[] {
       else if (r < 0.11) status = "Leave";
       else if (r < 0.125) status = "Half Day";
       else if (r < 0.27) { status = "Late"; lateMinutes = rint(6, 45); }
-      const sh = SHIFTS.find((s) => s.id === shift)!;
-      const [h = 9, m = 30] = sh.start.split(":").map(Number);
+      const sh = SHIFTS.find((s) => s.id === shift) || SHIFTS[0];
+      const [h = 10, m = 0] = sh.start.split(":").map(Number);
       const startMin = h * 60 + m + lateMinutes;
       if (status !== "Absent" && status !== "Leave") {
         checkIn = `${String(Math.floor(startMin / 60) % 24).padStart(2, "0")}:${String(startMin % 60).padStart(2, "0")}`;
@@ -157,10 +154,10 @@ function buildCorrections(): AttendanceCorrection[] {
   const mk = (i: number, empId: string, date: string, oi: string, oo: string | undefined, ri: string, ro: string, reason: string, status: AttendanceCorrection["status"]): AttendanceCorrection =>
     ({ id: `COR-${i}`, employeeId: empId, date, originalIn: oi, originalOut: oo, requestedIn: ri, requestedOut: ro, reason, submittedBy: empId, submittedAt: date, status });
   return [
-    mk(1, "OF-1011", "2026-10-20", "09:52", undefined, "09:30", "18:25", "Device failed to register evening punch", "Awaiting Manager"),
-    mk(2, "OF-1014", "2026-10-18", "10:10", "19:00", "09:30", "18:30", "Forgot to punch in after client meeting", "Awaiting HR"),
-    mk(3, "OF-1021", "2026-10-15", "09:41", "18:35", "09:30", "18:30", "Biometric reader was offline", "Approved"),
-    mk(4, "OF-1006", "2026-10-12", "09:58", "18:20", "09:30", "18:30", "Traffic delay, punched late by 28 min", "Rejected"),
+    mk(1, "OF-1011", "2026-10-20", "10:52", undefined, "10:00", "18:25", "Device failed to register evening punch", "Awaiting Manager"),
+    mk(2, "OF-1014", "2026-10-18", "10:40", "19:00", "10:00", "18:30", "Forgot to punch in after client meeting", "Awaiting HR"),
+    mk(3, "OF-1021", "2026-10-15", "10:25", "18:35", "10:00", "18:30", "Biometric reader was offline", "Approved"),
+    mk(4, "OF-1006", "2026-10-12", "10:48", "18:20", "10:00", "18:30", "Traffic delay, punched late by 28 min", "Rejected"),
   ];
 }
 

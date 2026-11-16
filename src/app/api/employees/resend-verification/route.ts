@@ -146,11 +146,11 @@ export async function POST(req: NextRequest) {
           },
           shift: {
             shiftName: "General Shift",
-            startTime: "09:30",
+            startTime: "10:00",
             endTime: "18:30",
             gracePeriodMinutes: 15,
             halfDayThresholdHours: 4.5,
-            fullDayHours: 9,
+            fullDayHours: 8.5,
           },
           leaveBalance: {
             casualLeave: 12,

@@ -1010,7 +1010,7 @@ function AttendanceRecordCard({
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
               <Clock className="h-3 w-3" />
-              Shift: {shift?.start || "09:30"} - {shift?.end || "18:30"}
+              Shift: {shift?.start || "10:00"} - {shift?.end || "18:30"}
             </span>
             <span className="font-medium text-xs text-muted-foreground">
               In: <strong className="text-foreground">{record.checkIn || "—"}</strong>
@@ -1088,7 +1088,7 @@ function AttendanceRecordCard({
           <span className="font-medium text-foreground">{fmtDate(record.date)}</span>
           {" · "}
           <span className="font-medium text-foreground">{shift?.name || "General Shift"}</span>{" "}
-          <span className="font-normal text-muted-foreground">({shift?.start || "09:30"} - {shift?.end || "18:30"})</span>
+          <span className="font-normal text-muted-foreground">({shift?.start || "10:00"} - {shift?.end || "18:30"})</span>
         </div>
 
         <div className="flex items-center gap-1.5">
@@ -1382,7 +1382,7 @@ function ConfirmationCard({
         <div className="flex justify-between">
           <span className="text-muted-foreground">Assigned Shift:</span>
           <span className="font-semibold text-foreground">
-            {shift?.name || "General Shift"} ({shift?.start || "09:30"} - {shift?.end || "18:30"})
+            {shift?.name || "General Shift"} ({shift?.start || "10:00"} - {shift?.end || "18:30"})
           </span>
         </div>
         <div className="flex justify-between">
@@ -1600,7 +1600,7 @@ function ShiftsAndHolidaysView({
                       <Pencil className="h-3 w-3" /> Edit
                     </Button>
                   )}
-                  {canManage && onDeleteShift && (
+                  {canManage && onDeleteShift && shift.id !== "SH-GEN" && (
                     <Button
                       size="sm"
                       variant="ghost"
@@ -1712,7 +1712,7 @@ function CorrectionDialog({
     data.shifts.find((s) => s.id === "SH-GEN") ||
     data.shifts.find((s) => s.name.toLowerCase().includes("general")) ||
     data.shifts[0];
-  const defaultIn = genShift?.start || "09:30";
+  const defaultIn = genShift?.start || "10:00";
   const defaultOut = genShift?.end || "18:30";
 
   const [emp, setEmp] = useState(prefill?.empId || uid);
@@ -1884,7 +1884,7 @@ function CreateShiftDialog({
   onSubmit: (s: Omit<Shift, "id">, id?: string) => void;
 }) {
   const [name, setName] = useState("");
-  const [start, setStart] = useState("09:30");
+  const [start, setStart] = useState("10:00");
   const [end, setEnd] = useState("18:30");
   const [graceMinutes, setGraceMinutes] = useState("15");
   const [breakMinutes, setBreakMinutes] = useState("60");
@@ -1898,7 +1898,7 @@ function CreateShiftDialog({
   useEffect(() => {
     if (initialData) {
       setName(initialData.name || "");
-      setStart(initialData.start || "09:30");
+      setStart(initialData.start || "10:00");
       setEnd(initialData.end || "18:30");
       setGraceMinutes(String(initialData.graceMinutes ?? 15));
       setBreakMinutes(String(initialData.breakMinutes ?? 60));
@@ -1910,7 +1910,7 @@ function CreateShiftDialog({
       setWeeklyOffs(Array.isArray(initialData.weeklyOffs) ? initialData.weeklyOffs : ["Saturday", "Sunday"]);
     } else {
       setName("");
-      setStart("09:30");
+      setStart("10:00");
       setEnd("18:30");
       setGraceMinutes("15");
       setBreakMinutes("60");

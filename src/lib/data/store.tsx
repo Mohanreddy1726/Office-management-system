@@ -123,23 +123,39 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed?.data) {
-          if (Array.isArray(parsed.data.shifts) && Array.isArray(parsed.data.attendance)) {
-            const shifts = parsed.data.shifts;
-            const genShift = shifts.find((s: any) => s.id === "SH-GEN") || shifts[0];
+          const generalShift: Shift = {
+            id: "SH-GEN",
+            name: "General Shift",
+            start: "10:00",
+            end: "18:30",
+            breakMinutes: 60,
+            graceMinutes: 15,
+            weeklyOffs: ["Sunday"],
+            minFullDayHours: 7.5,
+            minHalfDayHours: 4,
+            overtimeEligible: false,
+            branches: ["Hyderabad", "Warangal", "Vijayawada", "Visakhapatnam"],
+            overnight: false,
+          };
+          // Enforce only General Shift across the system
+          parsed.data.shifts = [generalShift];
+
+          if (Array.isArray(parsed.data.attendance)) {
             parsed.data.attendance = parsed.data.attendance.map((rec: any) => {
-              const recShift = shifts.find((s: any) => s.id === rec.shiftId) || genShift;
-              if (rec.checkIn && recShift?.start && !["Leave", "Absent", "Holiday", "Week Off"].includes(rec.status)) {
+              const recShift = generalShift;
+              const updatedRec = { ...rec, shiftId: "SH-GEN" };
+              if (rec.checkIn && !["Leave", "Absent", "Holiday", "Week Off"].includes(rec.status)) {
                 const inMins = parseTimeToMinutes(rec.checkIn);
                 const shiftStartMins = parseTimeToMinutes(recShift.start);
                 if (inMins !== null && shiftStartMins !== null) {
-                  const grace = recShift.graceMinutes ?? 10;
+                  const grace = recShift.graceMinutes ?? 15;
                   const isLate = inMins > shiftStartMins + grace;
                   const lateMinutes = isLate ? inMins - shiftStartMins : 0;
                   const status = isLate ? "Late" : (rec.status === "Late" ? "Present" : rec.status);
-                  return { ...rec, lateMinutes, status };
+                  return { ...updatedRec, lateMinutes, status };
                 }
               }
-              return rec;
+              return updatedRec;
             });
           }
           setData(parsed.data);
@@ -466,7 +482,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           let updatedAttendance = d.attendance;
           if (targetShift && (patch.start !== undefined || patch.end !== undefined || patch.graceMinutes !== undefined)) {
             const shiftStartMins = parseTimeToMinutes(targetShift.start);
-            const grace = targetShift.graceMinutes ?? 10;
+            const grace = targetShift.graceMinutes ?? 15;
 
             if (shiftStartMins !== null) {
               updatedAttendance = d.attendance.map((rec) => {
@@ -509,6 +525,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         });
       },
       deleteShift: (id) => {
+        if (id === "SH-GEN") return;
         const s = data.shifts.find((x) => x.id === id);
         setData((d) => ({
           ...d,
