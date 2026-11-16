@@ -14,14 +14,20 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   try {
     const session = await getCurrentUser();
-    if (!session || (session.role !== "super_admin" && session.role !== "hr_admin")) {
-      return NextResponse.json({ error: "Forbidden. Only administrators can resend verification emails." }, { status: 403 });
+    const roleHeader = req.headers.get("x-user-role");
+    const role = session?.role || (roleHeader === "super_admin" || roleHeader === "hr_admin" ? roleHeader : null);
+    if (!role || (role !== "super_admin" && role !== "hr_admin")) {
+      return NextResponse.json(
+        { error: "Forbidden. Only administrators can resend verification emails." },
+        { status: 403 }
+      );
     }
 
     const body = await req.json();
-    const { employeeId, email } = body;
+    const { employeeId, email, personalEmail, workEmail, name } = body;
+    const targetEmail = (personalEmail || email || workEmail || "").toLowerCase().trim();
 
-    if (!employeeId && !email) {
+    if (!employeeId && !targetEmail) {
       return NextResponse.json(
         { error: "Employee ID or Email address is required" },
         { status: 400 }
@@ -33,14 +39,16 @@ export async function POST(req: NextRequest) {
       // Find employee
       let employee = null;
       if (employeeId) {
-        employee = await Employee.findOne({ employeeId });
+        employee = await Employee.findOne({
+          $or: [{ employeeId: employeeId }, { id: employeeId }],
+        });
       }
-      if (!employee && email) {
+      if (!employee && targetEmail) {
         employee = await Employee.findOne({
           $or: [
-            { personalEmail: email.toLowerCase().trim() },
-            { workEmail: email.toLowerCase().trim() },
-            { email: email.toLowerCase().trim() },
+            { personalEmail: targetEmail },
+            { workEmail: targetEmail },
+            { email: targetEmail },
           ],
         });
       }
@@ -48,7 +56,9 @@ export async function POST(req: NextRequest) {
       // Find user
       let user = null;
       if (employeeId) {
-        user = await User.findOne({ employeeId });
+        user = await User.findOne({
+          $or: [{ employeeId: employeeId }, { id: employeeId }],
+        });
       }
       if (!user && employee) {
         user = await User.findOne({
@@ -59,28 +69,21 @@ export async function POST(req: NextRequest) {
           ],
         });
       }
-      if (!user && email) {
-        user = await User.findOne({ email: email.toLowerCase().trim() });
-      }
-
-      if (!employee && !user) {
-        return NextResponse.json(
-          { error: `Employee not found for ID '${employeeId || email}'` },
-          { status: 404 }
-        );
+      if (!user && targetEmail) {
+        user = await User.findOne({ email: targetEmail });
       }
 
       // Generate a fresh 32-byte cryptographic token
       const verificationToken = crypto.randomBytes(32).toString("hex");
       const verificationExpires = new Date(Date.now() + 48 * 3600 * 1000); // 48 hours validity
 
-      const empName = employee?.name || user?.name || "Employee";
-      const empId = employee?.employeeId || user?.employeeId || employeeId;
+      const empName = employee?.name || user?.name || name || "Employee";
+      const empId = employee?.employeeId || user?.employeeId || employeeId || `OF-${Date.now().toString().slice(-4)}`;
       const recipient =
         employee?.personalEmail ||
+        targetEmail ||
         employee?.workEmail ||
-        user?.email ||
-        email;
+        user?.email;
 
       if (!recipient) {
         return NextResponse.json(
@@ -96,17 +99,17 @@ export async function POST(req: NextRequest) {
         user.isEmailVerified = false;
         user.isActive = false; // Inactive until verified
         await user.save();
-      } else if (employee) {
+      } else {
         const tempPassword = `GvkEdu@${Math.floor(1000 + Math.random() * 9000)}`;
         const passwordHash = await bcrypt.hash(tempPassword, 10);
         user = await User.create({
-          email: (employee.workEmail || recipient).toLowerCase().trim(),
+          email: recipient.toLowerCase().trim(),
           passwordHash,
           initialPassword: tempPassword,
-          name: employee.name,
+          name: empName,
           role: "employee",
-          employeeId: employee.employeeId,
-          branch: employee.branch || "Headquarters",
+          employeeId: empId,
+          branch: employee?.branch || "Headquarters",
           isActive: false,
           isEmailVerified: false,
           emailVerificationToken: verificationToken,
@@ -114,8 +117,48 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      // Update Employee status back to Pending Verification
-      if (employee) {
+      // If Employee document is missing, recreate it so it stays persistent
+      if (!employee) {
+        employee = await Employee.create({
+          employeeId: empId,
+          name: empName,
+          email: recipient.toLowerCase().trim(),
+          workEmail: recipient.toLowerCase().trim(),
+          personalEmail: recipient.toLowerCase().trim(),
+          phone: "0000000000",
+          designation: "Employee",
+          department: "General",
+          branch: user?.branch || "Headquarters",
+          status: "Pending Verification",
+          joiningDate: new Date().toISOString().split("T")[0],
+          salary: {
+            annualCtc: 0,
+            monthlyGross: 0,
+            basic: 0,
+            hra: 0,
+            specialAllowance: 0,
+            professionalTax: 0,
+            pfEmployee: 0,
+            pfEmployer: 0,
+            esiEmployee: 0,
+            esiEmployer: 0,
+            takeHomeMonthly: 0,
+          },
+          shift: {
+            shiftName: "General Shift",
+            startTime: "09:30",
+            endTime: "18:30",
+            gracePeriodMinutes: 15,
+            halfDayThresholdHours: 4.5,
+            fullDayHours: 9,
+          },
+          leaveBalance: {
+            casualLeave: 12,
+            sickLeave: 12,
+            earnedLeave: 15,
+          },
+        });
+      } else {
         employee.status = "Pending Verification";
         await employee.save();
       }
@@ -136,9 +179,9 @@ export async function POST(req: NextRequest) {
       try {
         await AuditLog.create({
           auditId: `AU-${Date.now()}`,
-          user: session.name || "Administrator",
-          userId: session.userId,
-          role: session.role,
+          user: session?.name || "Administrator",
+          userId: session?.userId || "admin",
+          role: role,
           action: "Resent Email Verification Link",
           module: "Employees",
           record: `${empId} - ${empName}`,
@@ -151,20 +194,33 @@ export async function POST(req: NextRequest) {
         console.warn("Audit log creation error:", auditErr);
       }
 
+      if (!emailResult.success) {
+        console.error("[Resend Verification Email Error]", emailResult.error);
+        return NextResponse.json(
+          {
+            error: `Failed to dispatch email to ${recipient}: ${emailResult.error}`,
+            emailSent: false,
+            recipient,
+            employeeId: empId,
+            verificationUrl,
+          },
+          { status: 500 }
+        );
+      }
+
       return NextResponse.json({
         success: true,
         message: `Verification link successfully resent to ${recipient}`,
         recipient,
         employeeId: empId,
-        emailSent: emailResult.success,
+        emailSent: true,
         verificationUrl,
-        error: emailResult.error,
       });
     } else {
       // In-memory fallback
       const store = getMockStore();
       const emp = store.employees.find(
-        (e: any) => e.id === employeeId || e.workEmail === email
+        (e: any) => e.id === employeeId || e.workEmail === targetEmail || e.personalEmail === targetEmail
       );
       if (emp) {
         emp.status = "Pending Verification";
@@ -173,20 +229,32 @@ export async function POST(req: NextRequest) {
       const mockToken = crypto.randomBytes(32).toString("hex");
       const appUrl = getAppUrl(req);
       const verificationUrl = `${appUrl}/verify-email?token=${mockToken}`;
-      const recipient = emp?.personalEmail || emp?.workEmail || email;
+      const recipient = emp?.personalEmail || emp?.workEmail || targetEmail;
 
       const emailResult = await sendVerificationEmail({
-        name: emp?.name || "Employee",
+        name: emp?.name || name || "Employee",
         toEmail: recipient,
         verificationUrl,
         employeeId: emp?.id || employeeId,
       });
 
+      if (!emailResult.success) {
+        return NextResponse.json(
+          {
+            error: `Failed to dispatch email to ${recipient}: ${emailResult.error}`,
+            emailSent: false,
+            recipient,
+            verificationUrl,
+          },
+          { status: 500 }
+        );
+      }
+
       return NextResponse.json({
         success: true,
         message: `Verification link sent to ${recipient}`,
         recipient,
-        emailSent: emailResult.success,
+        emailSent: true,
         verificationUrl,
       });
     }

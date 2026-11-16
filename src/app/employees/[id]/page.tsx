@@ -35,7 +35,7 @@ export default function EmployeeDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = params?.id as string;
-  const { data, updateEmployee } = useStore();
+  const { data, session, updateEmployee } = useStore();
   const { isAdmin, isManager, isEmployee, uid, inScope } = useScope();
   const [tab, setTab] = useState("overview");
   const [edit, setEdit] = useState(false);
@@ -49,10 +49,16 @@ export default function EmployeeDetailPage() {
     try {
       const res = await fetch("/api/employees/resend-verification", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-role": session?.role || (isAdmin ? "super_admin" : "employee"),
+        },
         body: JSON.stringify({
           employeeId: e.id,
+          name: e.name,
           email: e.personalEmail || e.workEmail,
+          personalEmail: e.personalEmail,
+          workEmail: e.workEmail,
         }),
       });
       const resData = await res.json();

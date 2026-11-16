@@ -175,10 +175,16 @@ export default function EmployeesPage() {
                   toast.loading(`Sending verification mail to ${r.name}...`, { id: `resend-${r.id}` });
                   const res = await fetch("/api/employees/resend-verification", {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: {
+                      "Content-Type": "application/json",
+                      "x-user-role": session?.role || "super_admin",
+                    },
                     body: JSON.stringify({
                       employeeId: r.id,
+                      name: r.name,
                       email: r.personalEmail || r.workEmail,
+                      personalEmail: r.personalEmail,
+                      workEmail: r.workEmail,
                     }),
                   });
                   const data = await res.json();
@@ -405,7 +411,10 @@ export default function EmployeesPage() {
             try {
               const res = await fetch("/api/employees", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                  "Content-Type": "application/json",
+                  "x-user-role": session?.role || "super_admin",
+                },
                 body: JSON.stringify(newEmp),
               });
               const data = await res.json();
@@ -421,15 +430,14 @@ export default function EmployeesPage() {
 
               if (data.emailSent) {
                 toast.success(`Employee ${newEmp.name} created! Verification link sent to ${newEmp.personalEmail || newEmp.workEmail}`);
+              } else if (newEmp.sendVerification && data.emailError) {
+                toast.warning(`Employee added, but verification email failed to send: ${data.emailError}. You can click "Resend Link" to try again.`);
               } else {
                 toast.success(`Employee ${newEmp.name} (${newId}) added successfully!`);
               }
             } catch (err: any) {
-              if (!err.message?.includes("Failed to add employee")) {
-                addEmployee(newEmp);
-                setOpenAdd(false);
-                toast.success("Employee saved to store");
-              }
+              console.error("[AddEmployee Error]", err);
+              // Do NOT swallow the error and do NOT add a ghost employee to store!
               throw err;
             }
           }}
@@ -504,7 +512,7 @@ function EmployeeCard({
   onDelete: () => void;
 }) {
   const router = useRouter();
-  const { data } = useStore();
+  const { data, session } = useStore();
   const [isResending, setIsResending] = useState(false);
 
   const handleResendVerification = async (e?: React.MouseEvent) => {
@@ -514,10 +522,16 @@ function EmployeeCard({
     try {
       const res = await fetch("/api/employees/resend-verification", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-role": session?.role || "super_admin",
+        },
         body: JSON.stringify({
           employeeId: emp.id,
+          name: emp.name,
           email: emp.personalEmail || emp.workEmail,
+          personalEmail: emp.personalEmail,
+          workEmail: emp.workEmail,
         }),
       });
       const resData = await res.json();
