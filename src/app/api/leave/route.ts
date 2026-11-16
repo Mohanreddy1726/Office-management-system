@@ -273,7 +273,14 @@ export async function PATCH(req: NextRequest) {
         ? session?.role === "manager"
           ? "Approved by Manager"
           : "Approved by HR Admin"
-        : "Rejected as per operational constraints");
+        : "");
+
+    if (finalDecision === "Rejected" && (!noteText || noteText.trim().length < 3)) {
+      return NextResponse.json(
+        { error: "An explanation / reason is required to reject a leave application." },
+        { status: 400 }
+      );
+    }
 
     const conn = await connectToDatabase();
     if (conn) {

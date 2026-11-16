@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/data/store";
 import { TODAY } from "@/lib/data/seed";
@@ -21,7 +21,7 @@ import {
   CalendarDays, Download, Hourglass, Plus, CheckCircle2, Clock,
   Calendar, Check, X, Search, LayoutGrid, List, Building2, Shield,
   ArrowUpRight, FileText, AlertCircle, Sparkles, Plane, HeartPulse,
-  Coffee, Baby, FileQuestion, UserCheck, AlertTriangle, ShieldCheck, Trash2
+  Coffee, Baby, FileQuestion, UserCheck, AlertTriangle, ShieldCheck, Trash2, XCircle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -45,6 +45,7 @@ export default function LeavePage() {
   // Modals & Slide-out Sheet
   const [applyOpen, setApplyOpen] = useState(false);
   const [detailItem, setDetailItem] = useState<LeaveRequest | null>(null);
+  const [rejectItem, setRejectItem] = useState<LeaveRequest | null>(null);
 
   // Scoped requests
   const scopedLeaves = useMemo(() => {
@@ -170,10 +171,7 @@ export default function LeavePage() {
                   size="sm"
                   variant="outline"
                   className="h-7 text-xs text-rose-600 border-rose-200 hover:bg-rose-50"
-                  onClick={() => {
-                    decideLeave(r.id, "Rejected", "Operational constraints");
-                    toast.error(`Leave request rejected`);
-                  }}
+                  onClick={() => setRejectItem(r)}
                 >
                   Reject
                 </Button>
@@ -346,10 +344,7 @@ export default function LeavePage() {
                         decideLeave(req.id, "Approved", isManager ? "Approved by Manager" : "Approved by HR Admin");
                         toast.success(`Leave approved for ${nameOf(req.employeeId)}`);
                       }}
-                      onReject={() => {
-                        decideLeave(req.id, "Rejected", "Coverage constraints");
-                        toast.error("Leave request rejected");
-                      }}
+                      onReject={() => setRejectItem(req)}
                       onViewDetails={() => setDetailItem(req)}
                     />
                   ))}
@@ -536,10 +531,7 @@ export default function LeavePage() {
                           decideLeave(req.id, "Approved", isManager ? "Approved by Manager" : "Approved by HR Admin");
                           toast.success(`Leave approved for ${nameOf(req.employeeId)}`);
                         }}
-                        onReject={() => {
-                          decideLeave(req.id, "Rejected", "Coverage constraints");
-                          toast.error("Leave request rejected");
-                        }}
+                        onReject={() => setRejectItem(req)}
                         onViewDetails={() => setDetailItem(req)}
                       />
                     );
@@ -695,14 +687,29 @@ export default function LeavePage() {
                   setDetailItem(null);
                 }}
                 onReject={() => {
-                  decideLeave(detailItem.id, "Rejected", "Coverage constraints");
-                  toast.error(`Leave request rejected`);
-                  setDetailItem(null);
+                  setRejectItem(detailItem);
                 }}
               />
             )}
           </SheetContent>
         </Sheet>
+
+        {/* MODAL: Reject Leave Request with Required Explanation */}
+        <RejectLeaveDialog
+          open={!!rejectItem}
+          request={rejectItem}
+          onOpenChange={(v) => !v && setRejectItem(null)}
+          onConfirmReject={(reason) => {
+            if (rejectItem) {
+              decideLeave(rejectItem.id, "Rejected", reason);
+              toast.error("Leave request rejected with explanation");
+              setRejectItem(null);
+              if (detailItem?.id === rejectItem.id) {
+                setDetailItem(null);
+              }
+            }
+          }}
+        />
       </div>
     </AppShell>
   );
@@ -833,6 +840,17 @@ function LeaveRequestCard({
         <div className="mt-3.5 rounded-xl bg-slate-50 p-2.5 text-xs text-foreground dark:bg-muted/30">
           <p className="text-muted-foreground italic">"{request.reason}"</p>
         </div>
+
+        {/* Rejection Note Display */}
+        {request.status === "Rejected" && request.decisionNote && (
+          <div className="mt-2.5 rounded-xl border border-rose-200/80 bg-rose-50/70 p-2.5 text-xs text-rose-900 dark:bg-rose-950/30 dark:border-rose-900/60 dark:text-rose-200">
+            <div className="flex items-center gap-1 font-semibold text-rose-700 dark:text-rose-400 mb-0.5 text-[11px]">
+              <XCircle className="h-3.5 w-3.5" />
+              <span>Rejection Reason:</span>
+            </div>
+            <p className="italic text-[11px] leading-relaxed">"{request.decisionNote}"</p>
+          </div>
+        )}
 
         {request.managerDecision && (
           <div className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
@@ -1069,6 +1087,24 @@ function LeaveDetailSheetContent({
           <p className="font-medium text-foreground bg-muted/40 p-2 rounded-md italic">"{request.reason}"</p>
         </div>
       </div>
+
+      {/* Rejection Explanation in Detail Sheet */}
+      {request.status === "Rejected" && request.decisionNote && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-3.5 text-xs dark:bg-rose-950/20 dark:border-rose-900/60">
+          <div className="flex items-center gap-1.5 text-rose-700 dark:text-rose-400 font-semibold mb-1">
+            <XCircle className="h-4 w-4" />
+            <span>Rejection Reason / Explanation</span>
+          </div>
+          <p className="text-rose-950 dark:text-rose-200 font-medium italic">
+            "{request.decisionNote}"
+          </p>
+          {request.reviewedBy && (
+            <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">
+              Reviewed by: {request.reviewedBy}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Audit Timeline */}
       <div className="space-y-3">
@@ -1315,6 +1351,127 @@ function ApplyLeaveDialog({
             className="text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
           >
             Submit Application ({days} {days === 1 ? "Day" : "Days"})
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* =========================================================================================
+ * DIALOG: RejectLeaveDialog (Requires explanation for rejection)
+ * ========================================================================================= */
+function RejectLeaveDialog({
+  open,
+  request,
+  onOpenChange,
+  onConfirmReject,
+}: {
+  open: boolean;
+  request: LeaveRequest | null;
+  onOpenChange: (open: boolean) => void;
+  onConfirmReject: (reason: string) => void;
+}) {
+  const [reason, setReason] = useState("");
+  const { data } = useStore();
+  const emp = request ? data.employees.find((e) => e.id === request.employeeId) : null;
+  const applicantName = emp?.name || request?.employeeId || "Employee";
+
+  // Reset reason when dialog opens for a new request
+  useEffect(() => {
+    if (open) {
+      setReason("");
+    }
+  }, [open, request?.id]);
+
+  const quickReasons = [
+    "Critical project deadline & pending deliverables",
+    "Insufficient team coverage / multiple members on leave",
+    "Peak business operational period / client commitments",
+    "Notice period policy requirements",
+    "Exceeds permissible single-stretch absence quota",
+  ];
+
+  const isValid = reason.trim().length >= 4;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md rounded-2xl p-6">
+        <DialogHeader>
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <div>
+              <DialogTitle className="text-base font-bold text-foreground">
+                Reject Leave Application
+              </DialogTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Rejection requires an explanation that will be recorded in the audit trail.
+              </p>
+            </div>
+          </div>
+        </DialogHeader>
+
+        {request && (
+          <div className="rounded-xl border border-rose-100 bg-rose-50/50 p-3 text-xs dark:bg-rose-950/20 dark:border-rose-900/50">
+            <p className="font-semibold text-rose-950 dark:text-rose-200">
+              {applicantName} ({request.type})
+            </p>
+            <p className="text-rose-700 dark:text-rose-300 mt-0.5">
+              {fmtDate(request.startDate)} {request.startDate !== request.endDate ? `→ ${fmtDate(request.endDate)}` : ""} · {request.days} {request.days === 1 ? "day" : "days"}
+            </p>
+          </div>
+        )}
+
+        <div className="space-y-3 py-1">
+          <div>
+            <label className="text-xs font-semibold text-foreground block mb-1.5">
+              Reason / Explanation for Rejection <span className="text-rose-500">*</span>
+            </label>
+            <Textarea
+              rows={3}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="State clear reasons why this leave cannot be granted at this time..."
+              className="text-xs"
+              autoFocus
+            />
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Minimum 4 characters required. This explanation will be displayed to the employee.
+            </p>
+          </div>
+
+          <div>
+            <p className="text-[11px] font-medium text-muted-foreground mb-1.5 uppercase tracking-wide">
+              Quick Explanations:
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {quickReasons.map((qr) => (
+                <button
+                  key={qr}
+                  type="button"
+                  onClick={() => setReason(qr)}
+                  className="rounded-lg border border-border bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 dark:bg-muted/40 dark:text-muted-foreground dark:hover:text-foreground text-left"
+                >
+                  {qr}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2 pt-2 border-t border-border">
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} className="text-xs">
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            disabled={!isValid}
+            onClick={() => onConfirmReject(reason.trim())}
+            className="text-xs bg-rose-600 hover:bg-rose-700 text-white font-semibold"
+          >
+            Confirm Rejection
           </Button>
         </DialogFooter>
       </DialogContent>

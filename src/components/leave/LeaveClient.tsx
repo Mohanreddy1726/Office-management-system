@@ -74,6 +74,16 @@ export function LeaveClient({ currentRole }: LeaveClientProps) {
   };
 
   const handleDecision = async (leaveId: string, approve: boolean) => {
+    let note = approve ? "Approved as per leave policy" : "";
+    if (!approve) {
+      const reason = window.prompt("Please enter the reason / explanation for rejecting this leave request:");
+      if (!reason || reason.trim().length < 3) {
+        toast.error("Rejection cancelled: An explanation is required to reject a leave request.");
+        return;
+      }
+      note = reason.trim();
+    }
+
     try {
       const res = await fetch("/api/leave", {
         method: "PATCH",
@@ -81,13 +91,15 @@ export function LeaveClient({ currentRole }: LeaveClientProps) {
         body: JSON.stringify({
           leaveId,
           action: approve ? "approve" : "reject",
-          note: approve ? "Approved as per leave policy" : "Rejected due to project deadlines",
+          note,
         }),
       });
       const data = await res.json();
       if (data.success) {
         toast.success(approve ? "Leave request approved!" : "Leave request rejected");
         fetchLeaveData();
+      } else {
+        toast.error(data.error || "Failed to update leave request");
       }
     } catch {
       toast.error("Failed to update leave request");

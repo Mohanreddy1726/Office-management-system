@@ -648,6 +648,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               ? {
                   ...l,
                   status: decision,
+                  decisionNote: note,
+                  reviewedBy: session ? nameOf(d, session.userId) : "Admin",
+                  reviewedAt: stampTime,
                   timeline: [
                     ...l.timeline,
                     {

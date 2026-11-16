@@ -118,6 +118,9 @@ export interface LeaveRequest {
   status: LeaveStage;
   managerDecision?: "Recommended Approval" | "Recommended Rejection";
   managerNote?: string;
+  decisionNote?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
   timeline: { stage: string; actor: string; at: string; note?: string }[];
 }
 
