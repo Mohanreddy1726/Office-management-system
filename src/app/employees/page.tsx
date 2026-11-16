@@ -415,7 +415,7 @@ export default function EmployeesPage() {
               }
 
               const newId = data.employee?.employeeId || `OF-${1000 + (data.employees?.length || 0) + 1}`;
-              const actualStatus = data.employee?.status || (newEmp.sendVerification ? "Pending Verification" : "Active");
+              const actualStatus = data.employee?.status || (newEmp.sendVerification ? "Pending Verification" : (newEmp.statusChoice || newEmp.status || "Active"));
               addEmployee({ ...newEmp, id: newId, status: actualStatus });
               setOpenAdd(false);
 
@@ -935,10 +935,11 @@ function AddEmployeeDialog({
   const [department, setDepartment] = useState("");
   const [team, setTeam] = useState("");
   const [branch, setBranch] = useState("");
-  const [employmentType, setEmploymentType] = useState<string>("");
+  const [employmentType, setEmploymentType] = useState<string>("Full-time");
   const [managerId, setManagerId] = useState<string>("");
   const [joining, setJoining] = useState("");
-  const [probationMonths, setProbationMonths] = useState("");
+  const [statusChoice, setStatusChoice] = useState<"Active" | "Probation">("Active");
+  const [probationMonths, setProbationMonths] = useState("3");
   const [workEmail, setWorkEmail] = useState("");
 
   // 3. Education & Qualification
@@ -1048,8 +1049,10 @@ function AddEmployeeDialog({
         employmentType: (employmentType as any) || "Full-time",
         managerId: managerId || null,
         joiningDate: joining || new Date().toISOString().slice(0, 10),
-        probationMonths: probationMonths ? Number(probationMonths) : 3,
-        status: sendVerification ? "Pending Verification" : (probationMonths && Number(probationMonths) > 0 ? "Probation" : "Active"),
+        statusChoice,
+        initialStatus: statusChoice,
+        probationMonths: statusChoice === "Probation" ? (Number(probationMonths) || 3) : 0,
+        status: sendVerification ? "Pending Verification" : statusChoice,
 
         // Education
         qualification: qualification.trim(),
@@ -1349,16 +1352,47 @@ function AddEmployeeDialog({
                 />
               </Field>
 
-              <Field label="Probation Duration">
-                <Select value={probationMonths} onValueChange={setProbationMonths}>
-                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select duration" /></SelectTrigger>
+              <Field label="Employment Status" required hint="Choose whether employee starts as Active or on Probation">
+                <Select value={statusChoice} onValueChange={(v: "Active" | "Probation") => setStatusChoice(v)}>
+                  <SelectTrigger className="h-9 text-xs font-medium">
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="3">3 Months</SelectItem>
-                    <SelectItem value="6">6 Months</SelectItem>
-                    <SelectItem value="0">Zero / Direct Confirmed</SelectItem>
+                    <SelectItem value="Active">
+                      <div className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                        <span className="font-semibold text-emerald-700">Active (Direct Confirmed)</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="Probation">
+                      <div className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-blue-500" />
+                        <span className="font-semibold text-blue-700">Probation (Under Review)</span>
+                      </div>
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </Field>
+
+              {statusChoice === "Probation" ? (
+                <Field label="Probation Duration" required hint="Duration employee stays on probation">
+                  <Select value={probationMonths} onValueChange={setProbationMonths}>
+                    <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select duration" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">1 Month</SelectItem>
+                      <SelectItem value="2">2 Months</SelectItem>
+                      <SelectItem value="3">3 Months</SelectItem>
+                      <SelectItem value="6">6 Months</SelectItem>
+                      <SelectItem value="12">12 Months</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+              ) : (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-2.5 flex items-center gap-2 text-xs text-emerald-800">
+                  <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <span>Immediate Confirmed Status (no probation period required)</span>
+                </div>
+              )}
 
               <div className="col-span-1 sm:col-span-2">
                 <Field label="Official Corporate Work Email" hint="Auto-generated based on legal name">
@@ -1748,8 +1782,16 @@ function AddEmployeeDialog({
                   />
                 </div>
 
-                <div className="border-t border-border/60 pt-2 text-[11px] text-muted-foreground">
-                  Verification target: <span className="font-semibold text-foreground">{personalEmail || workEmail || "Employee email"}</span>
+                <div className="border-t border-border/60 pt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                  <div>
+                    Verification target: <span className="font-semibold text-foreground">{personalEmail || workEmail || "Employee email"}</span>
+                  </div>
+                  <div>
+                    Status on verification:{" "}
+                    <span className={statusChoice === "Active" ? "font-semibold text-emerald-700" : "font-semibold text-blue-700"}>
+                      {statusChoice === "Active" ? "Active (Confirmed)" : `Probation (${probationMonths} Months)`}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>

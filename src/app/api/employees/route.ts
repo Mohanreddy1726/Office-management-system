@@ -168,6 +168,14 @@ export async function POST(req: NextRequest) {
     const userRole = body.role || "employee";
     const shouldSendVerification = body.sendVerification !== false;
 
+    // Determine initial employment status: "Active" vs "Probation"
+    const statusChoice = body.statusChoice || body.initialStatus || (body.status !== "Pending Verification" ? body.status : undefined) || "Active";
+    const isProbation = statusChoice === "Probation";
+    const probationMonths = isProbation ? (Number(body.probationMonths) || 3) : 0;
+    const probationEndDate = isProbation
+      ? new Date(Date.now() + probationMonths * 30 * 86400000).toISOString().slice(0, 10)
+      : undefined;
+
     const conn = await connectToDatabase();
     if (conn) {
       // Check for duplicate work email
@@ -210,9 +218,9 @@ export async function POST(req: NextRequest) {
         designation: body.designation.trim(),
         department: body.department || "Operations",
         branch: body.branch || "Headquarters",
-        status: shouldSendVerification ? "Pending Verification" : (body.status || "Active"),
+        status: shouldSendVerification ? "Pending Verification" : (isProbation ? "Probation" : "Active"),
         joiningDate: body.joiningDate || new Date().toISOString().slice(0, 10),
-        probationEndDate: body.probationMonths ? new Date(Date.now() + Number(body.probationMonths) * 30 * 86400000).toISOString().slice(0, 10) : undefined,
+        probationEndDate,
 
         bankDetails: {
           accountNumber: body.accountNumber || body.bankDetails?.accountNumber || "",
@@ -310,7 +318,7 @@ export async function POST(req: NextRequest) {
         designation: body.designation,
         department: body.department,
         branch: body.branch || "Headquarters",
-        status: "Active",
+        status: shouldSendVerification ? "Pending Verification" : (isProbation ? "Probation" : "Active"),
         aadhaarNumber: cleanAadhaar,
         panNumber: body.pan,
         salary: {
@@ -351,12 +359,21 @@ export async function PATCH(req: NextRequest) {
     const conn = await connectToDatabase();
     if (conn) {
       const updateData: any = {};
+      const unsetData: any = {};
       if (patch.designation) updateData.designation = patch.designation.trim();
       if (patch.department) updateData.department = patch.department;
       if (patch.team) updateData.team = patch.team;
       if (patch.phone) updateData.phone = patch.phone.trim();
-      if (patch.status) updateData.status = patch.status;
       if (patch.branch) updateData.branch = patch.branch;
+
+      if (patch.status) {
+        updateData.status = patch.status;
+        if (patch.status === "Active") {
+          unsetData.probationEndDate = 1;
+        } else if (patch.status === "Probation" && !patch.probationEndDate) {
+          updateData.probationEndDate = new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10);
+        }
+      }
 
       if (patch.bankName !== undefined) updateData["bankDetails.bankName"] = patch.bankName.trim();
       if (patch.accountNumber !== undefined) {
@@ -365,9 +382,14 @@ export async function PATCH(req: NextRequest) {
       }
       if (patch.ifscCode !== undefined) updateData["bankDetails.ifscCode"] = patch.ifscCode.trim().toUpperCase();
 
+      const updateQuery: any = { $set: updateData };
+      if (Object.keys(unsetData).length > 0) {
+        updateQuery.$unset = unsetData;
+      }
+
       const updated = await Employee.findOneAndUpdate(
         { employeeId },
-        { $set: updateData },
+        updateQuery,
         { new: true }
       );
 
