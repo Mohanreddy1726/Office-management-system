@@ -73,6 +73,21 @@ export async function GET(req: NextRequest) {
         }
       }
 
+      if (session?.role === "employee") {
+        const myEmpId = session.employeeId || session.userId;
+        const sanitized = employees.map((e: any) => {
+          if (e.employeeId === myEmpId) return e;
+          const obj = typeof e.toObject === "function" ? e.toObject() : { ...e };
+          delete obj.salary;
+          delete obj.bankDetails;
+          delete obj.aadhaarNumber;
+          delete obj.panNumber;
+          delete obj.address;
+          return obj;
+        });
+        return NextResponse.json({ success: true, employees: sanitized });
+      }
+
       return NextResponse.json({ success: true, employees });
     } else {
       const store = getMockStore();
@@ -90,6 +105,22 @@ export async function GET(req: NextRequest) {
       }
       if (department && department !== "All") emps = emps.filter((e) => e.department === department);
       if (status && status !== "All") emps = emps.filter((e) => e.status === status);
+
+      if (session?.role === "employee") {
+        const myEmpId = session.employeeId || session.userId;
+        const sanitized = emps.map((e: any) => {
+          if (e.employeeId === myEmpId || e.id === myEmpId) return e;
+          const copy = { ...e };
+          delete copy.salary;
+          delete copy.bankDetails;
+          delete copy.aadhaarNumber;
+          delete copy.panNumber;
+          delete copy.address;
+          return copy;
+        });
+        return NextResponse.json({ success: true, employees: sanitized });
+      }
+
       return NextResponse.json({ success: true, employees: emps });
     }
   } catch (error: any) {
@@ -306,8 +337,8 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const session = await getCurrentUser();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!session || (session.role !== "super_admin" && session.role !== "hr_admin")) {
+      return NextResponse.json({ error: "Forbidden. HR or Admin role required." }, { status: 403 });
     }
 
     const body = await req.json();

@@ -30,6 +30,15 @@ export default function EmployeesPage() {
   const { data, session, addEmployee, updateEmployee } = useStore();
   const router = useRouter();
   const role = session?.role;
+  const isAdmin = role === "super_admin" || role === "hr_admin";
+  const isManager = role === "manager";
+
+  useEffect(() => {
+    if (session && session.role === "employee") {
+      router.push("/dashboard");
+    }
+  }, [session, router]);
+
   const [q, setQ] = useState("");
   const [dept, setDept] = useState("all");
   const [branch, setBranch] = useState("all");
@@ -64,7 +73,6 @@ export default function EmployeesPage() {
     return () => clearInterval(interval);
   }, []);
 
-  const isManager = role === "manager";
   const rows = useMemo(() => {
     let list = data.employees;
     if (isManager && session) list = list.filter((e) => e.managerId === session.userId);
@@ -120,43 +128,59 @@ export default function EmployeesPage() {
       header: "Actions",
       render: (r) => (
         <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={async () => {
-              try {
-                toast.loading(`Sending verification mail to ${r.name}...`, { id: `resend-${r.id}` });
-                const res = await fetch("/api/employees/resend-verification", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    employeeId: r.id,
-                    email: r.personalEmail || r.workEmail,
-                  }),
-                });
-                const data = await res.json();
-                if (!res.ok) {
-                  toast.error(data.error || "Failed to resend verification link", { id: `resend-${r.id}` });
-                } else {
-                  toast.success(`Verification link sent to ${data.recipient || r.personalEmail || r.workEmail}`, {
-                    id: `resend-${r.id}`,
-                    description: "Employee can now activate their account and receive login credentials.",
+          {isAdmin && r.status === "Pending Verification" ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                try {
+                  toast.loading(`Sending verification mail to ${r.name}...`, { id: `resend-${r.id}` });
+                  const res = await fetch("/api/employees/resend-verification", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      employeeId: r.id,
+                      email: r.personalEmail || r.workEmail,
+                    }),
                   });
+                  const data = await res.json();
+                  if (!res.ok) {
+                    toast.error(data.error || "Failed to resend verification link", { id: `resend-${r.id}` });
+                  } else {
+                    toast.success(`Verification link sent to ${data.recipient || r.personalEmail || r.workEmail}`, {
+                      id: `resend-${r.id}`,
+                      description: "Employee can now activate their account and receive login credentials.",
+                    });
+                  }
+                } catch (err: any) {
+                  toast.error(err.message || "Failed to resend verification link", { id: `resend-${r.id}` });
                 }
-              } catch (err: any) {
-                toast.error(err.message || "Failed to resend verification link", { id: `resend-${r.id}` });
-              }
-            }}
-            className="h-7 gap-1 border-amber-300 bg-amber-50 text-[11px] font-semibold text-amber-900 hover:bg-amber-100"
-          >
-            <Mail className="h-3 w-3 text-amber-700" />
-            <span>Resend Link</span>
-          </Button>
+              }}
+              className="h-7 gap-1 border-amber-300 bg-amber-50 text-[11px] font-semibold text-amber-900 hover:bg-amber-100"
+            >
+              <Mail className="h-3 w-3 text-amber-700" />
+              <span>Resend Link</span>
+            </Button>
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          )}
         </div>
       ),
     },
   ];
+
+  if (session?.role === "employee") {
+    return (
+      <AppShell>
+        <div className="mx-auto mt-16 max-w-md rounded-lg border border-border bg-card p-8 text-center">
+          <p className="text-lg font-semibold text-foreground">Access Denied</p>
+          <p className="mt-1 text-sm text-muted-foreground">Employees do not have access to the employee management directory.</p>
+          <Link href="/dashboard" className="mt-4 inline-block text-sm font-medium text-primary hover:underline">Go to dashboard</Link>
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>
@@ -193,7 +217,7 @@ export default function EmployeesPage() {
               >
                 <Download className="h-3.5 w-3.5" /> Export CSV
               </Button>
-              {role !== "employee" && (
+              {isAdmin && (
                 <Button size="sm" className="gap-1.5 text-xs" onClick={() => setOpenAdd(true)}>
                   <Plus className="h-3.5 w-3.5" /> Add Employee
                 </Button>
@@ -306,6 +330,7 @@ export default function EmployeesPage() {
                 <EmployeeCard
                   key={emp.id}
                   emp={emp}
+                  isAdmin={isAdmin}
                   onResetPassword={() => setResetEmp(emp)}
                   onDelete={() => setDeleteEmp(emp)}
                 />
@@ -400,10 +425,12 @@ export default function EmployeesPage() {
 
 function EmployeeCard({
   emp,
+  isAdmin,
   onResetPassword,
   onDelete,
 }: {
   emp: Employee;
+  isAdmin?: boolean;
   onResetPassword: () => void;
   onDelete: () => void;
 }) {
@@ -533,37 +560,41 @@ function EmployeeCard({
               {statusLabel}
             </span>
 
-            <div className="flex items-center gap-1 text-muted-foreground">
-              <button
-                type="button"
-                onClick={handleResendVerification}
-                disabled={isResending}
-                className="rounded-md p-1 hover:bg-amber-100 hover:text-amber-800 text-amber-600 transition-colors"
-                title="Resend Verification Mail"
-              >
-                {isResending ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-600" />
-                ) : (
-                  <Mail className="h-3.5 w-3.5" />
+            {isAdmin && (
+              <div className="flex items-center gap-1 text-muted-foreground">
+                {emp.status === "Pending Verification" && (
+                  <button
+                    type="button"
+                    onClick={handleResendVerification}
+                    disabled={isResending}
+                    className="rounded-md p-1 hover:bg-amber-100 hover:text-amber-800 text-amber-600 transition-colors"
+                    title="Resend Verification Mail"
+                  >
+                    {isResending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-600" />
+                    ) : (
+                      <Mail className="h-3.5 w-3.5" />
+                    )}
+                  </button>
                 )}
-              </button>
-              <button
-                type="button"
-                onClick={onResetPassword}
-                className="rounded-md p-1 hover:bg-amber-50 hover:text-amber-700 transition-colors"
-                title="Reset Password"
-              >
-                <Key className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={onDelete}
-                className="rounded-md p-1 hover:bg-rose-50 hover:text-rose-700 transition-colors"
-                title="Delete Employee"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </div>
+                <button
+                  type="button"
+                  onClick={onResetPassword}
+                  className="rounded-md p-1 hover:bg-amber-50 hover:text-amber-700 transition-colors"
+                  title="Reset Password"
+                >
+                  <Key className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={onDelete}
+                  className="rounded-md p-1 hover:bg-rose-50 hover:text-rose-700 transition-colors"
+                  title="Delete Employee"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -601,20 +632,22 @@ function EmployeeCard({
                 Pending Verification ({emp.personalEmail || emp.workEmail})
               </span>
             </div>
-            <Button
-              type="button"
-              size="sm"
-              onClick={handleResendVerification}
-              disabled={isResending}
-              className="h-7 shrink-0 gap-1.5 border border-amber-400 bg-amber-600 px-2.5 text-[11px] font-semibold text-white hover:bg-amber-700 shadow-xs"
-            >
-              {isResending ? (
-                <Loader2 className="h-3 w-3 animate-spin text-white" />
-              ) : (
-                <Mail className="h-3 w-3 text-white" />
-              )}
-              <span>Resend Link</span>
-            </Button>
+            {isAdmin && (
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleResendVerification}
+                disabled={isResending}
+                className="h-7 shrink-0 gap-1.5 border border-amber-400 bg-amber-600 px-2.5 text-[11px] font-semibold text-white hover:bg-amber-700 shadow-xs"
+              >
+                {isResending ? (
+                  <Loader2 className="h-3 w-3 animate-spin text-white" />
+                ) : (
+                  <Mail className="h-3 w-3 text-white" />
+                )}
+                <span>Resend Link</span>
+              </Button>
+            )}
           </div>
         )}
 
@@ -667,44 +700,50 @@ function EmployeeCard({
           </span>
 
           <div className="flex flex-wrap items-center gap-1.5">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleResendVerification}
-              disabled={isResending}
-              className="h-8 gap-1.5 border-amber-400 bg-amber-50 text-xs font-semibold text-amber-900 hover:bg-amber-100 shadow-sm"
-              title="Resend verification and login details email"
-            >
-              {isResending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-700" />
-              ) : (
-                <Mail className="h-3.5 w-3.5 text-amber-700" />
-              )}
-              <span>Resend Verification Link</span>
-            </Button>
+            {isAdmin && emp.status === "Pending Verification" && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleResendVerification}
+                disabled={isResending}
+                className="h-8 gap-1.5 border-amber-400 bg-amber-50 text-xs font-semibold text-amber-900 hover:bg-amber-100 shadow-sm"
+                title="Resend verification and login details email"
+              >
+                {isResending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-700" />
+                ) : (
+                  <Mail className="h-3.5 w-3.5 text-amber-700" />
+                )}
+                <span>Resend Verification Link</span>
+              </Button>
+            )}
 
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onResetPassword}
-              className="h-8 gap-1 border-slate-200 bg-slate-50/60 text-xs font-medium text-slate-700 hover:bg-slate-100"
-            >
-              <Key className="h-3.5 w-3.5 text-slate-600" />
-              <span>Reset Password</span>
-            </Button>
+            {isAdmin && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onResetPassword}
+                  className="h-8 gap-1 border-slate-200 bg-slate-50/60 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                >
+                  <Key className="h-3.5 w-3.5 text-slate-600" />
+                  <span>Reset Password</span>
+                </Button>
 
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onDelete}
-              className="h-8 gap-1 border-rose-200 bg-rose-50/40 text-xs font-medium text-rose-600 hover:bg-rose-100"
-            >
-              <Trash2 className="h-3.5 w-3.5 text-rose-500" />
-              <span>Delete</span>
-            </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onDelete}
+                  className="h-8 gap-1 border-rose-200 bg-rose-50/40 text-xs font-medium text-rose-600 hover:bg-rose-100"
+                >
+                  <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                  <span>Delete</span>
+                </Button>
+              </>
+            )}
 
             <Button
               type="button"
@@ -714,7 +753,7 @@ function EmployeeCard({
               className="h-8 gap-1.5 border border-slate-200 bg-slate-100 text-xs font-medium text-slate-800 hover:bg-slate-200"
             >
               <BarChart3 className="h-3.5 w-3.5 text-slate-600" />
-              <span>View Analytics</span>
+              <span>View Profile</span>
               <ArrowUpRight className="h-3 w-3 text-slate-400" />
             </Button>
           </div>

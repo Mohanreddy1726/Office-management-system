@@ -14,8 +14,8 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   try {
     const session = await getCurrentUser();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!session || (session.role !== "super_admin" && session.role !== "hr_admin")) {
+      return NextResponse.json({ error: "Forbidden. Only administrators can resend verification emails." }, { status: 403 });
     }
 
     const body = await req.json();

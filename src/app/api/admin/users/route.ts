@@ -9,8 +9,8 @@ import bcrypt from "bcryptjs";
 export async function GET(req: NextRequest) {
   try {
     const session = await getCurrentUser();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!session || session.role !== "super_admin") {
+      return NextResponse.json({ error: "Forbidden. Only Super Admin can view user accounts." }, { status: 403 });
     }
 
     const conn = await connectToDatabase();

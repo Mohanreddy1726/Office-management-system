@@ -47,7 +47,7 @@ export const NAV: NavGroup[] = [
       { to: "/leave", label: "Leave Management", icon: CalendarDays, roles: ALL },
     ],
   },
-  { group: "Finance", items: [{ to: "/payroll", label: "Payroll", icon: Wallet, roles: ["super_admin", "hr_admin", "employee"] }] },
+  { group: "Finance", items: [{ to: "/payroll", label: "Payroll", icon: Wallet, roles: ALL }] },
   {
     group: "Operations",
     items: [
@@ -61,8 +61,8 @@ export const NAV: NavGroup[] = [
   {
     group: "Administration",
     items: [
-      { to: "/admin", label: "Administration & Settings", icon: Settings, roles: A_H },
-      { to: "/audit-logs", label: "Audit Logs", icon: ScrollText, roles: A_H },
+      { to: "/admin", label: "Administration & Settings", icon: Settings, roles: ["super_admin"] },
+      { to: "/audit-logs", label: "Audit Logs", icon: ScrollText, roles: ["super_admin"] },
     ],
   },
 ];
@@ -438,13 +438,22 @@ function BranchSelector() {
 
 function QuickCreate() {
   const router = useRouter();
-  const items: { label: string; to: string; search?: Record<string, string> }[] = [
-    { label: "Add Employee", to: "/employees", search: { open: "add" } },
-    { label: "Record Attendance Correction", to: "/attendance", search: { open: "correction" } },
-    { label: "Process Payroll", to: "/payroll", search: { open: "run" } },
-    { label: "Upload Document", to: "/documents", search: { open: "upload" } },
-    { label: "View Approvals", to: "/leave", search: { tab: "approvals" } },
+  const { session } = useStore();
+  const role = session?.role;
+  const isAdmin = role === "super_admin" || role === "hr_admin";
+  const isManager = role === "manager";
+
+  const allItems: { label: string; to: string; search?: Record<string, string>; allowed: boolean }[] = [
+    { label: "Add Employee", to: "/employees", search: { open: "add" }, allowed: isAdmin },
+    { label: "Record Attendance Correction", to: "/attendance", search: { open: "correction" }, allowed: true },
+    { label: "Process Payroll", to: "/payroll", search: { open: "run" }, allowed: isAdmin },
+    { label: "Upload Document", to: "/documents", search: { open: "upload" }, allowed: true },
+    { label: "View Approvals", to: "/leave", search: { tab: "approvals" }, allowed: isAdmin || isManager },
   ];
+
+  const items = allItems.filter((i) => i.allowed);
+  if (!items.length) return null;
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -675,10 +684,70 @@ export function AppShell({ children }: { children: ReactNode }) {
 }
 
 function RoleGate({ pathname, children }: { pathname: string; children: ReactNode }) {
-  const { session } = useStore();
-  const item = NAV.flatMap((g) => g.items).find((i) => pathname === i.to || pathname.startsWith(i.to + "/"));
-  const allowed = !item || !session || item.roles.includes(session.role) || (pathname.startsWith("/employees/") && session.role === "employee");
+  const { session, hydrated, data } = useStore();
+
+  // If store is still hydrating, show loader
+  if (!hydrated) {
+    return (
+      <div className="flex min-h-[300px] items-center justify-center">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  // If no session after hydration, prompt sign-in
+  if (!session) {
+    return (
+      <div className="mx-auto mt-16 max-w-md rounded-lg border border-border bg-card p-8 text-center">
+        <p className="text-lg font-semibold text-foreground">Authentication Required</p>
+        <p className="mt-1 text-sm text-muted-foreground">Please sign in to access RenDesk.</p>
+        <Link href="/login" className="mt-4 inline-block rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">Sign in</Link>
+      </div>
+    );
+  }
+
+  // Strict employee restriction on /employees/[id]: Employee can ONLY view their own ID
+  if (session.role === "employee" && pathname.startsWith("/employees/")) {
+    const myId = session.employeeId || session.userId;
+    const targetId = pathname.replace("/employees/", "").split("/")[0].split("?")[0];
+    if (targetId && targetId !== myId) {
+      return (
+        <div className="mx-auto mt-16 max-w-md rounded-lg border border-border bg-card p-8 text-center">
+          <p className="text-lg font-semibold text-foreground">Access Denied</p>
+          <p className="mt-1 text-sm text-muted-foreground">Employees can only view their own profile.</p>
+          <Link href={`/employees/${myId}`} className="mt-4 inline-block text-sm font-medium text-primary hover:underline">View my profile</Link>
+        </div>
+      );
+    }
+  }
+
+  // Strict manager restriction on /employees/[id]: Manager can only view their own team members or self
+  if (session.role === "manager" && pathname.startsWith("/employees/")) {
+    const myId = session.employeeId || session.userId;
+    const targetId = pathname.replace("/employees/", "").split("/")[0].split("?")[0];
+    if (targetId && targetId !== myId) {
+      const targetEmp = data.employees.find((e) => e.id === targetId);
+      if (targetEmp && targetEmp.managerId !== myId) {
+        return (
+          <div className="mx-auto mt-16 max-w-md rounded-lg border border-border bg-card p-8 text-center">
+            <p className="text-lg font-semibold text-foreground">Access Denied</p>
+            <p className="mt-1 text-sm text-muted-foreground">Managers can only view profiles of employees in their reporting team.</p>
+            <Link href="/employees" className="mt-4 inline-block text-sm font-medium text-primary hover:underline">Back to team</Link>
+          </div>
+        );
+      }
+    }
+  }
+
+  // Route matching from NAV definition
+  const item = NAV.flatMap((g) => g.items).find((i) => pathname === i.to || (pathname.startsWith(i.to + "/") && i.to !== "/"));
+
+  // Check role authorization
+  const isEmployeesDetailForSelf = pathname.startsWith("/employees/") && (pathname.replace("/employees/", "").split("/")[0] === (session.employeeId || session.userId));
+  const allowed = !item || item.roles.includes(session.role) || isEmployeesDetailForSelf;
+
   if (allowed) return <>{children}</>;
+
   return (
     <div className="mx-auto mt-16 max-w-md rounded-lg border border-border bg-card p-8 text-center">
       <p className="text-lg font-semibold text-foreground">You don't have access to this page</p>

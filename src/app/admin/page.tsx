@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/shell";
 import { useStore } from "@/lib/data/store";
 import { PageHeader, KpiCard, StatusBadge, TabsShell, Field, ConfirmDialog } from "@/components/shared";
@@ -43,7 +45,14 @@ const ACTIONS: PermissionAction[] = ["view", "create", "edit", "approve", "expor
 export default function AdminPage() {
   const { data, addUser, updateUser, setPermission, resetDemo } = useStore();
   const { role } = useScope();
+  const router = useRouter();
   const isSuper = role === "super_admin";
+
+  useEffect(() => {
+    if (role && role !== "super_admin") {
+      router.push("/dashboard");
+    }
+  }, [role, router]);
 
   const [tab, setTab] = useState("users");
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
@@ -293,6 +302,18 @@ export default function AdminPage() {
   ];
 
   const modules = Object.keys(data.permissions);
+
+  if (role && role !== "super_admin") {
+    return (
+      <AppShell>
+        <div className="mx-auto mt-16 max-w-md rounded-lg border border-border bg-card p-8 text-center">
+          <p className="text-lg font-semibold text-foreground">Access Denied</p>
+          <p className="mt-1 text-sm text-muted-foreground">Only Super Administrators have access to Administration & System Settings.</p>
+          <Link href="/dashboard" className="mt-4 inline-block text-sm font-medium text-primary hover:underline">Go to dashboard</Link>
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>

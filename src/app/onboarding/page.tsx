@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useStore } from "@/lib/data/store";
 import { PageHeader, KpiCard, StatusBadge, TabsShell, Field } from "@/components/shared";
 import { DataTable, type Column } from "@/components/data-table";
-import { Person, Sel } from "@/components/form-bits";
+import { Person, Sel, useScope } from "@/components/form-bits";
 import { BRANCHES, type Branch, type Joiner, type OnboardingTask, type Resignation, type FormerEmployee } from "@/lib/data/types";
 import { DEPARTMENTS, TODAY } from "@/lib/data/seed";
 import { fmtDate, initials } from "@/lib/format";
@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils";
 
 export default function OnboardingPage() {
   const { data, addOnboardingTaskUpdate, addJoiner, addResignation, addOnboardingTask } = useStore();
+  const { isAdmin } = useScope();
   const [tab, setTab] = useState("joiners");
   const [view, setView] = useState<"cards" | "table">("cards");
   const [q, setQ] = useState("");
@@ -168,6 +169,18 @@ export default function OnboardingPage() {
       render: (r) => <StatusBadge status={r.clearanceDone ? "Completed" : "Pending"} />,
     },
   ];
+
+  if (!isAdmin) {
+    return (
+      <AppShell>
+        <div className="mx-auto mt-16 max-w-md rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+          <p className="text-lg font-semibold text-foreground">Access Denied</p>
+          <p className="mt-1 text-sm text-muted-foreground">Only Super Admin and HR Admin can access Onboarding & Exit management.</p>
+          <Link href="/dashboard" className="mt-4 inline-block text-sm font-medium text-primary hover:underline">Return to Dashboard</Link>
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>

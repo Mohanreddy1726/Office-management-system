@@ -6,7 +6,7 @@ import { useStore } from "@/lib/data/store";
 import { TODAY, DEPARTMENTS } from "@/lib/data/seed";
 import { PageHeader, KpiCard, StatusBadge, TabsShell, Field, Timeline, EmployeeAvatar } from "@/components/shared";
 import { DataTable, exportCsv, type Column } from "@/components/data-table";
-import { Person, Sel, useNames } from "@/components/form-bits";
+import { Person, Sel, useNames, useScope } from "@/components/form-bits";
 import type { MailEntry, MailDirection } from "@/lib/data/types";
 import { fmtDate, initials, avatarColor } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 
 export default function MailPage() {
   const { data, updateMail, setGmail } = useStore();
+  const { isAdmin } = useScope();
   const nameOf = useNames();
 
   const [tab, setTab] = useState<string>("all");
@@ -166,6 +167,18 @@ export default function MailPage() {
       ),
     },
   ];
+
+  if (!isAdmin) {
+    return (
+      <AppShell>
+        <div className="mx-auto mt-16 max-w-md rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+          <p className="text-lg font-semibold text-foreground">Access Denied</p>
+          <p className="mt-1 text-sm text-muted-foreground">Only Super Admin and HR Admin can access the Mail & Courier desk.</p>
+          <Link href="/dashboard" className="mt-4 inline-block text-sm font-medium text-primary hover:underline">Return to Dashboard</Link>
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>

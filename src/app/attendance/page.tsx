@@ -252,6 +252,7 @@ export default function AttendancePage() {
         const s =
           data.shifts.find((sh) => sh.id === r.shiftId) ||
           data.shifts.find((sh) => sh.id === "SH-GEN") ||
+          data.shifts.find((sh) => sh.name.toLowerCase().includes("general")) ||
           data.shifts[0];
         let lateM = r.lateMinutes;
         if (r.checkIn && s?.start && !["Leave", "Absent", "Holiday", "Week Off"].includes(r.status)) {
@@ -278,6 +279,7 @@ export default function AttendancePage() {
         const s =
           data.shifts.find((sh) => sh.id === r.shiftId) ||
           data.shifts.find((sh) => sh.id === "SH-GEN") ||
+          data.shifts.find((sh) => sh.name.toLowerCase().includes("general")) ||
           data.shifts[0];
         let st = r.status;
         if (r.checkIn && s?.start && !["Leave", "Absent", "Holiday", "Week Off"].includes(r.status)) {
@@ -366,6 +368,7 @@ export default function AttendancePage() {
                         const s =
                           data.shifts.find((sh) => sh.id === r.shiftId) ||
                           data.shifts.find((sh) => sh.id === "SH-GEN") ||
+                          data.shifts.find((sh) => sh.name.toLowerCase().includes("general")) ||
                           data.shifts[0];
                         return s ? `${s.name} (${s.start}-${s.end})` : r.shiftId;
                       })(),

@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 
 export default function OrganizationPage() {
   const { data } = useStore();
-  const { isManager, uid } = useScope();
+  const { isManager, isEmployee, uid } = useScope();
   const router = useRouter();
   const [tab, setTab] = useState("chart");
   const [search, setSearch] = useState("");
@@ -68,6 +68,18 @@ export default function OrganizationPage() {
     const q = search.toLowerCase();
     return teams.filter(([t, list]) => t.toLowerCase().includes(q) || list.some((e) => e.name.toLowerCase().includes(q)));
   }, [teams, search]);
+
+  if (isEmployee) {
+    return (
+      <AppShell>
+        <div className="mx-auto mt-16 max-w-md rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+          <p className="text-lg font-semibold text-foreground">Access Denied</p>
+          <p className="mt-1 text-sm text-muted-foreground">Employees do not have access to Organization & Team hierarchy.</p>
+          <Link href="/dashboard" className="mt-4 inline-block text-sm font-medium text-primary hover:underline">Return to Dashboard</Link>
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>

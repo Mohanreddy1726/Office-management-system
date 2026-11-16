@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/shell";
 import { useStore } from "@/lib/data/store";
 import { PageHeader, KpiCard, ChartCard } from "@/components/shared";
@@ -54,7 +55,7 @@ const COLORS = [
 
 export default function AnalyticsPage() {
   const { data } = useStore();
-  const { inScope, role, isAdmin } = useScope();
+  const { inScope, role, isAdmin, isEmployee } = useScope();
 
   const emps = useMemo(
     () => data.employees.filter((e) => inScope(e.id) && e.status !== "Inactive"),
@@ -257,6 +258,18 @@ export default function AnalyticsPage() {
         ),
     },
   ];
+
+  if (isEmployee) {
+    return (
+      <AppShell>
+        <div className="mx-auto mt-16 max-w-md rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+          <p className="text-lg font-semibold text-foreground">Access Denied</p>
+          <p className="mt-1 text-sm text-muted-foreground">Employees do not have access to Organization Analytics & Reporting.</p>
+          <Link href="/dashboard" className="mt-4 inline-block text-sm font-medium text-primary hover:underline">Return to Dashboard</Link>
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>

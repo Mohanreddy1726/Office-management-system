@@ -7,8 +7,8 @@ import { getMockStore } from "@/lib/mock-db";
 export async function GET() {
   try {
     const session = await getCurrentUser();
-    if (!session || (session.role !== "super_admin" && session.role !== "hr_admin")) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!session || session.role !== "super_admin") {
+      return NextResponse.json({ error: "Forbidden. Only Super Admin can access audit logs." }, { status: 403 });
     }
 
     const conn = await connectToDatabase();

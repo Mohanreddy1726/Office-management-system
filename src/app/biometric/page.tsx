@@ -308,6 +308,18 @@ export default function BiometricPage() {
     { key: "s", header: "Status", render: (r) => <StatusBadge status={r.status} /> },
   ];
 
+  if (!isAdmin) {
+    return (
+      <AppShell>
+        <div className="mx-auto mt-16 max-w-md rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+          <p className="text-lg font-semibold text-foreground">Access Denied</p>
+          <p className="mt-1 text-sm text-muted-foreground">Only Super Admin and HR Admin can access Biometric Device Mapping.</p>
+          <Link href="/dashboard" className="mt-4 inline-block text-sm font-medium text-primary hover:underline">Return to Dashboard</Link>
+        </div>
+      </AppShell>
+    );
+  }
+
   return (
     <AppShell>
       <div>

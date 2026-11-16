@@ -36,7 +36,7 @@ export default function EmployeeDetailPage() {
   const router = useRouter();
   const id = params?.id as string;
   const { data, updateEmployee } = useStore();
-  const { isAdmin, isEmployee, uid } = useScope();
+  const { isAdmin, isManager, isEmployee, uid, inScope } = useScope();
   const [tab, setTab] = useState("overview");
   const [edit, setEdit] = useState(false);
   const [isResending, setIsResending] = useState(false);
@@ -93,6 +93,14 @@ export default function EmployeeDetailPage() {
     );
   }
 
+  if (isManager && !inScope(e.id)) {
+    return (
+      <AppShell>
+        <EmptyState title="Access Denied: You can only view employees in your team." />
+      </AppShell>
+    );
+  }
+
   const canSensitive = isAdmin || e.id === uid;
   const att = data.attendance
     .filter((a) => a.employeeId === e.id)
@@ -139,20 +147,22 @@ export default function EmployeeDetailPage() {
               actions={
                 isAdmin ? (
                   <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="gap-1.5 text-xs border-amber-300 bg-amber-50/80 text-amber-900 hover:bg-amber-100 font-medium"
-                      onClick={handleResendVerification}
-                      disabled={isResending}
-                    >
-                      {isResending ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-700" />
-                      ) : (
-                        <Mail className="h-3.5 w-3.5 text-amber-700" />
-                      )}
-                      <span>Resend Verification Link</span>
-                    </Button>
+                    {e.status === "Pending Verification" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5 text-xs border-amber-300 bg-amber-50/80 text-amber-900 hover:bg-amber-100 font-medium"
+                        onClick={handleResendVerification}
+                        disabled={isResending}
+                      >
+                        {isResending ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-700" />
+                        ) : (
+                          <Mail className="h-3.5 w-3.5 text-amber-700" />
+                        )}
+                        <span>Resend Verification Link</span>
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="outline"
@@ -199,20 +209,22 @@ export default function EmployeeDetailPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                size="sm"
-                onClick={handleResendVerification}
-                disabled={isResending}
-                className="gap-1.5 border border-amber-400 bg-amber-600 text-xs font-semibold text-white hover:bg-amber-700 shadow-sm"
-              >
-                {isResending ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-white" />
-                ) : (
-                  <Mail className="h-3.5 w-3.5 text-white" />
-                )}
-                <span>Resend Verification Link</span>
-              </Button>
+              {isAdmin && (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleResendVerification}
+                  disabled={isResending}
+                  className="gap-1.5 border border-amber-400 bg-amber-600 text-xs font-semibold text-white hover:bg-amber-700 shadow-sm"
+                >
+                  {isResending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-white" />
+                  ) : (
+                    <Mail className="h-3.5 w-3.5 text-white" />
+                  )}
+                  <span>Resend Verification Link</span>
+                </Button>
+              )}
               <span className="rounded-full bg-amber-200 px-3 py-1 text-xs font-semibold text-amber-900">
                 Awaiting Verification
               </span>

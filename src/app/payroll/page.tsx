@@ -255,8 +255,8 @@ export default function PayrollPage() {
     ];
   }, [eligible]);
 
-  // Employee Self-Service View (if regular employee)
-  if (isEmployee) {
+  // Self-Service View for non-admins (regular employees and managers)
+  if (!isAdmin) {
     const self = data.employees.find((e) => e.id === uid);
     const selfItem = payrollItems.find((p) => p.employee.id === uid);
 

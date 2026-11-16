@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/shell";
 import { useStore } from "@/lib/data/store";
 import { PageHeader, KpiCard, StatusBadge } from "@/components/shared";
 import { DataTable, exportCsv, type Column } from "@/components/data-table";
-import { Sel } from "@/components/form-bits";
+import { Sel, useScope } from "@/components/form-bits";
 import type { AuditEntry } from "@/lib/data/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +34,15 @@ import {
 
 export default function AuditLogsPage() {
   const { data } = useStore();
+  const { role } = useScope();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (role && role !== "super_admin") {
+      router.push("/dashboard");
+    }
+  }, [role, router]);
+
   const [q, setQ] = useState("");
   const [mod, setMod] = useState("all");
   const [outcome, setOutcome] = useState("all");
@@ -108,6 +119,18 @@ export default function AuditLogsPage() {
       ),
     },
   ];
+
+  if (role && role !== "super_admin") {
+    return (
+      <AppShell>
+        <div className="mx-auto mt-16 max-w-md rounded-lg border border-border bg-card p-8 text-center">
+          <p className="text-lg font-semibold text-foreground">Access Denied</p>
+          <p className="mt-1 text-sm text-muted-foreground">Only Super Administrators have access to Audit Logs.</p>
+          <Link href="/dashboard" className="mt-4 inline-block text-sm font-medium text-primary hover:underline">Go to dashboard</Link>
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>
