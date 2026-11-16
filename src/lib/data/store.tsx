@@ -89,6 +89,22 @@ export interface Store {
 
 const Ctx = createContext<Store | null>(null);
 
+const parseTimeToMinutes = (str?: string): number | null => {
+  if (!str) return null;
+  const clean = str.toLowerCase().trim();
+  const isPm = clean.includes("pm");
+  const isAm = clean.includes("am");
+  const bare = clean.replace(/am|pm/g, "").trim();
+  const parts = bare.split(":");
+  if (parts.length < 2) return null;
+  let h = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  if (isNaN(h) || isNaN(m)) return null;
+  if (isPm && h < 12) h += 12;
+  if (isAm && h === 12) h = 0;
+  return h * 60 + m;
+};
+
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<AppState>(() => seedState());
   const [session, setSession] = useState<Session | null>(null);
@@ -113,14 +129,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             parsed.data.attendance = parsed.data.attendance.map((rec: any) => {
               const recShift = shifts.find((s: any) => s.id === rec.shiftId) || genShift;
               if (rec.checkIn && recShift?.start && !["Leave", "Absent", "Holiday", "Week Off"].includes(rec.status)) {
-                const [inH, inM] = rec.checkIn.split(":").map(Number);
-                const [shH, shM] = recShift.start.split(":").map(Number);
-                if (!isNaN(inH) && !isNaN(inM) && !isNaN(shH) && !isNaN(shM)) {
-                  const checkInMins = inH * 60 + inM;
-                  const shiftStartMins = shH * 60 + shM;
+                const inMins = parseTimeToMinutes(rec.checkIn);
+                const shiftStartMins = parseTimeToMinutes(recShift.start);
+                if (inMins !== null && shiftStartMins !== null) {
                   const grace = recShift.graceMinutes ?? 10;
-                  const isLate = checkInMins > shiftStartMins + grace;
-                  const lateMinutes = isLate ? checkInMins - shiftStartMins : 0;
+                  const isLate = inMins > shiftStartMins + grace;
+                  const lateMinutes = isLate ? inMins - shiftStartMins : 0;
                   const status = isLate ? "Late" : (rec.status === "Late" ? "Present" : rec.status);
                   return { ...rec, lateMinutes, status };
                 }
@@ -423,32 +437,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           // Recalculate attendance records belonging to this shift when timing parameters change
           let updatedAttendance = d.attendance;
           if (targetShift && (patch.start !== undefined || patch.end !== undefined || patch.graceMinutes !== undefined)) {
-            const [shH, shM] = targetShift.start.split(":").map(Number);
-            const shiftStartMins = (shH || 0) * 60 + (shM || 0);
+            const shiftStartMins = parseTimeToMinutes(targetShift.start);
             const grace = targetShift.graceMinutes ?? 10;
 
-            updatedAttendance = d.attendance.map((rec) => {
-              const recShiftId = rec.shiftId || "SH-GEN";
-              if (recShiftId !== id && !(id === "SH-GEN" && (recShiftId === "SH-GEN" || recShiftId.includes("GEN")))) {
-                return rec;
-              }
-              if (!rec.checkIn || ["Leave", "Absent", "Holiday", "Week Off"].includes(rec.status)) {
-                return rec;
-              }
+            if (shiftStartMins !== null) {
+              updatedAttendance = d.attendance.map((rec) => {
+                const recShiftId = rec.shiftId || "SH-GEN";
+                if (recShiftId !== id && !(id === "SH-GEN" && (recShiftId === "SH-GEN" || recShiftId.includes("GEN")))) {
+                  return rec;
+                }
+                if (!rec.checkIn || ["Leave", "Absent", "Holiday", "Week Off"].includes(rec.status)) {
+                  return rec;
+                }
 
-              const [inH, inM] = rec.checkIn.split(":").map(Number);
-              if (isNaN(inH) || isNaN(inM)) return rec;
-              const checkInMins = inH * 60 + inM;
-              const isLate = checkInMins > shiftStartMins + grace;
-              const lateMinutes = isLate ? checkInMins - shiftStartMins : 0;
-              const status = isLate ? "Late" : (rec.status === "Late" ? "Present" : rec.status);
+                const checkInMins = parseTimeToMinutes(rec.checkIn);
+                if (checkInMins === null) return rec;
+                const isLate = checkInMins > shiftStartMins + grace;
+                const lateMinutes = isLate ? checkInMins - shiftStartMins : 0;
+                const status = isLate ? "Late" : (rec.status === "Late" ? "Present" : rec.status);
 
-              return {
-                ...rec,
-                lateMinutes,
-                status,
-              };
-            });
+                return {
+                  ...rec,
+                  lateMinutes,
+                  status,
+                };
+              });
+            }
           }
 
           return {

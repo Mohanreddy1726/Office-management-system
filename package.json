@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "seed": "node scripts/seed.mjs"
+    "seed": "node scripts/seed.mjs",
+    "sync:biometric": "node scripts/sync_live_to_atlas.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^7.0.3",

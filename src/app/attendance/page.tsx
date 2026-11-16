@@ -30,6 +30,22 @@ const getTodayIso = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
+const parseTimeToMinutes = (str?: string): number | null => {
+  if (!str) return null;
+  const clean = str.toLowerCase().trim();
+  const isPm = clean.includes("pm");
+  const isAm = clean.includes("am");
+  const bare = clean.replace(/am|pm/g, "").trim();
+  const parts = bare.split(":");
+  if (parts.length < 2) return null;
+  let h = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  if (isNaN(h) || isNaN(m)) return null;
+  if (isPm && h < 12) h += 12;
+  if (isAm && h === 12) h = 0;
+  return h * 60 + m;
+};
+
 export default function AttendancePage() {
   const {
     data,
@@ -92,7 +108,8 @@ export default function AttendancePage() {
       const json = await res.json();
       if (res.ok && json.success) {
         toast.success(
-          `Biometric Sync Complete: ${json.summary?.processed || 0} punches scanned, ${json.summary?.updatedRecords || 0} attendance records updated!`,
+          json.message ||
+            `Biometric Sync Complete: ${json.summary?.processed || 0} punches scanned, ${json.summary?.updatedRecords || 0} attendance records updated!`,
           { id: "bio-sync" }
         );
         await loadAttendance();
@@ -256,11 +273,9 @@ export default function AttendancePage() {
           data.shifts[0];
         let lateM = r.lateMinutes;
         if (r.checkIn && s?.start && !["Leave", "Absent", "Holiday", "Week Off"].includes(r.status)) {
-          const [inH, inM] = r.checkIn.split(":").map(Number);
-          const [shH, shM] = s.start.split(":").map(Number);
-          if (!isNaN(inH) && !isNaN(inM) && !isNaN(shH) && !isNaN(shM)) {
-            const inMins = inH * 60 + inM;
-            const startMins = shH * 60 + shM;
+          const inMins = parseTimeToMinutes(r.checkIn);
+          const startMins = parseTimeToMinutes(s.start);
+          if (inMins !== null && startMins !== null) {
             const grace = s.graceMinutes ?? 10;
             lateM = inMins > startMins + grace ? inMins - startMins : 0;
           }
@@ -283,11 +298,9 @@ export default function AttendancePage() {
           data.shifts[0];
         let st = r.status;
         if (r.checkIn && s?.start && !["Leave", "Absent", "Holiday", "Week Off"].includes(r.status)) {
-          const [inH, inM] = r.checkIn.split(":").map(Number);
-          const [shH, shM] = s.start.split(":").map(Number);
-          if (!isNaN(inH) && !isNaN(inM) && !isNaN(shH) && !isNaN(shM)) {
-            const inMins = inH * 60 + inM;
-            const startMins = shH * 60 + shM;
+          const inMins = parseTimeToMinutes(r.checkIn);
+          const startMins = parseTimeToMinutes(s.start);
+          if (inMins !== null && startMins !== null) {
             const grace = s.graceMinutes ?? 10;
             if (inMins > startMins + grace) st = "Late";
             else if (st === "Late") st = "Present";
@@ -888,11 +901,9 @@ function AttendanceRecordCard({
   let effectiveLateMinutes = record.lateMinutes || 0;
   let effectiveStatus = record.status;
   if (record.checkIn && shift?.start && !["Leave", "Absent", "Holiday", "Week Off"].includes(record.status)) {
-    const [inH, inM] = record.checkIn.split(":").map(Number);
-    const [shH, shM] = shift.start.split(":").map(Number);
-    if (!isNaN(inH) && !isNaN(inM) && !isNaN(shH) && !isNaN(shM)) {
-      const inMins = inH * 60 + inM;
-      const startMins = shH * 60 + shM;
+    const inMins = parseTimeToMinutes(record.checkIn);
+    const startMins = parseTimeToMinutes(shift.start);
+    if (inMins !== null && startMins !== null) {
       const grace = shift.graceMinutes ?? 10;
       if (inMins > startMins + grace) {
         effectiveLateMinutes = inMins - startMins;
@@ -1314,11 +1325,9 @@ function ConfirmationCard({
 
   let effectiveLateMinutes = record.lateMinutes || 0;
   if (record.checkIn && shift?.start && !["Leave", "Absent", "Holiday", "Week Off"].includes(record.status)) {
-    const [inH, inM] = record.checkIn.split(":").map(Number);
-    const [shH, shM] = shift.start.split(":").map(Number);
-    if (!isNaN(inH) && !isNaN(inM) && !isNaN(shH) && !isNaN(shM)) {
-      const inMins = inH * 60 + inM;
-      const startMins = shH * 60 + shM;
+    const inMins = parseTimeToMinutes(record.checkIn);
+    const startMins = parseTimeToMinutes(shift.start);
+    if (inMins !== null && startMins !== null) {
       const grace = shift.graceMinutes ?? 10;
       effectiveLateMinutes = inMins > startMins + grace ? inMins - startMins : 0;
     }
