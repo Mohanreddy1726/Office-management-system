@@ -1,27 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db";
 import { Attendance } from "@/models/Attendance";
-import { BiometricMapping, BiometricDevice, UnmappedPunch } from "@/models/Biometric";
-import { Employee } from "@/models/Employee";
-import { AuditLog } from "@/models/AuditLog";
 import { getCurrentUser } from "@/lib/auth";
 import { getMockStore } from "@/lib/mock-db";
-import ZKLib from "node-zklib";
+import { reconcileAllActiveMappings, syncLiveBiometricHardware } from "@/lib/biometric-sync";
 
 export const dynamic = "force-dynamic";
-
-function getISTDateComponents(date: Date) {
-  const dateStr = date.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }); // YYYY-MM-DD
-  const timeStr = date.toLocaleTimeString("en-IN", {
-    timeZone: "Asia/Kolkata",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
-  const hour24 = Number(date.toLocaleTimeString("en-US", { timeZone: "Asia/Kolkata", hour: "numeric", hour12: false }));
-  const minute = Number(date.toLocaleTimeString("en-US", { timeZone: "Asia/Kolkata", minute: "numeric" }));
-  return { dateStr, timeStr, hour24, minute };
-}
 
 export async function GET(req: NextRequest) {
   try {
@@ -34,6 +18,13 @@ export async function GET(req: NextRequest) {
 
     const conn = await connectToDatabase();
     if (conn) {
+      // Automatic Self-Healing: Reconcile any unmapped punches matching active biometric mappings
+      try {
+        await reconcileAllActiveMappings();
+      } catch (selfHealErr) {
+        console.warn("[Attendance Self-Heal Warning]", selfHealErr);
+      }
+
       const query: any = {};
       if (!all && date && date !== "all") {
         query.date = date;
@@ -92,236 +83,28 @@ export async function POST(req: NextRequest) {
 
     if (action === "sync_biometric") {
       const conn = await connectToDatabase();
-      let targetIp = "192.168.29.201";
-      let targetPort = 4370;
-
       if (conn) {
-        const dev = await BiometricDevice.findOne({ deviceId: "DEV-01" });
-        if (dev?.ipAddress) targetIp = dev.ipAddress;
-        if (dev?.port) targetPort = dev.port;
-      }
-
-      try {
-        const zk = new ZKLib(targetIp, targetPort, 8000, 3000, 0, "tcp");
-        await zk.createSocket();
-        const logsRes = await zk.getAttendances();
-        await zk.disconnect();
-
-        const punches = logsRes?.data || [];
-        if (conn && punches.length > 0) {
-          const mappings = await BiometricMapping.find({ status: "Active" });
-          const pinToMapping = new Map(mappings.map((m) => [String(m.biometricId).trim(), m]));
-          const employees = await Employee.find({});
-          const empMap = new Map(employees.map((e) => [e.employeeId, e]));
-
-          // Group by (employeeId, dateStr)
-          const groups = new Map<string, { employeeId: string; date: string; punches: Date[] }>();
-          const unmappedPunches: any[] = [];
-
-          for (const log of punches) {
-            if (!log.deviceUserId || !log.recordTime) continue;
-            const pin = String(log.deviceUserId).trim();
-            if (!pin) continue;
-
-            const d = new Date(log.recordTime);
-            if (isNaN(d.getTime()) || d.getFullYear() < 2020) continue;
-
-            const { dateStr } = getISTDateComponents(d);
-            const mapping = pinToMapping.get(pin);
-
-            if (mapping) {
-              const key = `${mapping.employeeId}_${dateStr}`;
-              if (!groups.has(key)) {
-                groups.set(key, { employeeId: mapping.employeeId, date: dateStr, punches: [] });
-              }
-              groups.get(key)!.punches.push(d);
-            } else {
-              unmappedPunches.push({
-                deviceId: "DEV-01",
-                biometricId: pin,
-                punchTime: d,
-                punchType: "Unknown",
-                resolved: false,
-              });
-            }
-          }
-
-          const bulkOps: any[] = [];
-          for (const item of groups.values()) {
-            item.punches.sort((a, b) => a.getTime() - b.getTime());
-            const first = item.punches[0];
-            const last = item.punches[item.punches.length - 1];
-
-            const firstComp = getISTDateComponents(first);
-            const checkInTime = firstComp.timeStr;
-            const hasMultiplePunches = item.punches.length > 1;
-            const checkOutTime = hasMultiplePunches ? getISTDateComponents(last).timeStr : null;
-
-            let totalHours = 0;
-            if (hasMultiplePunches) {
-              const diffMs = last.getTime() - first.getTime();
-              totalHours = Math.round((diffMs / (1000 * 60 * 60)) * 10) / 10;
-            }
-
-            const firstMinutes = firstComp.hour24 * 60 + firstComp.minute;
-            const isLate = firstMinutes > (9 * 60 + 30);
-            let status = isLate ? "Late" : "Present";
-            if (totalHours > 0 && totalHours < 4.5 && hasMultiplePunches) {
-              status = "Half-day";
-            }
-
-            const emp = empMap.get(item.employeeId);
-
-            bulkOps.push({
-              updateOne: {
-                filter: { employeeId: item.employeeId, date: item.date },
-                update: {
-                  $set: {
-                    employeeId: item.employeeId,
-                    employeeName: emp?.name || "Employee",
-                    department: emp?.department || "Operations",
-                    branch: emp?.branch || "Headquarters",
-                    date: item.date,
-                    checkIn: checkInTime,
-                    checkOut: checkOutTime,
-                    totalHours,
-                    status,
-                    confirmation: "Confirmed",
-                    deviceUsed: "eSSL K30 Pro - Main Office",
-                    updatedAt: new Date(),
-                  },
-                  $setOnInsert: { createdAt: new Date() },
-                },
-                upsert: true,
-              },
-            });
-          }
-
-          if (bulkOps.length > 0) {
-            await Attendance.bulkWrite(bulkOps, { ordered: false });
-          }
-
-          // Mark resolved in UnmappedPunch
-          const mappedPins = Array.from(pinToMapping.keys());
-          await UnmappedPunch.updateMany(
-            { biometricId: { $in: mappedPins } },
-            { $set: { resolved: true, updatedAt: new Date() } }
-          );
-
-          await BiometricDevice.updateOne(
-            { deviceId: "DEV-01" },
-            {
-              $set: {
-                status: "Online",
-                lastSync: new Date(),
-                totalLogsCount: punches.length,
-              },
-            }
-          );
-
+        // Attempt live terminal connection
+        const liveResult = await syncLiveBiometricHardware();
+        if (liveResult.success) {
           return NextResponse.json({
             success: true,
-            message: `Synced ${punches.length} punch records from eSSL K30 Pro terminal (${bulkOps.length} attendance records updated).`,
-            summary: { processed: punches.length, updatedRecords: bulkOps.length },
+            message: `Synced ${liveResult.totalLogs} punch records from eSSL K30 Pro terminal (${liveResult.updatedRecords} attendance records updated).`,
+            summary: { processed: liveResult.totalLogs, updatedRecords: liveResult.updatedRecords },
           });
         }
-      } catch (err: any) {
-        // Fallback for cloud deployments: Reconcile unmapped punches stored in MongoDB Atlas with active mappings!
-        if (conn) {
-          const mappings = await BiometricMapping.find({ status: "Active" });
-          const pinToMapping = new Map(mappings.map((m) => [String(m.biometricId).trim(), m]));
-          const employees = await Employee.find({});
-          const empMap = new Map(employees.map((e) => [e.employeeId, e]));
 
-          const mappedPins = Array.from(pinToMapping.keys());
-          const pendingPunches = await UnmappedPunch.find({ biometricId: { $in: mappedPins } });
-
-          const dayGroups = new Map<string, { employeeId: string; date: string; punches: Date[] }>();
-          for (const p of pendingPunches) {
-            if (!p.punchTime) continue;
-            const d = new Date(p.punchTime);
-            if (isNaN(d.getTime())) continue;
-
-            const mapping = pinToMapping.get(String(p.biometricId).trim());
-            if (!mapping) continue;
-
-            const { dateStr } = getISTDateComponents(d);
-            const key = `${mapping.employeeId}_${dateStr}`;
-            if (!dayGroups.has(key)) {
-              dayGroups.set(key, { employeeId: mapping.employeeId, date: dateStr, punches: [] });
-            }
-            dayGroups.get(key)!.punches.push(d);
-          }
-
-          const bulkOps: any[] = [];
-          for (const item of dayGroups.values()) {
-            item.punches.sort((a, b) => a.getTime() - b.getTime());
-            const first = item.punches[0];
-            const last = item.punches[item.punches.length - 1];
-
-            const firstComp = getISTDateComponents(first);
-            const checkInTime = firstComp.timeStr;
-            const hasMultiplePunches = item.punches.length > 1;
-            const checkOutTime = hasMultiplePunches ? getISTDateComponents(last).timeStr : null;
-
-            let totalHours = 0;
-            if (hasMultiplePunches) {
-              const diffMs = last.getTime() - first.getTime();
-              totalHours = Math.round((diffMs / (1000 * 60 * 60)) * 10) / 10;
-            }
-
-            const firstMinutes = firstComp.hour24 * 60 + firstComp.minute;
-            const isLate = firstMinutes > (9 * 60 + 30);
-            let status = isLate ? "Late" : "Present";
-            if (totalHours > 0 && totalHours < 4.5 && hasMultiplePunches) {
-              status = "Half-day";
-            }
-
-            const emp = empMap.get(item.employeeId);
-
-            bulkOps.push({
-              updateOne: {
-                filter: { employeeId: item.employeeId, date: item.date },
-                update: {
-                  $set: {
-                    employeeId: item.employeeId,
-                    employeeName: emp?.name || "Employee",
-                    department: emp?.department || "Operations",
-                    branch: emp?.branch || "Headquarters",
-                    date: item.date,
-                    checkIn: checkInTime,
-                    checkOut: checkOutTime,
-                    totalHours,
-                    status,
-                    confirmation: "Confirmed",
-                    deviceUsed: "eSSL K30 Pro - Main Office",
-                    updatedAt: new Date(),
-                  },
-                  $setOnInsert: { createdAt: new Date() },
-                },
-                upsert: true,
-              },
-            });
-          }
-
-          if (bulkOps.length > 0) {
-            await Attendance.bulkWrite(bulkOps, { ordered: false });
-            await UnmappedPunch.updateMany(
-              { biometricId: { $in: mappedPins } },
-              { $set: { resolved: true, updatedAt: new Date() } }
-            );
-          }
-
-          const count = await Attendance.countDocuments();
-          return NextResponse.json({
-            success: true,
-            syncedFrom: "cloud_database",
-            message: `Terminal is on office LAN. Reconciled ${bulkOps.length} attendance records from stored biometric punches (${count} total records in database).`,
-            summary: { processed: pendingPunches.length, updatedRecords: bulkOps.length },
-          });
-        }
-        return NextResponse.json({ error: `Terminal sync error: ${err.message}` }, { status: 502 });
+        // If hardware is unreachable (e.g. running on Vercel cloud), reconcile all stored unmapped punches
+        const cloudResult = await reconcileAllActiveMappings();
+        const totalCount = await Attendance.countDocuments();
+        return NextResponse.json({
+          success: true,
+          syncedFrom: "cloud_database",
+          message: `Terminal is on office LAN. Reconciled ${cloudResult.updatedRecords} attendance records from stored biometric punches (${totalCount} total in database).`,
+          summary: { processed: cloudResult.processedPunches, updatedRecords: cloudResult.updatedRecords },
+        });
       }
+      return NextResponse.json({ success: true, message: "Sync simulated in memory" });
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });

@@ -3,6 +3,8 @@ import { connectToDatabase } from "@/lib/db";
 import { Employee } from "@/models/Employee";
 import { User } from "@/models/User";
 import { AuditLog } from "@/models/AuditLog";
+import { BiometricMapping } from "@/models/Biometric";
+import { reconcileEmployeePunches } from "@/lib/biometric-sync";
 import { getCurrentUser } from "@/lib/auth";
 import { getMockStore } from "@/lib/mock-db";
 import { sendVerificationEmail, getAppUrl } from "@/lib/email";
@@ -312,6 +314,34 @@ export async function POST(req: NextRequest) {
         details: `Aadhaar: ${cleanAadhaar ? cleanAadhaar.slice(0, 4) + " **** " + cleanAadhaar.slice(-4) : "N/A"} | Role: ${userRole} | Login: ${loginEmail} | Verification Dispatched: ${shouldSendVerification ? "Yes (gvkdigital01@gmail.com)" : "No"}`,
       });
 
+      // Automatic Biometric Mapping & Immediate Attendance Pull
+      let reconciledAttendanceCount = 0;
+      if (body.biometricId) {
+        const cleanBioId = String(body.biometricId).trim();
+        if (cleanBioId) {
+          try {
+            await BiometricMapping.findOneAndUpdate(
+              { deviceId: "DEV-01", biometricId: cleanBioId },
+              {
+                $set: {
+                  deviceId: "DEV-01",
+                  biometricId: cleanBioId,
+                  employeeId: employee.employeeId,
+                  employeeName: employee.name,
+                  status: "Active",
+                },
+                $setOnInsert: { createdAt: new Date() },
+              },
+              { upsert: true, new: true }
+            );
+
+            reconciledAttendanceCount = await reconcileEmployeePunches(cleanBioId, employee);
+          } catch (bioErr) {
+            console.warn("[Onboarding Biometric Mapping Error]", bioErr);
+          }
+        }
+      }
+
       // Send Verification Email via Gmail SMTP
       let emailResult = null;
       if (shouldSendVerification) {
@@ -339,6 +369,7 @@ export async function POST(req: NextRequest) {
         },
         emailSent: emailResult?.success ?? false,
         emailError: emailResult?.error,
+        reconciledAttendanceCount,
       });
     } else {
       // In-memory fallback
@@ -442,6 +473,32 @@ export async function PATCH(req: NextRequest) {
           },
           { $set: { isActive: isNowActive } }
         );
+      }
+
+      // Update or link biometric mapping if provided in patch
+      if (patch.biometricId && updated) {
+        const cleanBioId = String(patch.biometricId).trim();
+        if (cleanBioId) {
+          try {
+            await BiometricMapping.findOneAndUpdate(
+              { deviceId: "DEV-01", biometricId: cleanBioId },
+              {
+                $set: {
+                  deviceId: "DEV-01",
+                  biometricId: cleanBioId,
+                  employeeId: updated.employeeId,
+                  employeeName: updated.name,
+                  status: "Active",
+                },
+                $setOnInsert: { createdAt: new Date() },
+              },
+              { upsert: true, new: true }
+            );
+            await reconcileEmployeePunches(cleanBioId, updated);
+          } catch (bioErr) {
+            console.warn("[Patch Biometric Sync Error]", bioErr);
+          }
+        }
       }
 
       return NextResponse.json({ success: true, employee: updated });

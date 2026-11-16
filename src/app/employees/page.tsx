@@ -22,7 +22,7 @@ import {
   Download, Plus, Users, LayoutGrid, List, Mail, Phone, Building2,
   ArrowUpRight, Key, Trash2, BarChart3, Activity, Shield, CheckCircle2,
   Lock, AlertTriangle, GraduationCap, Briefcase, CreditCard, User, Landmark,
-  ChevronRight, ChevronLeft, Check, Sparkles, FileText, ShieldCheck, Eye, EyeOff, Loader2, Calendar
+  ChevronRight, ChevronLeft, Check, Sparkles, FileText, ShieldCheck, Eye, EyeOff, Loader2, Calendar, Fingerprint
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -429,12 +429,30 @@ export default function EmployeesPage() {
               setOpenAdd(false);
 
               if (data.emailSent) {
-                toast.success(`Employee ${newEmp.name} created! Verification link sent to ${newEmp.personalEmail || newEmp.workEmail}`);
+                toast.success(
+                  `Employee ${newEmp.name} created! Verification link sent to ${newEmp.personalEmail || newEmp.workEmail}${
+                    data.reconciledAttendanceCount ? ` (${data.reconciledAttendanceCount} attendance records loaded)` : ""
+                  }`
+                );
               } else if (newEmp.sendVerification && data.emailError) {
                 toast.warning(`Employee added, but verification email failed to send: ${data.emailError}. You can click "Resend Link" to try again.`);
               } else {
-                toast.success(`Employee ${newEmp.name} (${newId}) added successfully!`);
+                toast.success(
+                  `Employee ${newEmp.name} (${newId}) added successfully!${
+                    data.reconciledAttendanceCount ? ` (${data.reconciledAttendanceCount} biometric attendance records loaded)` : ""
+                  }`
+                );
               }
+
+              // Refresh attendance records to immediately reflect newly reconciled records
+              fetch("/api/attendance?all=true")
+                .then((res) => (res.ok ? res.json() : null))
+                .then((resData) => {
+                  if (resData?.success && Array.isArray(resData.records)) {
+                    setAttendanceRecords(resData.records);
+                  }
+                })
+                .catch(() => {});
             } catch (err: any) {
               console.error("[AddEmployee Error]", err);
               // Do NOT swallow the error and do NOT add a ghost employee to store!
@@ -958,6 +976,7 @@ function AddEmployeeDialog({
   const [statusChoice, setStatusChoice] = useState<"Active" | "Probation">("Active");
   const [probationMonths, setProbationMonths] = useState("3");
   const [workEmail, setWorkEmail] = useState("");
+  const [biometricId, setBiometricId] = useState("");
 
   // 3. Education & Qualification
   const [qualification, setQualification] = useState("");
@@ -1070,6 +1089,7 @@ function AddEmployeeDialog({
         initialStatus: statusChoice,
         probationMonths: statusChoice === "Probation" ? (Number(probationMonths) || 3) : 0,
         status: sendVerification ? "Pending Verification" : statusChoice,
+        biometricId: biometricId.trim(),
 
         // Education
         qualification: qualification.trim(),
@@ -1420,6 +1440,23 @@ function AddEmployeeDialog({
                     placeholder="e.g. firstname.lastname@gvkedutech.com"
                     className="h-9 text-xs"
                   />
+                </Field>
+              </div>
+
+              <div className="col-span-1 sm:col-span-2">
+                <Field
+                  label="Biometric Machine PIN / Terminal Punch ID (Optional)"
+                  hint="Device DEV-01 (eSSL K30 Pro). All historical & live punch logs will be automatically mapped & synced to their attendance records."
+                >
+                  <div className="relative">
+                    <Input
+                      value={biometricId}
+                      onChange={(e) => setBiometricId(e.target.value.replace(/\D/g, ""))}
+                      placeholder="e.g. 1002, 1003, 1006"
+                      className="h-9 font-mono text-xs pl-8"
+                    />
+                    <Fingerprint className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  </div>
                 </Field>
               </div>
             </div>
