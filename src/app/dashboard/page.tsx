@@ -894,14 +894,26 @@ function EmployeeDashboard({ me }: { me: any }) {
             {myLeaves.length === 0 ? (
               <p className="px-2 py-4 text-xs text-muted-foreground">No leave requests yet.</p>
             ) : (
-              myLeaves.map((l) => (
-                <div key={l.id} className="flex items-center justify-between gap-2 px-2 py-1.5">
-                  <span className="min-w-0 text-xs font-medium">
-                    {l.type} · {fmtDate(l.startDate)} ({l.days}d)
-                  </span>
-                  <StatusBadge status={l.status} />
-                </div>
-              ))
+              myLeaves.map((l) => {
+                const rejReason =
+                  l.decisionNote ||
+                  l.timeline?.slice().reverse().find((t: any) => t.stage === "Rejected" && t.note)?.note;
+                return (
+                  <div key={l.id} className="rounded-md border border-border/50 p-2 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 text-xs font-medium text-foreground">
+                        {l.type} · {fmtDate(l.startDate)} ({l.days}d)
+                      </span>
+                      <StatusBadge status={l.status} />
+                    </div>
+                    {l.status === "Rejected" && (
+                      <p className="text-[11px] text-rose-600 dark:text-rose-400 italic">
+                        Reason: "{rejReason || "Operational constraints"}"
+                      </p>
+                    )}
+                  </div>
+                );
+              })
             )}
           </CardContent>
         </Card>

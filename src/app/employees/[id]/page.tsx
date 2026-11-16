@@ -380,12 +380,19 @@ export default function EmployeeDetailPage() {
                 ))}
               </div>
               <List
-                items={leaves.map((l) => ({
-                  k: l.id,
-                  left: `${l.type} · ${l.days} day(s)`,
-                  sub: `${fmtDate(l.startDate)} → ${fmtDate(l.endDate)}`,
-                  right: <StatusBadge status={l.status} />,
-                }))}
+                items={leaves.map((l) => {
+                  const rejReason =
+                    l.decisionNote ||
+                    l.timeline?.slice().reverse().find((t: any) => t.stage === "Rejected" && t.note)?.note;
+                  return {
+                    k: l.id,
+                    left: `${l.type} · ${l.days} day(s)`,
+                    sub: `${fmtDate(l.startDate)} → ${fmtDate(l.endDate)}${
+                      l.status === "Rejected" ? ` · Rejection: "${rejReason || "Operational constraints"}"` : ""
+                    }`,
+                    right: <StatusBadge status={l.status} />,
+                  };
+                })}
                 empty="No leave requests"
               />
             </Card>

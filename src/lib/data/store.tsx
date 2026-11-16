@@ -293,6 +293,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 status: req.status || "Submitted",
                 managerDecision: req.managerDecision,
                 managerNote: req.managerNote,
+                decisionNote:
+                  req.decisionNote ||
+                  (Array.isArray(req.timeline)
+                    ? [...req.timeline].reverse().find((t: any) => (t.stage === "Rejected" || t.stage === "Clarification") && t.note)?.note
+                    : undefined),
+                reviewedBy: req.reviewedBy,
+                reviewedAt: req.reviewedAt,
                 timeline: Array.isArray(req.timeline) ? req.timeline : [],
               }));
 

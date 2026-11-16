@@ -134,7 +134,25 @@ export default function LeavePage() {
       render: (r) => <span className="block max-w-[200px] truncate text-muted-foreground">{r.reason}</span>,
       hideOnMobile: true,
     },
-    { key: "status", header: "Status", render: (r) => <StatusBadge status={r.status} /> },
+    {
+      key: "status",
+      header: "Status",
+      render: (r) => {
+        const rejReason =
+          r.decisionNote ||
+          r.timeline?.slice().reverse().find((t: any) => t.stage === "Rejected" && t.note)?.note;
+        return (
+          <div className="space-y-1">
+            <StatusBadge status={r.status} />
+            {r.status === "Rejected" && rejReason && (
+              <p className="text-[10px] text-rose-600 dark:text-rose-400 italic max-w-[170px] truncate" title={rejReason}>
+                "{rejReason}"
+              </p>
+            )}
+          </div>
+        );
+      },
+    },
     {
       key: "act",
       header: "",
@@ -688,6 +706,7 @@ export default function LeavePage() {
                 }}
                 onReject={() => {
                   setRejectItem(detailItem);
+                  setDetailItem(null);
                 }}
               />
             )}
@@ -841,16 +860,31 @@ function LeaveRequestCard({
           <p className="text-muted-foreground italic">"{request.reason}"</p>
         </div>
 
-        {/* Rejection Note Display */}
-        {request.status === "Rejected" && request.decisionNote && (
-          <div className="mt-2.5 rounded-xl border border-rose-200/80 bg-rose-50/70 p-2.5 text-xs text-rose-900 dark:bg-rose-950/30 dark:border-rose-900/60 dark:text-rose-200">
-            <div className="flex items-center gap-1 font-semibold text-rose-700 dark:text-rose-400 mb-0.5 text-[11px]">
-              <XCircle className="h-3.5 w-3.5" />
-              <span>Rejection Reason:</span>
+        {/* Rejection Comment Box Display on Employee Leave Card */}
+        {request.status === "Rejected" && (() => {
+          const rejectionReason =
+            request.decisionNote ||
+            request.timeline?.slice().reverse().find((t) => t.stage === "Rejected" && t.note)?.note ||
+            "Operational / coverage constraints";
+          return (
+            <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50/80 p-3 text-xs text-rose-950 dark:bg-rose-950/40 dark:border-rose-900/60 dark:text-rose-200">
+              <div className="flex items-center justify-between gap-1.5 mb-1 text-[11px] font-bold text-rose-800 dark:text-rose-300">
+                <span className="flex items-center gap-1.5">
+                  <XCircle className="h-4 w-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                  <span>Rejection Reason:</span>
+                </span>
+                {request.reviewedBy && (
+                  <span className="text-[10px] font-normal text-rose-600/90 dark:text-rose-400">
+                    By {request.reviewedBy}
+                  </span>
+                )}
+              </div>
+              <div className="rounded-lg bg-white/90 p-2 text-xs font-medium text-rose-900 shadow-2xs border border-rose-100 dark:bg-rose-950/60 dark:text-rose-100 dark:border-rose-900/40">
+                <p className="italic leading-relaxed">"{rejectionReason}"</p>
+              </div>
             </div>
-            <p className="italic text-[11px] leading-relaxed">"{request.decisionNote}"</p>
-          </div>
-        )}
+          );
+        })()}
 
         {request.managerDecision && (
           <div className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
@@ -1089,22 +1123,30 @@ function LeaveDetailSheetContent({
       </div>
 
       {/* Rejection Explanation in Detail Sheet */}
-      {request.status === "Rejected" && request.decisionNote && (
-        <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-3.5 text-xs dark:bg-rose-950/20 dark:border-rose-900/60">
-          <div className="flex items-center gap-1.5 text-rose-700 dark:text-rose-400 font-semibold mb-1">
-            <XCircle className="h-4 w-4" />
-            <span>Rejection Reason / Explanation</span>
+      {request.status === "Rejected" && (() => {
+        const rejNote =
+          request.decisionNote ||
+          request.timeline?.slice().reverse().find((t) => t.stage === "Rejected" && t.note)?.note;
+        if (!rejNote) return null;
+        return (
+          <div className="rounded-xl border border-rose-200 bg-rose-50/80 p-3.5 text-xs dark:bg-rose-950/20 dark:border-rose-900/60">
+            <div className="flex items-center justify-between gap-1 text-rose-700 dark:text-rose-400 font-semibold mb-1">
+              <span className="flex items-center gap-1.5">
+                <XCircle className="h-4 w-4" />
+                <span>Rejection Reason / Comment</span>
+              </span>
+              {request.reviewedBy && (
+                <span className="text-[11px] text-rose-600/90 dark:text-rose-400 font-normal">
+                  By {request.reviewedBy}
+                </span>
+              )}
+            </div>
+            <div className="mt-1 rounded-lg bg-white/90 p-2.5 text-rose-950 dark:bg-rose-950/60 dark:text-rose-100 font-medium italic border border-rose-100">
+              "{rejNote}"
+            </div>
           </div>
-          <p className="text-rose-950 dark:text-rose-200 font-medium italic">
-            "{request.decisionNote}"
-          </p>
-          {request.reviewedBy && (
-            <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">
-              Reviewed by: {request.reviewedBy}
-            </p>
-          )}
-        </div>
-      )}
+        );
+      })()}
 
       {/* Audit Timeline */}
       <div className="space-y-3">
@@ -1396,7 +1438,7 @@ function RejectLeaveDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md rounded-2xl p-6">
+      <DialogContent className="max-w-md rounded-2xl p-6 z-[100]">
         <DialogHeader>
           <div className="flex items-center gap-2.5">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400">
@@ -1404,10 +1446,10 @@ function RejectLeaveDialog({
             </div>
             <div>
               <DialogTitle className="text-base font-bold text-foreground">
-                Reject Leave Application
+                Leave Rejection Reason
               </DialogTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Rejection requires an explanation that will be recorded in the audit trail.
+                Provide a reason or comment explaining why this leave is rejected. This reason will show on the employee's leave card.
               </p>
             </div>
           </div>
@@ -1427,13 +1469,13 @@ function RejectLeaveDialog({
         <div className="space-y-3 py-1">
           <div>
             <label className="text-xs font-semibold text-foreground block mb-1.5">
-              Reason / Explanation for Rejection <span className="text-rose-500">*</span>
+              Rejection Comment / Reason <span className="text-rose-500">*</span>
             </label>
             <Textarea
               rows={3}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="State clear reasons why this leave cannot be granted at this time..."
+              placeholder="Type the reason or comment why this leave cannot be granted..."
               className="text-xs"
               autoFocus
             />
