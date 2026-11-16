@@ -104,9 +104,9 @@ async function syncAll() {
           update: {
             $set: {
               employeeId: mapping.employeeId,
-              employeeName: mapping.employeeName || emp?.name || "Narada Mohan Nanda Kishore Reddy",
-              department: emp?.department || "Engineering",
-              branch: emp?.branch || "Hyderabad",
+              employeeName: mapping.employeeName || emp?.name || "Employee",
+              department: emp?.department || "Operations",
+              branch: emp?.branch || "Headquarters",
               date: item.date,
               checkIn: checkInTime,
               checkOut: checkOutTime,

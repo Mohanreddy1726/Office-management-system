@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Fingerprint, Plus, Laptop, Wifi, CheckCircle2, Link2 } from "lucide-react";
+import { Fingerprint, Plus, Laptop, Wifi, CheckCircle2, Link2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/utils";
 
@@ -10,6 +10,7 @@ export function BiometricClient() {
   const [mappings, setMappings] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
 
   // Modals
   const [showDeviceModal, setShowDeviceModal] = useState(false);
@@ -72,6 +73,32 @@ export function BiometricClient() {
     }
   };
 
+  const handleSyncTerminal = async () => {
+    setSyncing(true);
+    toast.loading("Connecting to eSSL K30 Pro terminal...", { id: "bio-sync" });
+    try {
+      const res = await fetch("/api/attendance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "sync_biometric" }),
+      });
+      const data = await res.json();
+      if (!res.ok && !data.success) {
+        toast.error(data.error || "Terminal sync failed", { id: "bio-sync" });
+      } else {
+        toast.success(
+          data.message || `Terminal synced! (${data.summary?.updatedRecords || 0} records updated)`,
+          { id: "bio-sync" }
+        );
+        fetchData();
+      }
+    } catch (err: any) {
+      toast.error(`Terminal sync failed: ${err.message}`, { id: "bio-sync" });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const handleAddMapping = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -88,7 +115,9 @@ export function BiometricClient() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed");
 
-      toast.success("Employee biometric ID mapped successfully!");
+      toast.success(
+        data.message || `Employee biometric ID mapped successfully! (${data.reconciledRecords || 0} attendance records reconciled)`
+      );
       setShowMapModal(false);
       setBioId("");
       fetchData();
@@ -111,6 +140,13 @@ export function BiometricClient() {
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleSyncTerminal}
+            disabled={syncing}
+            className="flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 px-3.5 py-2 text-xs font-semibold text-primary hover:bg-primary/10 shadow-xs transition disabled:opacity-60"
+          >
+            <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} /> Sync Terminal
+          </button>
           <button
             onClick={() => setShowDeviceModal(true)}
             className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-muted shadow-xs transition"

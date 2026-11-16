@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useStore } from "@/lib/data/store";
@@ -35,11 +35,22 @@ export default function EmployeeDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = params?.id as string;
-  const { data, session, updateEmployee } = useStore();
+  const { data, session, updateEmployee, setAttendanceRecords } = useStore();
   const { isAdmin, isManager, isEmployee, uid, inScope } = useScope();
   const [tab, setTab] = useState("overview");
   const [edit, setEdit] = useState(false);
   const [isResending, setIsResending] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/attendance?all=true")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((resData) => {
+        if (resData?.success && Array.isArray(resData.records)) {
+          setAttendanceRecords(resData.records);
+        }
+      })
+      .catch((err) => console.warn("Failed to load attendance in employee profile:", err));
+  }, [setAttendanceRecords]);
 
   const e = data.employees.find((x) => x.id === id);
 
