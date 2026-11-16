@@ -1641,7 +1641,7 @@ function AddEmployeeDialog({
                 <Input
                   value={accountNumber}
                   onChange={(e) => setAccountNumber(e.target.value)}
-                  placeholder="e.g. 436201502494"
+                  placeholder="e.g. 123456789012"
                   className="h-9 text-xs font-mono"
                 />
               </Field>
@@ -1650,7 +1650,7 @@ function AddEmployeeDialog({
                 <Input
                   value={ifscCode}
                   onChange={(e) => setIfscCode(e.target.value.toUpperCase())}
-                  placeholder="e.g. ICIC0004362, SBIN0001234"
+                  placeholder="e.g. SBIN0001234, HDFC0001844"
                   className="h-9 text-xs font-mono uppercase"
                 />
               </Field>

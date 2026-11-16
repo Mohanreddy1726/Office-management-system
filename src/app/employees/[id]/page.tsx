@@ -631,7 +631,7 @@ function EditDialog({
             <Input
               value={accountNumber}
               onChange={(x) => setAccountNumber(x.target.value)}
-              placeholder="e.g. 436201502494"
+              placeholder="e.g. 123456789012"
             />
           </Field>
           <div className="col-span-2">
@@ -639,7 +639,7 @@ function EditDialog({
               <Input
                 value={ifscCode}
                 onChange={(x) => setIfscCode(x.target.value.toUpperCase())}
-                placeholder="e.g. ICIC0004362"
+                placeholder="e.g. SBIN0001234"
                 className="font-mono uppercase"
               />
             </Field>

@@ -88,7 +88,7 @@ interface LopOverride {
 function getBankDetails(e: Employee) {
   if (e.bankName) {
     const accNo = e.accountNumber || (e.bankLast4 ? `•••• •••• ${e.bankLast4}` : "50100412345678");
-    const ifsc = e.ifscCode || "ICIC0004362";
+    const ifsc = e.ifscCode || "HDFC0001844";
     return { bankName: e.bankName, accNo, ifsc };
   }
   const bankNames = ["ICICI Bank", "State Bank of India", "HDFC Bank", "Axis Bank", "Kotak Mahindra Bank"];
