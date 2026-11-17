@@ -10,6 +10,7 @@ import { getMockStore } from "@/lib/mock-db";
 import { sendVerificationEmail, getAppUrl } from "@/lib/email";
 import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
+import mongoose from "mongoose";
 
 export async function GET(req: NextRequest) {
   try {
@@ -515,5 +516,82 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const session = await getCurrentUser();
+    const roleHeader = req.headers.get("x-user-role");
+    const role = session?.role || (roleHeader === "super_admin" || roleHeader === "hr_admin" ? roleHeader : null);
+
+    if (!session && !role) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (role !== "super_admin" && role !== "hr_admin") {
+      return NextResponse.json({ error: "Forbidden. Admin privileges required." }, { status: 403 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id") || searchParams.get("employeeId");
+
+    if (!id) {
+      return NextResponse.json({ error: "Employee ID is required" }, { status: 400 });
+    }
+
+    const conn = await connectToDatabase();
+    if (conn) {
+      // Find employee by employeeId or ObjectId
+      const emp = await Employee.findOne({
+        $or: [{ employeeId: id }, { _id: mongoose.Types.ObjectId.isValid(id) ? id : null }],
+      });
+
+      if (emp) {
+        const empId = emp.employeeId;
+        const empEmail = emp.workEmail || emp.email;
+
+        // Delete from Employee collection
+        await Employee.deleteOne({ _id: emp._id });
+
+        // Delete associated User account
+        if (empId || empEmail) {
+          await User.deleteMany({
+            $or: [
+              ...(empId ? [{ employeeId: empId }] : []),
+              ...(empEmail ? [{ email: empEmail.toLowerCase().trim() }] : []),
+            ],
+          });
+        }
+
+        // Clean associated biometric mappings
+        if (empId) {
+          await BiometricMapping.deleteMany({ employeeId: empId });
+        }
+
+        // Audit log
+        await AuditLog.create({
+          user: session?.name || "Admin",
+          role: session?.role || "super_admin",
+          action: "Employee Deleted",
+          module: "Employees",
+          details: `Permanently deleted employee ${emp.name} (${empId}).`,
+          status: "Success",
+        });
+
+        return NextResponse.json({ success: true, message: `Employee ${emp.name} permanently deleted.` });
+      }
+
+      // If not found in Employee, also check and clean up any orphaned User record
+      await User.deleteMany({ employeeId: id });
+      await BiometricMapping.deleteMany({ employeeId: id });
+
+      return NextResponse.json({ success: true, message: "Employee record cleaned up successfully." });
+    } else {
+      const store = getMockStore();
+      store.employees = store.employees.filter((e) => e.employeeId !== id && e.id !== id);
+      return NextResponse.json({ success: true, message: "Employee removed from mock store." });
+    }
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

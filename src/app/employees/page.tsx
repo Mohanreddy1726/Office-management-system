@@ -27,7 +27,7 @@ import {
 import { cn } from "@/lib/utils";
 
 export default function EmployeesPage() {
-  const { data, session, addEmployee, updateEmployee, setAttendanceRecords } = useStore();
+  const { data, session, addEmployee, updateEmployee, deleteEmployee, setAttendanceRecords } = useStore();
   const router = useRouter();
   const role = session?.role;
   const isAdmin = role === "super_admin" || role === "hr_admin";
@@ -85,13 +85,22 @@ export default function EmployeesPage() {
   const [resetEmp, setResetEmp] = useState<Employee | null>(null);
   const [deleteEmp, setDeleteEmp] = useState<Employee | null>(null);
 
-  // Sync employees from MongoDB API to ensure real status is immediately enforced
+  // Sync employees from MongoDB API to ensure real status is immediately enforced and non-existent employees are pruned
   useEffect(() => {
     const syncStatus = () => {
       fetch("/api/employees")
         .then((res) => (res.ok ? res.json() : null))
         .then((resData) => {
           if (resData?.success && Array.isArray(resData.employees)) {
+            const validIds = new Set(resData.employees.map((e: any) => e.employeeId));
+
+            // Immediately prune any ghost/unverified employee not in the database
+            data.employees.forEach((localEmp) => {
+              if (!validIds.has(localEmp.id)) {
+                deleteEmployee(localEmp.id);
+              }
+            });
+
             resData.employees.forEach((dbEmp: any) => {
               const id = dbEmp.employeeId;
               updateEmployee(id, {
@@ -106,9 +115,9 @@ export default function EmployeesPage() {
     };
 
     syncStatus();
-    const interval = setInterval(syncStatus, 4000);
+    const interval = setInterval(syncStatus, 3000);
     return () => clearInterval(interval);
-  }, []);
+  }, [data.employees, deleteEmployee, updateEmployee]);
 
   const rows = useMemo(() => {
     let list = data.employees;
@@ -476,20 +485,26 @@ export default function EmployeesPage() {
           emp={deleteEmp}
           onClose={() => setDeleteEmp(null)}
           onConfirm={async (emp) => {
-            updateEmployee(emp.id, { status: "Inactive" }, "Deactivated by admin");
-            try {
-              await fetch("/api/employees", {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  employeeId: emp.id,
-                  patch: { status: "Inactive" },
-                }),
-              });
-            } catch (err) {
-              console.error("Failed to deactivate employee via API:", err);
+            if (emp.status === "Pending Verification") {
+              // Permanently delete unverified employee
+              deleteEmployee(emp.id);
+              toast.success(`Unverified employee ${emp.name} permanently removed`);
+            } else {
+              updateEmployee(emp.id, { status: "Inactive" }, "Deactivated by admin");
+              try {
+                await fetch("/api/employees", {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    employeeId: emp.id,
+                    patch: { status: "Inactive" },
+                  }),
+                });
+              } catch (err) {
+                console.error("Failed to deactivate employee via API:", err);
+              }
+              toast.success(`Employee ${emp.name} marked as Inactive and portal access revoked`);
             }
-            toast.success(`Employee ${emp.name} marked as Inactive and portal access revoked`);
             setDeleteEmp(null);
           }}
         />
@@ -1964,6 +1979,8 @@ function DeleteEmployeeDialog({
   onConfirm: (emp: Employee) => void;
 }) {
   if (!emp) return null;
+  const isUnverified = emp.status === "Pending Verification";
+
   return (
     <Dialog open={Boolean(emp)} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-md">
@@ -1973,15 +1990,19 @@ function DeleteEmployeeDialog({
               <AlertTriangle className="h-5 w-5" />
             </span>
             <div>
-              <DialogTitle>Deactivate employee</DialogTitle>
+              <DialogTitle>{isUnverified ? "Delete unverified employee" : "Deactivate employee"}</DialogTitle>
               <DialogDescription>
-                Are you sure you want to deactivate {emp.name}?
+                {isUnverified
+                  ? `Permanently remove unverified employee ${emp.name} (${emp.id})?`
+                  : `Are you sure you want to deactivate ${emp.name}?`}
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
         <p className="text-xs text-muted-foreground">
-          This will set the status of <strong>{emp.name} ({emp.id})</strong> to <em>Inactive</em> and revoke access. You can reactivate this account later from Administration.
+          {isUnverified
+            ? `This employee is pending verification. Confirming will permanently remove this employee card from the system.`
+            : `This will set the status of ${emp.name} (${emp.id}) to Inactive and revoke access. You can reactivate this account later from Administration.`}
         </p>
         <DialogFooter className="mt-4">
           <Button variant="outline" onClick={onClose}>
@@ -1991,7 +2012,7 @@ function DeleteEmployeeDialog({
             variant="destructive"
             onClick={() => onConfirm(emp)}
           >
-            Confirm Deactivation
+            {isUnverified ? "Permanently Delete" : "Confirm Deactivation"}
           </Button>
         </DialogFooter>
       </DialogContent>

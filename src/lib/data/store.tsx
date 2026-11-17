@@ -31,6 +31,7 @@ export interface Store {
   // employees
   addEmployee: (e: Omit<Employee, "id"> & { id?: string }) => string;
   updateEmployee: (id: string, patch: Partial<Employee>, auditNote?: string) => void;
+  deleteEmployee: (id: string) => void;
   // attendance
   addCorrection: (c: Omit<AttendanceCorrection, "id" | "submittedAt" | "status">) => void;
   decideCorrection: (id: string, decision: "Approved" | "Rejected" | "Clarification", note: string) => void;
@@ -161,6 +162,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
           // Authoritative leaves always come from MongoDB Atlas
           parsed.data.leaves = [];
+          // Filter out stale unverified employees lingering in localStorage
+          if (Array.isArray(parsed.data.employees)) {
+            parsed.data.employees = parsed.data.employees.filter((e: any) => e.status !== "Pending Verification");
+          }
           setData(parsed.data);
         }
         setSession(parsed?.session ?? null);
@@ -207,15 +212,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (resData?.success && Array.isArray(resData.employees)) {
             setData((d) => {
               const existingMap = new Map(d.employees.map((e) => [e.id, e]));
-              resData.employees.forEach((dbEmp: any) => {
+              const authoritativeEmployees = resData.employees.map((dbEmp: any) => {
                 const id = dbEmp.employeeId;
                 const prev = existingMap.get(id);
                 const b = dbEmp.bankDetails;
-                existingMap.set(id, {
+                return {
                   ...prev, // Base / mock defaults
                   id,
-                  name: dbEmp.name || prev?.name,
-                  workEmail: dbEmp.workEmail || dbEmp.email || prev?.workEmail,
+                  name: dbEmp.name || prev?.name || "Employee",
+                  workEmail: dbEmp.workEmail || dbEmp.email || prev?.workEmail || "",
                   personalEmail: dbEmp.personalEmail !== undefined ? dbEmp.personalEmail : (prev?.personalEmail || ""),
                   phone: dbEmp.phone || prev?.phone || "+91 90000 00000",
                   dob: dbEmp.dateOfBirth || prev?.dob || "2000-01-01",
@@ -241,9 +246,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                   ifscCode: b?.ifscCode || dbEmp.ifscCode || prev?.ifscCode,
                   bankLast4: b?.bankLast4 || (b?.accountNumber ? b.accountNumber.slice(-4) : undefined) || dbEmp.bankLast4 || prev?.bankLast4,
                   paymentMethod: dbEmp.paymentMethod || prev?.paymentMethod || "Corporate NEFT",
-                });
+                };
               });
-              return { ...d, employees: Array.from(existingMap.values()) };
+              return { ...d, employees: authoritativeEmployees };
             });
           }
         })
@@ -462,6 +467,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updateEmployee: (id, patch, auditNote) => {
         setData((d) => ({ ...d, employees: d.employees.map((e) => (e.id === id ? { ...e, ...patch } : e)) }));
         audit({ user: session ? nameOf(data, session.userId) : "Demo", action: "Updated employee", module: "Employees", record: `${id} ${nameOf(data, id)}`, outcome: "Success", details: auditNote });
+      },
+      deleteEmployee: (id) => {
+        setData((d) => ({ ...d, employees: d.employees.filter((e) => e.id !== id) }));
+        fetch(`/api/employees?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch((err) => {
+          console.error("Failed to delete employee on server:", err);
+        });
+        const empRecord = data.employees.find((x) => x.id === id);
+        audit({
+          user: session ? nameOf(data, session.userId) : "Admin",
+          action: "Deleted employee record",
+          module: "Employees",
+          record: empRecord ? `${empRecord.name} (${empRecord.id})` : id,
+          outcome: "Success",
+        });
       },
       addCorrection: (c) => {
         setData((d) => ({
