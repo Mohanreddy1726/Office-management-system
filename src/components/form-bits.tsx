@@ -42,6 +42,7 @@ export function Person({ id }: { id: string | null | undefined }) {
 export function useScope() {
   const { data, session, prefs } = useStore();
   const role = session?.role;
+  const isSuperAdmin = role === "super_admin";
   const isAdmin = role === "super_admin" || role === "hr_admin";
   const isManager = role === "manager";
   const isEmployee = role === "employee";
@@ -64,7 +65,7 @@ export function useScope() {
     if (isManager) return e.managerId === uid || empId === uid;
     return true;
   };
-  return { role, isAdmin, isManager, isEmployee, uid, inScope };
+  return { role, isSuperAdmin, isAdmin, isManager, isEmployee, uid, inScope };
 }
 
 export function Stat({ label, value }: { label: string; value: React.ReactNode }) {

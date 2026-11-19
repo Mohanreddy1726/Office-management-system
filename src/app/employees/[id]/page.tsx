@@ -28,9 +28,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { ArrowLeft, Mail, Phone, MapPin, Pencil, GraduationCap, Briefcase, Landmark, ShieldCheck, User, AlertTriangle, Loader2 } from "lucide-react";
+import { ArrowLeft, Mail, Phone, MapPin, Pencil, GraduationCap, Briefcase, Landmark, ShieldCheck, User, AlertTriangle, Loader2, Trash2 } from "lucide-react";
 import type { Employee, EmploymentStatus } from "@/lib/data/types";
 import { AppShell } from "@/components/shell";
+import { DeleteEmployeeDialog } from "@/components/employees/DeleteEmployeeDialog";
 
 export default function EmployeeDetailPage() {
   const params = useParams();
@@ -38,8 +39,10 @@ export default function EmployeeDetailPage() {
   const id = params?.id as string;
   const { data, session, updateEmployee, setAttendanceRecords } = useStore();
   const { isAdmin, isManager, isEmployee, uid, inScope } = useScope();
+  const isSuperAdmin = session?.role === "super_admin";
   const [tab, setTab] = useState("overview");
   const [edit, setEdit] = useState(false);
+  const [deleteEmp, setDeleteEmp] = useState<Employee | null>(null);
   const [isResending, setIsResending] = useState(false);
 
   useEffect(() => {
@@ -189,6 +192,17 @@ export default function EmployeeDetailPage() {
                     >
                       <Pencil className="h-3.5 w-3.5" /> Edit Profile
                     </Button>
+                    {isSuperAdmin && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5 text-xs border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:text-rose-800 font-medium"
+                        onClick={() => setDeleteEmp(e)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-rose-600" />
+                        <span>Delete Employee</span>
+                      </Button>
+                    )}
                   </div>
                 ) : undefined
               }
@@ -553,6 +567,16 @@ export default function EmployeeDetailPage() {
             }}
           />
         )}
+
+        <DeleteEmployeeDialog
+          emp={deleteEmp}
+          open={Boolean(deleteEmp)}
+          onOpenChange={(open) => !open && setDeleteEmp(null)}
+          onDeleted={() => {
+            setDeleteEmp(null);
+            router.push("/employees");
+          }}
+        />
       </div>
     </AppShell>
   );

@@ -4,6 +4,9 @@ import { Employee } from "@/models/Employee";
 import { User } from "@/models/User";
 import { AuditLog } from "@/models/AuditLog";
 import { BiometricMapping } from "@/models/Biometric";
+import { LeaveRequest, LeaveBalance } from "@/models/Leave";
+import { Attendance } from "@/models/Attendance";
+import { Asset } from "@/models/Asset";
 import { reconcileEmployeePunches } from "@/lib/biometric-sync";
 import { getCurrentUser } from "@/lib/auth";
 import { getMockStore } from "@/lib/mock-db";
@@ -542,20 +545,43 @@ export async function DELETE(req: NextRequest) {
   try {
     const session = await getCurrentUser();
     const roleHeader = req.headers.get("x-user-role");
-    const role = session?.role || (roleHeader === "super_admin" || roleHeader === "hr_admin" ? roleHeader : null);
+    // Session role is authoritative; if no session (test/mock), check roleHeader
+    const role = session ? session.role : (roleHeader === "super_admin" ? roleHeader : null);
 
-    if (!session && !role) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!role) {
+      return NextResponse.json({ error: "Unauthorized. Please sign in." }, { status: 401 });
     }
-    if (role !== "super_admin" && role !== "hr_admin") {
-      return NextResponse.json({ error: "Forbidden. Admin privileges required." }, { status: 403 });
+    // Strict restriction: ONLY Super Admin can delete employees
+    if (role !== "super_admin") {
+      return NextResponse.json(
+        { error: "Forbidden. Only Super Admin has permission to delete employees." },
+        { status: 403 }
+      );
     }
 
     const { searchParams } = new URL(req.url);
-    const id = searchParams.get("id") || searchParams.get("employeeId");
+    let id = searchParams.get("id") || searchParams.get("employeeId");
+    if (!id) {
+      try {
+        const body = await req.json();
+        id = body?.id || body?.employeeId;
+      } catch {
+        // no json body
+      }
+    }
 
     if (!id) {
       return NextResponse.json({ error: "Employee ID is required" }, { status: 400 });
+    }
+
+    // Safety check: Prevent Super Admin from deleting their own active account
+    if (session) {
+      if ((session.employeeId && session.employeeId === id) || session.userId === id) {
+        return NextResponse.json(
+          { error: "You cannot delete your own active Super Admin employee record." },
+          { status: 400 }
+        );
+      }
     }
 
     const conn = await connectToDatabase();
@@ -566,45 +592,89 @@ export async function DELETE(req: NextRequest) {
       });
 
       if (emp) {
-        const empId = emp.employeeId;
-        const empEmail = emp.workEmail || emp.email;
-
-        // Delete from Employee collection
-        await Employee.deleteOne({ _id: emp._id });
-
-        // Delete associated User account
-        if (empId || empEmail) {
-          await User.deleteMany({
-            $or: [
-              ...(empId ? [{ employeeId: empId }] : []),
-              ...(empEmail ? [{ email: empEmail.toLowerCase().trim() }] : []),
-            ],
-          });
+        // Check if the target employee's email matches the current super admin's email
+        if (
+          session?.email &&
+          (emp.email?.toLowerCase().trim() === session.email.toLowerCase().trim() ||
+            emp.workEmail?.toLowerCase().trim() === session.email.toLowerCase().trim() ||
+            emp.personalEmail?.toLowerCase().trim() === session.email.toLowerCase().trim())
+        ) {
+          return NextResponse.json(
+            { error: "You cannot delete your own active Super Admin employee record." },
+            { status: 400 }
+          );
         }
 
-        // Clean associated biometric mappings
+        const empId = emp.employeeId;
+        const empEmail = emp.workEmail || emp.email;
+        const personalEmail = emp.personalEmail;
+
+        // 1. Delete from Employee collection
+        await Employee.deleteOne({ _id: emp._id });
+
+        // 2. Delete associated User account(s)
+        const emailFilter = [empEmail, personalEmail]
+          .filter((em): em is string => Boolean(em))
+          .map((em) => em.toLowerCase().trim());
+
+        await User.deleteMany({
+          $or: [
+            ...(empId ? [{ employeeId: empId }] : []),
+            ...(emailFilter.length > 0 ? [{ email: { $in: emailFilter } }] : []),
+          ],
+        });
+
+        // 3. Clean associated biometric mappings
         if (empId) {
           await BiometricMapping.deleteMany({ employeeId: empId });
         }
 
-        // Audit log
+        // 4. Clean associated leave requests and balances
+        if (empId) {
+          await LeaveRequest.deleteMany({ employeeId: empId });
+          await LeaveBalance.deleteMany({ employeeId: empId });
+        }
+
+        // 5. Clean associated attendance records
+        if (empId) {
+          await Attendance.deleteMany({ employeeId: empId });
+        }
+
+        // 6. Release assigned assets back to inventory
+        if (empId) {
+          await Asset.updateMany(
+            { assignedTo: empId },
+            { $set: { assignedTo: null, status: "Available" } }
+          );
+        }
+
+        // 7. Audit log
         await AuditLog.create({
-          user: session?.name || "Admin",
-          role: session?.role || "super_admin",
+          user: session?.name || "Super Admin",
+          role: "super_admin",
           action: "Employee Deleted",
           module: "Employees",
-          details: `Permanently deleted employee ${emp.name} (${empId}).`,
+          details: `Super Admin permanently deleted employee ${emp.name} (${empId}).`,
           status: "Success",
         });
 
-        return NextResponse.json({ success: true, message: `Employee ${emp.name} permanently deleted.` });
+        return NextResponse.json({
+          success: true,
+          message: `Employee ${emp.name} (${empId}) permanently deleted.`,
+        });
       }
 
-      // If not found in Employee, also check and clean up any orphaned User record
+      // If not found in Employee, also check and clean up any orphaned records
       await User.deleteMany({ employeeId: id });
       await BiometricMapping.deleteMany({ employeeId: id });
+      await LeaveRequest.deleteMany({ employeeId: id });
+      await LeaveBalance.deleteMany({ employeeId: id });
+      await Attendance.deleteMany({ employeeId: id });
 
-      return NextResponse.json({ success: true, message: "Employee record cleaned up successfully." });
+      return NextResponse.json({
+        success: true,
+        message: "Employee records and associated data cleaned up successfully.",
+      });
     } else {
       const store = getMockStore();
       store.employees = store.employees.filter((e) => e.employeeId !== id && e.id !== id);

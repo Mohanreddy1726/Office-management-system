@@ -31,7 +31,7 @@ export interface Store {
   // employees
   addEmployee: (e: Omit<Employee, "id"> & { id?: string }) => string;
   updateEmployee: (id: string, patch: Partial<Employee>, auditNote?: string) => void;
-  deleteEmployee: (id: string) => void;
+  deleteEmployee: (id: string, skipApi?: boolean) => void;
   // attendance
   addCorrection: (c: Omit<AttendanceCorrection, "id" | "submittedAt" | "status">) => void;
   decideCorrection: (id: string, decision: "Approved" | "Rejected" | "Clarification", note: string) => void;
@@ -518,11 +518,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setData((d) => ({ ...d, employees: d.employees.map((e) => (e.id === id ? { ...e, ...patch } : e)) }));
         audit({ user: session ? nameOf(data, session.userId) : "Demo", action: "Updated employee", module: "Employees", record: `${id} ${nameOf(data, id)}`, outcome: "Success", details: auditNote });
       },
-      deleteEmployee: (id) => {
-        setData((d) => ({ ...d, employees: d.employees.filter((e) => e.id !== id) }));
-        fetch(`/api/employees?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch((err) => {
-          console.error("Failed to delete employee on server:", err);
-        });
+      deleteEmployee: (id, skipApi = false) => {
+        setData((d) => ({
+          ...d,
+          employees: d.employees.filter((e) => e.id !== id),
+          leaves: d.leaves.filter((l) => l.employeeId !== id),
+          attendance: d.attendance.filter((a) => a.employeeId !== id),
+          assets: d.assets.map((ast) =>
+            ast.assignedTo === id ? { ...ast, assignedTo: null, status: "Available" } : ast
+          ),
+        }));
+        if (!skipApi) {
+          fetch(`/api/employees?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch((err) => {
+            console.error("Failed to delete employee on server:", err);
+          });
+        }
         const empRecord = data.employees.find((x) => x.id === id);
         audit({
           user: session ? nameOf(data, session.userId) : "Admin",

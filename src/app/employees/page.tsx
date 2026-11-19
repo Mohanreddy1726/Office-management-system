@@ -18,6 +18,7 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { fmtDate, inr, tenure, initials } from "@/lib/format";
 import { AppShell } from "@/components/shell";
+import { DeleteEmployeeDialog } from "@/components/employees/DeleteEmployeeDialog";
 import {
   Download, Plus, Users, LayoutGrid, List, Mail, Phone, Building2,
   ArrowUpRight, Key, Trash2, BarChart3, Activity, Shield, CheckCircle2,
@@ -30,6 +31,7 @@ export default function EmployeesPage() {
   const { data, session, addEmployee, updateEmployee, deleteEmployee, setAttendanceRecords } = useStore();
   const router = useRouter();
   const role = session?.role;
+  const isSuperAdmin = role === "super_admin";
   const isAdmin = role === "super_admin" || role === "hr_admin";
   const isManager = role === "manager";
 
@@ -214,7 +216,21 @@ export default function EmployeesPage() {
               <Mail className="h-3 w-3 text-amber-700" />
               <span>Resend Link</span>
             </Button>
-          ) : (
+          ) : null}
+          {isSuperAdmin && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setDeleteEmp(r)}
+              className="h-7 gap-1 border-rose-200 bg-rose-50 text-[11px] font-semibold text-rose-700 hover:bg-rose-100 hover:text-rose-800"
+              title="Delete employee permanently"
+            >
+              <Trash2 className="h-3 w-3 text-rose-600" />
+              <span>Delete</span>
+            </Button>
+          )}
+          {!isSuperAdmin && !(isAdmin && r.status === "Pending Verification") && (
             <span className="text-xs text-muted-foreground">—</span>
           )}
         </div>
@@ -396,6 +412,7 @@ export default function EmployeesPage() {
                   key={emp.id}
                   emp={emp}
                   isAdmin={isAdmin}
+                  isSuperAdmin={isSuperAdmin}
                   month={selectedMonth}
                   onResetPassword={() => setResetEmp(emp)}
                   onDelete={() => setDeleteEmp(emp)}
@@ -480,33 +497,12 @@ export default function EmployeesPage() {
           }}
         />
 
-        {/* Delete Confirmation Dialog */}
+        {/* Delete Confirmation Dialog (Super Admin Only) */}
         <DeleteEmployeeDialog
           emp={deleteEmp}
-          onClose={() => setDeleteEmp(null)}
-          onConfirm={async (emp) => {
-            if (emp.status === "Pending Verification") {
-              // Permanently delete unverified employee
-              deleteEmployee(emp.id);
-              toast.success(`Unverified employee ${emp.name} permanently removed`);
-            } else {
-              updateEmployee(emp.id, { status: "Inactive" }, "Deactivated by admin");
-              try {
-                await fetch("/api/employees", {
-                  method: "PATCH",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    employeeId: emp.id,
-                    patch: { status: "Inactive" },
-                  }),
-                });
-              } catch (err) {
-                console.error("Failed to deactivate employee via API:", err);
-              }
-              toast.success(`Employee ${emp.name} marked as Inactive and portal access revoked`);
-            }
-            setDeleteEmp(null);
-          }}
+          open={Boolean(deleteEmp)}
+          onOpenChange={(open) => !open && setDeleteEmp(null)}
+          onDeleted={() => setDeleteEmp(null)}
         />
       </div>
     </AppShell>
@@ -534,12 +530,14 @@ const parseTimeToMinutes = (t?: string): number | null => {
 function EmployeeCard({
   emp,
   isAdmin,
+  isSuperAdmin,
   month,
   onResetPassword,
   onDelete,
 }: {
   emp: Employee;
   isAdmin?: boolean;
+  isSuperAdmin?: boolean;
   month?: string;
   onResetPassword: () => void;
   onDelete: () => void;
@@ -732,14 +730,16 @@ function EmployeeCard({
                 >
                   <Key className="h-3.5 w-3.5" />
                 </button>
-                <button
-                  type="button"
-                  onClick={onDelete}
-                  className="rounded-md p-1 hover:bg-rose-50 hover:text-rose-700 transition-colors"
-                  title="Delete Employee"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                {isSuperAdmin && (
+                  <button
+                    type="button"
+                    onClick={onDelete}
+                    className="rounded-md p-1 hover:bg-rose-50 hover:text-rose-700 transition-colors"
+                    title="Delete Employee"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -878,18 +878,20 @@ function EmployeeCard({
                   <Key className="h-3.5 w-3.5 text-slate-600" />
                   <span>Reset Password</span>
                 </Button>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={onDelete}
-                  className="h-8 gap-1 border-rose-200 bg-rose-50/40 text-xs font-medium text-rose-600 hover:bg-rose-100"
-                >
-                  <Trash2 className="h-3.5 w-3.5 text-rose-500" />
-                  <span>Delete</span>
-                </Button>
               </>
+            )}
+
+            {isSuperAdmin && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onDelete}
+                className="h-8 gap-1 border-rose-200 bg-rose-50/40 text-xs font-medium text-rose-600 hover:bg-rose-100"
+              >
+                <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                <span>Delete</span>
+              </Button>
             )}
 
             <Button
@@ -1937,57 +1939,6 @@ function ResetPasswordDialog({
             onClick={() => onConfirm(emp.workEmail)}
           >
             Send reset link
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function DeleteEmployeeDialog({
-  emp,
-  onClose,
-  onConfirm,
-}: {
-  emp: Employee | null;
-  onClose: () => void;
-  onConfirm: (emp: Employee) => void;
-}) {
-  if (!emp) return null;
-  const isUnverified = emp.status === "Pending Verification";
-
-  return (
-    <Dialog open={Boolean(emp)} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <div className="flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-rose-50 text-rose-700">
-              <AlertTriangle className="h-5 w-5" />
-            </span>
-            <div>
-              <DialogTitle>{isUnverified ? "Delete unverified employee" : "Deactivate employee"}</DialogTitle>
-              <DialogDescription>
-                {isUnverified
-                  ? `Permanently remove unverified employee ${emp.name} (${emp.id})?`
-                  : `Are you sure you want to deactivate ${emp.name}?`}
-              </DialogDescription>
-            </div>
-          </div>
-        </DialogHeader>
-        <p className="text-xs text-muted-foreground">
-          {isUnverified
-            ? `This employee is pending verification. Confirming will permanently remove this employee card from the system.`
-            : `This will set the status of ${emp.name} (${emp.id}) to Inactive and revoke access. You can reactivate this account later from Administration.`}
-        </p>
-        <DialogFooter className="mt-4">
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={() => onConfirm(emp)}
-          >
-            {isUnverified ? "Permanently Delete" : "Confirm Deactivation"}
           </Button>
         </DialogFooter>
       </DialogContent>
