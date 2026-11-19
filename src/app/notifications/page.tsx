@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/data/store";
-import { TODAY } from "@/lib/data/seed";
+import { TODAY, DEPARTMENTS } from "@/lib/data/seed";
 import { PageHeader, KpiCard, StatusBadge, TabsShell, Field, EmployeeAvatar } from "@/components/shared";
 import { Sel } from "@/components/form-bits";
 import type { NotificationItem, Announcement } from "@/lib/data/types";
@@ -450,7 +450,7 @@ function AnnouncementDialog({
               <Sel
                 value={scopeDetails}
                 onChange={setScopeDetails}
-                options={["Engineering", "Human Resources", "Finance & Accounts", "Operations", "Sales & BD"]}
+                options={DEPARTMENTS}
               />
             </Field>
           )}

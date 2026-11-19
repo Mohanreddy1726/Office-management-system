@@ -16,6 +16,7 @@ import {
 import { Stat, Person, useScope, Sel } from "@/components/form-bits";
 import { fmtDate, inr, tenure, attColor } from "@/lib/format";
 import { payslipFor } from "@/lib/payroll";
+import { DEPARTMENTS } from "@/lib/data/seed";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
@@ -160,7 +161,7 @@ export default function EmployeeDetailPage() {
           <div className="min-w-0 flex-1">
             <PageHeader
               title={e.name}
-              description={`${e.designation} · ${e.department} · ${e.team}`}
+              description={`${e.designation} · ${e.department} · ${e.branch}`}
               actions={
                 isAdmin ? (
                   <div className="flex flex-wrap items-center gap-2">
@@ -325,7 +326,6 @@ export default function EmployeeDetailPage() {
               <Grid>
                 <Stat label="Designation" value={e.designation} />
                 <Stat label="Department" value={e.department} />
-                <Stat label="Team" value={e.team} />
                 <Stat label="Branch" value={e.branch} />
                 <Stat label="Employment type" value={e.employmentType} />
                 <Stat label="Probation" value={`${e.probationMonths} months`} />
@@ -599,9 +599,9 @@ function EditDialog({
   onSave: (p: Partial<Employee>) => void;
 }) {
   const [designation, setDesignation] = useState(e.designation);
+  const [department, setDepartment] = useState(e.department);
   const [phone, setPhone] = useState(e.phone);
   const [status, setStatus] = useState<string>(e.status);
-  const [team, setTeam] = useState(e.team);
   const [bankName, setBankName] = useState(e.bankName || "");
   const [accountNumber, setAccountNumber] = useState(e.accountNumber || "");
   const [ifscCode, setIfscCode] = useState(e.ifscCode || "");
@@ -620,11 +620,11 @@ function EditDialog({
               placeholder="e.g. Senior Software Engineer"
             />
           </Field>
-          <Field label="Team">
-            <Input
-              value={team}
-              onChange={(x) => setTeam(x.target.value)}
-              placeholder="e.g. Frontend Platform"
+          <Field label="Department">
+            <Sel
+              value={department}
+              onChange={setDepartment}
+              options={DEPARTMENTS}
             />
           </Field>
           <Field
@@ -678,8 +678,9 @@ function EditDialog({
             onClick={() =>
               onSave({
                 designation,
+                department,
                 phone,
-                team,
+                team: department,
                 status: status as EmploymentStatus,
                 bankName: bankName.trim(),
                 accountNumber: accountNumber.trim(),

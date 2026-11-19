@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
             _id: `att-${Date.now()}`,
             employeeId,
             employeeName: session.name,
-            department: "Engineering",
+            department: "Operations",
             date: dateStr,
             checkIn: timeStr,
             status: "Present",

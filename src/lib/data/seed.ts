@@ -23,17 +23,18 @@ const rand = mulberry32(20261022);
 const pick = <T,>(arr: T[]) => arr[Math.floor(rand() * arr.length)];
 const rint = (min: number, max: number) => min + Math.floor(rand() * (max - min + 1));
 
-export const DEPARTMENTS = ["Engineering", "Human Resources", "Finance", "Sales", "Operations", "Customer Support"];
+export const DEPARTMENTS = [
+  "Telecaller",
+  "Operations",
+  "Digital",
+  "Business Development",
+];
 
 export const TEAMS = [
-  { name: "Frontend Platform", department: "Engineering", branch: "Hyderabad" as Branch },
-  { name: "Backend Services", department: "Engineering", branch: "Hyderabad" as Branch },
-  { name: "Quality Engineering", department: "Engineering", branch: "Warangal" as Branch },
-  { name: "Talent Acquisition", department: "Human Resources", branch: "Hyderabad" as Branch },
-  { name: "Finance & Accounts", department: "Finance", branch: "Hyderabad" as Branch },
-  { name: "Growth & Sales", department: "Sales", branch: "Vijayawada" as Branch },
-  { name: "Support Desk", department: "Customer Support", branch: "Visakhapatnam" as Branch },
-  { name: "Facilities & Admin", department: "Operations", branch: "Hyderabad" as Branch },
+  { name: "Telecaller Team", department: "Telecaller", branch: "Hyderabad" as Branch },
+  { name: "Operations Team", department: "Operations", branch: "Hyderabad" as Branch },
+  { name: "Digital Team", department: "Digital", branch: "Hyderabad" as Branch },
+  { name: "Business Development Team", department: "Business Development", branch: "Hyderabad" as Branch },
 ];
 
 const DESIGNATIONS: Record<string, string[]> = {

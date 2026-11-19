@@ -36,7 +36,7 @@ export const NAV: NavGroup[] = [
     items: [
       { to: "/employees", label: "Employees", icon: Users, roles: ["super_admin", "hr_admin", "manager"] },
       { to: "/onboarding", label: "Onboarding & Exit", icon: UserPlus, roles: A_H },
-      { to: "/organization", label: "Organization & Team", icon: Building2, roles: ["super_admin", "hr_admin", "manager"] },
+      { to: "/organization", label: "Organization", icon: Building2, roles: ["super_admin", "hr_admin", "manager"] },
     ],
   },
   {
@@ -71,7 +71,7 @@ export const BREADCRUMBS: Record<string, string[]> = {
   "/dashboard": ["Workspace", "Dashboard"],
   "/employees": ["People", "Employees"],
   "/onboarding": ["People", "Onboarding & Exit"],
-  "/organization": ["People", "Organization & Team"],
+  "/organization": ["People", "Organization"],
   "/attendance": ["Time & Attendance", "Attendance"],
   "/biometric": ["Time & Attendance", "Biometric Mapping"],
   "/leave": ["Time & Attendance", "Leave Management"],

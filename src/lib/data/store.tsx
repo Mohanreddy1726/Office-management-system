@@ -292,7 +292,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                   joiningDate: dbEmp.joiningDate || prev?.joiningDate || new Date().toISOString().slice(0, 10),
                   branch: dbEmp.branch || prev?.branch || "Hyderabad",
                   department: dbEmp.department || prev?.department || "Operations",
-                  team: dbEmp.team || prev?.team || "Operations",
+                  team: dbEmp.department || dbEmp.team || prev?.department || "Operations",
                   designation: dbEmp.designation || prev?.designation || "Staff",
                   employmentType: "Full-time",
                   managerId: dbEmp.reportingManagerId || prev?.managerId || null,

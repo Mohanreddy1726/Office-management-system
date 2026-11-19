@@ -680,7 +680,7 @@ function EmployeeCard({
                 <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
                   <Building2 className="h-3 w-3 shrink-0" />
                   <span className="truncate max-w-[130px]">
-                    {emp.team && emp.team !== "Unassigned" ? emp.team : emp.department} · {emp.branch}
+                    {emp.department} · {emp.branch}
                   </span>
                 </span>
               </div>
@@ -928,27 +928,24 @@ function getAvatarGradient(id: string) {
 
 function getResponsibility(emp: Employee) {
   const desig = emp.designation.toLowerCase();
-  const dept = emp.department.toLowerCase();
+  const dept = (emp.department || "").toLowerCase();
 
   if (desig.includes("manager") || desig.includes("lead") || desig.includes("head")) {
-    return "Supervising team operations & deliveries";
+    return "Supervising departmental operations & deliveries";
   }
-  if (dept.includes("engineering") || desig.includes("engineer") || desig.includes("developer")) {
-    return "Feature development & code reviews";
+  if (dept.includes("telecaller") || desig.includes("telecaller") || desig.includes("caller")) {
+    return "Outbound calling, lead qualification & customer outreach";
   }
-  if (dept.includes("human resources") || desig.includes("hr") || desig.includes("recruiter")) {
-    return "Talent acquisition & people operations";
+  if (dept.includes("digital") || desig.includes("developer") || desig.includes("engineer") || desig.includes("design") || desig.includes("marketing")) {
+    return "Digital media, technical workflows & platform delivery";
   }
-  if (dept.includes("finance") || desig.includes("account")) {
-    return "Financial audits & payroll processing";
+  if (dept.includes("business development") || desig.includes("bde") || desig.includes("sales") || desig.includes("growth")) {
+    return "Client acquisition, partnerships & business growth";
   }
-  if (dept.includes("sales") || desig.includes("business")) {
-    return "Client relationships & growth pipelines";
+  if (dept.includes("operations") || desig.includes("operations") || desig.includes("admin")) {
+    return "Operational workflows, coordination & facilities";
   }
-  if (dept.includes("support")) {
-    return "Customer resolution & service desk";
-  }
-  return "Operations execution & facility workflows";
+  return "Operational workflows, coordination & facilities";
 }
 
 /* ---------- Dialog Modals ---------- */
@@ -983,7 +980,6 @@ function AddEmployeeDialog({
   // 2. Job & Organization
   const [designation, setDesignation] = useState("");
   const [department, setDepartment] = useState("");
-  const [team, setTeam] = useState("");
   const [branch, setBranch] = useState("");
   const [employmentType, setEmploymentType] = useState<string>("Full-time");
   const [managerId, setManagerId] = useState<string>("");
@@ -1095,7 +1091,7 @@ function AddEmployeeDialog({
         // Job Details
         designation: designation.trim(),
         department: department || DEPARTMENTS[0] || "Operations",
-        team: team.trim() || "Operations",
+        team: department || DEPARTMENTS[0] || "Operations",
         branch: (branch as any) || BRANCHES[0] || "Headquarters",
         employmentType: (employmentType as any) || "Full-time",
         managerId: managerId || null,
@@ -1329,27 +1325,6 @@ function AddEmployeeDialog({
                   <SelectContent>
                     {DEPARTMENTS.map((d) => (
                       <SelectItem key={d} value={d}>{d}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-
-              <Field label="Assigned Team" required>
-                <Select value={team} onValueChange={setTeam}>
-                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select team" /></SelectTrigger>
-                  <SelectContent>
-                    {[
-                      "Frontend Platform",
-                      "Backend Services",
-                      "Quality Engineering",
-                      "Talent Acquisition",
-                      "Finance & Accounts",
-                      "Growth & Sales",
-                      "Support Desk",
-                      "Facilities & Admin",
-                      "Leadership & Strategy",
-                    ].map((t) => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

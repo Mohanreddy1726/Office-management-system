@@ -812,7 +812,7 @@ function ScheduleJoinerDialog({
 
   // Role & Placement
   const [designation, setDesignation] = useState("");
-  const [department, setDepartment] = useState(DEPARTMENTS[0] || "Engineering");
+  const [department, setDepartment] = useState(DEPARTMENTS[0] || "Operations");
   const [branch, setBranch] = useState<Branch>("Hyderabad");
   const [joiningDate, setJoiningDate] = useState("2026-11-15");
   const [ctc, setCtc] = useState("1200000");

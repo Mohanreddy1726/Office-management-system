@@ -984,7 +984,7 @@ function AttendanceRecordCard({
                 </span>
                 <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
                   <Building2 className="h-2.5 w-2.5" />
-                  {emp?.team || "Office"}
+                  {emp?.department || "Operations"}
                 </span>
               </div>
             </div>

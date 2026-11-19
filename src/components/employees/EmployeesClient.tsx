@@ -19,7 +19,7 @@ export function EmployeesClient() {
     email: "",
     phone: "",
     designation: "",
-    department: "Engineering",
+    department: "Operations",
     joiningDate: new Date().toISOString().slice(0, 10),
     annualCtc: "1200000",
     status: "Active",
@@ -81,7 +81,7 @@ export function EmployeesClient() {
     }
   };
 
-  const departments = ["All", "Engineering", "Human Resources", "Executive", "Design", "Finance", "Operations"];
+  const departments = ["All", "Telecaller", "Operations", "Digital", "Business Development"];
 
   return (
     <div className="space-y-6">
@@ -304,11 +304,10 @@ export function EmployeesClient() {
                     onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                     className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs focus:border-primary focus:outline-none"
                   >
-                    <option value="Engineering">Engineering</option>
-                    <option value="Human Resources">Human Resources</option>
-                    <option value="Design">Design</option>
-                    <option value="Finance">Finance</option>
+                    <option value="Telecaller">Telecaller</option>
                     <option value="Operations">Operations</option>
+                    <option value="Digital">Digital</option>
+                    <option value="Business Development">Business Development</option>
                   </select>
                 </div>
                 <div>

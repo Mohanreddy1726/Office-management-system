@@ -85,15 +85,14 @@ export default function OrganizationPage() {
     <AppShell>
       <div>
         <PageHeader
-          title="Organization & Team"
+          title="Organization Structure"
           description="Visual org chart, leadership structure, departmental hierarchy, and regional branch networks."
         />
 
         {/* Top Summary KPIs */}
-        <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-3">
           <KpiCard label="Active employees" value={String(active.length)} icon={<Users className="h-4 w-4" />} />
           <KpiCard label="Departments" value={String(depts.length)} icon={<Building2 className="h-4 w-4" />} onClick={() => setTab("depts")} />
-          <KpiCard label="Teams & Squads" value={String(teams.length)} icon={<GitBranch className="h-4 w-4" />} onClick={() => setTab("teams")} />
           <KpiCard label="Office Branches" value={String(BRANCHES.length)} icon={<MapPin className="h-4 w-4" />} onClick={() => setTab("branches")} />
         </div>
 
@@ -102,7 +101,6 @@ export default function OrganizationPage() {
           tabs={[
             { key: "chart", label: "Interactive Org Chart" },
             { key: "depts", label: `Departments (${depts.length})` },
-            { key: "teams", label: `Teams & Squads (${teams.length})` },
             { key: "branches", label: `Office Branches (${BRANCHES.length})` },
           ]}
           active={tab}
@@ -246,101 +244,7 @@ export default function OrganizationPage() {
             </div>
           )}
 
-          {/* TAB 3: TEAMS & SQUADS */}
-          {tab === "teams" && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Input
-                  placeholder="Filter team name or member…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="h-8 w-64 text-xs"
-                />
-                <span className="text-xs text-muted-foreground">{filteredTeams.length} functional teams</span>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {filteredTeams.map(([t, list]) => {
-                  const lead = list.find((e) => !list.some((x) => x.id === e.managerId)) ?? list[0];
-                  return (
-                    <div
-                      key={t}
-                      className="flex flex-col justify-between rounded-2xl border border-border bg-card p-5 shadow-sm transition-all hover:border-primary/40 hover:shadow-md"
-                    >
-                      <div>
-                        {/* Header */}
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <span className="inline-flex items-center gap-1 rounded-md border border-indigo-200/70 bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700">
-                              <GitBranch className="h-3 w-3 shrink-0" /> {list[0]?.department}
-                            </span>
-                            <h4 className="mt-1.5 font-bold text-foreground text-base">{t}</h4>
-                            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                              <MapPin className="h-3 w-3" /> {list[0]?.branch}
-                            </p>
-                          </div>
-                          <span className="rounded-full bg-blue-soft border border-primary/20 px-2.5 py-0.5 text-xs font-semibold text-primary">
-                            {list.length} members
-                          </span>
-                        </div>
-
-                        {/* Divider */}
-                        <div className="my-3 border-t border-border/60" />
-
-                        {/* Team Lead */}
-                        <div className="flex items-center justify-between rounded-xl border border-border/80 bg-muted/20 p-2.5 text-xs">
-                          <span className="text-muted-foreground">Team Lead:</span>
-                          <Link
-                            href={`/employees/${lead?.id}`}
-                            className="font-semibold text-foreground hover:text-primary flex items-center gap-1"
-                          >
-                            {lead?.name} <ArrowUpRight className="h-3 w-3 opacity-60" />
-                          </Link>
-                        </div>
-
-                        {/* Member Avatars Stack */}
-                        <div className="mt-4">
-                          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                            TEAM ROSTER
-                          </p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {list.map((e) => (
-                              <Link
-                                key={e.id}
-                                href={`/employees/${e.id}`}
-                                title={`${e.name} · ${e.designation}`}
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-background px-2 py-1 text-xs text-foreground hover:bg-muted transition-colors"
-                              >
-                                <span className="flex h-5 w-5 items-center justify-center rounded-md bg-indigo-600 font-bold text-white text-[9px]">
-                                  {initials(e.name)}
-                                </span>
-                                <span className="truncate max-w-[100px]">{e.name.split(" ")[0]}</span>
-                              </Link>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Footer */}
-                      <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between text-xs text-muted-foreground">
-                        <span>100% active allocation</span>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => router.push(`/employees?dept=${encodeURIComponent(list[0]?.department || "all")}`)}
-                          className="h-7 text-xs text-primary hover:text-primary/90"
-                        >
-                          View in directory <ArrowUpRight className="ml-1 h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* TAB 4: OFFICE BRANCHES */}
+          {/* TAB 3: OFFICE BRANCHES */}
           {tab === "branches" && (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               {BRANCHES.map((b) => {

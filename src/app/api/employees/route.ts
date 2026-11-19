@@ -38,6 +38,22 @@ export async function GET(req: NextRequest) {
 
       const employees = await Employee.find(query).sort({ employeeId: 1 });
 
+      // Auto-standardize departments to: Telecaller, Operations, Digital, Business Development
+      for (const emp of employees) {
+        let normalizedDept = emp.department;
+        if (!emp.department || emp.department === "Engineering" || emp.department === "Design") {
+          normalizedDept = "Digital";
+        } else if (emp.department === "Human Resources" || emp.department === "Finance" || emp.department === "Customer Support") {
+          normalizedDept = "Operations";
+        } else if (emp.department === "Sales") {
+          normalizedDept = "Business Development";
+        }
+        if (normalizedDept !== emp.department) {
+          emp.department = normalizedDept;
+          await Employee.updateOne({ _id: emp._id }, { $set: { department: normalizedDept } });
+        }
+      }
+
       // Auto-heal: If any employee is marked "Pending Verification", but their associated User account has verified email,
       // heal the employee status to Probation (if probationEndDate exists) or Active, and persist to DB.
       const pendingEmps = employees.filter((e) => e.status === "Pending Verification");
@@ -438,7 +454,10 @@ export async function PATCH(req: NextRequest) {
       const updateData: any = {};
       const unsetData: any = {};
       if (patch.designation) updateData.designation = patch.designation.trim();
-      if (patch.department) updateData.department = patch.department;
+      if (patch.department) {
+        updateData.department = patch.department;
+        updateData.team = patch.department;
+      }
       if (patch.team) updateData.team = patch.team;
       if (patch.phone) updateData.phone = patch.phone.trim();
       if (patch.branch) updateData.branch = patch.branch;
