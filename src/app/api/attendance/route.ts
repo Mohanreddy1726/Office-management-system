@@ -7,6 +7,27 @@ import { reconcileAllActiveMappings, syncLiveBiometricHardware } from "@/lib/bio
 
 export const dynamic = "force-dynamic";
 
+function formatAttendanceRecord(r: any) {
+  return {
+    id: r._id.toString(),
+    employeeId: r.employeeId,
+    employeeName: r.employeeName || "Employee",
+    department: r.department || "Operations",
+    branch: r.branch || "Headquarters",
+    date: r.date,
+    shiftId: "SH-GEN",
+    checkIn: r.checkIn || undefined,
+    checkOut: r.checkOut || undefined,
+    workedMinutes: r.totalHours ? Math.round(r.totalHours * 60) : 0,
+    lateMinutes: r.status === "Late" ? 30 : 0,
+    status: (r.status === "On Leave" ? "Leave" : r.status === "Half-day" ? "Half Day" : r.status || "Present") as any,
+    source: "Biometric" as const,
+    confirmation: r.confirmation || "Confirmed",
+    deviceUsed: r.deviceUsed || "eSSL K30 Pro - Main Office",
+    correction: r.correction || {},
+  };
+}
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getCurrentUser();
@@ -33,24 +54,7 @@ export async function GET(req: NextRequest) {
         query.employeeId = session.employeeId;
       }
       const rawRecords = await Attendance.find(query).sort({ date: -1, checkIn: 1 });
-      const records = rawRecords.map((r) => ({
-        id: r._id.toString(),
-        employeeId: r.employeeId,
-        employeeName: r.employeeName || "Employee",
-        department: r.department || "Operations",
-        branch: r.branch || "Headquarters",
-        date: r.date,
-        shiftId: "SH-GEN",
-        checkIn: r.checkIn || undefined,
-        checkOut: r.checkOut || undefined,
-        workedMinutes: r.totalHours ? Math.round(r.totalHours * 60) : 0,
-        lateMinutes: r.status === "Late" ? 30 : 0,
-        status: (r.status === "On Leave" ? "Leave" : r.status === "Half-day" ? "Half Day" : r.status || "Present") as any,
-        source: "Biometric" as const,
-        confirmation: r.confirmation || "Confirmed",
-        deviceUsed: r.deviceUsed || "eSSL K30 Pro - Main Office",
-        correction: r.correction || {},
-      }));
+      const records = rawRecords.map(formatAttendanceRecord);
       return NextResponse.json({ success: true, records, date });
     } else {
       const store = getMockStore();
@@ -87,8 +91,11 @@ export async function POST(req: NextRequest) {
         // Attempt live terminal connection
         const liveResult = await syncLiveBiometricHardware();
         if (liveResult.success) {
+          const rawRecords = await Attendance.find({}).sort({ date: -1, checkIn: 1 });
+          const records = rawRecords.map(formatAttendanceRecord);
           return NextResponse.json({
             success: true,
+            records,
             message: `Synced ${liveResult.totalLogs} punch records from eSSL K30 Pro terminal (${liveResult.updatedRecords} attendance records updated).`,
             summary: { processed: liveResult.totalLogs, updatedRecords: liveResult.updatedRecords },
           });
@@ -96,15 +103,20 @@ export async function POST(req: NextRequest) {
 
         // If hardware is unreachable (e.g. running on Vercel cloud), reconcile all stored unmapped punches
         const cloudResult = await reconcileAllActiveMappings();
+        const rawRecords = await Attendance.find({}).sort({ date: -1, checkIn: 1 });
+        const records = rawRecords.map(formatAttendanceRecord);
         const totalCount = await Attendance.countDocuments();
         return NextResponse.json({
           success: true,
+          records,
           syncedFrom: "cloud_database",
-          message: `Terminal is on office LAN. Reconciled ${cloudResult.updatedRecords} attendance records from stored biometric punches (${totalCount} total in database).`,
+          message: cloudResult.updatedRecords > 0
+            ? `Reconciled ${cloudResult.updatedRecords} attendance records for mapped employees (${totalCount} total in database).`
+            : `Refreshed ${records.length} attendance records from database. Physical terminal is on office LAN (192.168.29.201).`,
           summary: { processed: cloudResult.processedPunches, updatedRecords: cloudResult.updatedRecords },
         });
       }
-      return NextResponse.json({ success: true, message: "Sync simulated in memory" });
+      return NextResponse.json({ success: true, message: "Sync simulated in memory", records: [] });
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });

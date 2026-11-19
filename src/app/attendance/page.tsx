@@ -107,12 +107,23 @@ export default function AttendancePage() {
       });
       const json = await res.json();
       if (res.ok && json.success) {
+        if (Array.isArray(json.records) && json.records.length > 0) {
+          setAttendanceRecords(json.records);
+          const hasCurrentDate = json.records.some((r: any) => r.date === date);
+          const hasToday = json.records.some((r: any) => r.date === todayIso);
+          if (!hasCurrentDate && hasToday) {
+            setDate(todayIso);
+          } else if (!hasCurrentDate && json.records.length > 0) {
+            setDate(json.records[0].date);
+          }
+        } else {
+          await loadAttendance();
+        }
         toast.success(
           json.message ||
             `Biometric Sync Complete: ${json.summary?.processed || 0} punches scanned, ${json.summary?.updatedRecords || 0} attendance records updated!`,
           { id: "bio-sync" }
         );
-        await loadAttendance();
       } else {
         toast.error(json.error || "Biometric sync failed", { id: "bio-sync" });
       }
@@ -145,9 +156,9 @@ export default function AttendancePage() {
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const emp = data.employees.find((e) => e.id === a.employeeId);
-        const name = (emp?.name ?? "").toLowerCase();
-        const dep = (emp?.department ?? "").toLowerCase();
-        const team = (emp?.team ?? "").toLowerCase();
+        const name = (emp?.name ?? (a as any).employeeName ?? "").toLowerCase();
+        const dep = (emp?.department ?? (a as any).department ?? "").toLowerCase();
+        const team = (emp?.team ?? (a as any).branch ?? "").toLowerCase();
         const id = a.employeeId.toLowerCase();
         if (!name.includes(q) && !dep.includes(q) && !team.includes(q) && !id.includes(q)) {
           return false;

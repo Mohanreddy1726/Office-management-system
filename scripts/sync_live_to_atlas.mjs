@@ -23,6 +23,9 @@ async function syncAll() {
   const EmployeeSchema = new Schema({}, { strict: false });
   const Employee = mongoose.models.Employee || mongoose.model("Employee", EmployeeSchema);
 
+  const UnmappedPunchSchema = new Schema({}, { strict: false });
+  const UnmappedPunch = mongoose.models.UnmappedPunch || mongoose.model("UnmappedPunch", UnmappedPunchSchema);
+
   const mappings = await BiometricMapping.find({ status: "Active" });
   const pinToMapping = new Map(mappings.map((m) => [String(m.biometricId), m]));
   console.log(`Loaded ${mappings.length} biometric mappings.`);
@@ -72,6 +75,7 @@ async function syncAll() {
   console.log(`Grouped into ${groups.size} (date, pin) attendance sessions.`);
 
   const bulkOps = [];
+  const unmappedBulk = [];
   let matchedCount = 0;
 
   for (const item of groups.values()) {
@@ -91,8 +95,12 @@ async function syncAll() {
     }
 
     const firstMinutes = first.getHours() * 60 + first.getMinutes();
-    const isLate = firstMinutes > (9 * 60 + 30);
-    const status = isLate ? "Late" : "Present";
+    // General Shift starts at 10:00 AM with 15 mins grace period (10:15 AM)
+    const isLate = firstMinutes > (10 * 60 + 15);
+    let status = isLate ? "Late" : "Present";
+    if (totalHours > 0 && totalHours < 4.5 && item.punches.length > 1) {
+      status = "Half-day";
+    }
 
     const mapping = pinToMapping.get(item.pin);
     if (mapping) {
@@ -114,11 +122,50 @@ async function syncAll() {
               status,
               confirmation: "Confirmed",
               deviceUsed: "eSSL K30 Pro - Main Office",
+              updatedAt: new Date(),
             },
+            $setOnInsert: { createdAt: new Date() },
           },
           upsert: true,
         },
       });
+    } else {
+      unmappedBulk.push({
+        updateOne: {
+          filter: { deviceId: "DEV-01", biometricId: item.pin, punchTime: first },
+          update: {
+            $set: {
+              deviceId: "DEV-01",
+              biometricId: item.pin,
+              punchTime: first,
+              punchType: item.punches.length > 1 ? "CheckIn" : "Unknown",
+              resolved: false,
+              updatedAt: new Date(),
+            },
+            $setOnInsert: { createdAt: new Date() },
+          },
+          upsert: true,
+        },
+      });
+      if (item.punches.length > 1) {
+        unmappedBulk.push({
+          updateOne: {
+            filter: { deviceId: "DEV-01", biometricId: item.pin, punchTime: last },
+            update: {
+              $set: {
+                deviceId: "DEV-01",
+                biometricId: item.pin,
+                punchTime: last,
+                punchType: "CheckOut",
+                resolved: false,
+                updatedAt: new Date(),
+              },
+              $setOnInsert: { createdAt: new Date() },
+            },
+            upsert: true,
+          },
+        });
+      }
     }
   }
 
@@ -126,12 +173,19 @@ async function syncAll() {
   if (bulkOps.length > 0) {
     console.log(`Executing bulkWrite with ${bulkOps.length} operations...`);
     const res = await Attendance.bulkWrite(bulkOps, { ordered: false });
-    console.log("Bulk write complete:", {
+    console.log("Bulk write complete for Attendance:", {
       upserted: res.upsertedCount,
       modified: res.modifiedCount,
       matched: res.matchedCount,
     });
   }
+
+  console.log(`Saving ${unmappedBulk.length} unmapped punches in batches of 500...`);
+  for (let i = 0; i < unmappedBulk.length; i += 500) {
+    const chunk = unmappedBulk.slice(i, i + 500);
+    await UnmappedPunch.bulkWrite(chunk, { ordered: false });
+  }
+  console.log(`Saved ${unmappedBulk.length} unmapped punches to MongoDB Atlas.`);
 
   // Update BiometricDevice record
   const BiometricDeviceSchema = new Schema({}, { strict: false });

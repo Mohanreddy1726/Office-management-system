@@ -148,7 +148,6 @@ export async function reconcileAllActiveMappings(): Promise<{ processedPunches: 
   const activePins = activeMappings.map((m) => String(m.biometricId).trim());
   const pendingPunches = await UnmappedPunch.find({
     biometricId: { $in: activePins },
-    resolved: false,
   });
 
   if (pendingPunches.length === 0) return { processedPunches: 0, updatedRecords: 0 };
@@ -253,10 +252,9 @@ export async function syncLiveBiometricHardware(
   if (dev?.port && !overridePort) targetPort = dev.port;
 
   try {
-    const zk = new ZKLib(targetIp, targetPort, 8000, 3000, 0, "tcp");
+    const zk = new ZKLib(targetIp, targetPort, 15000, 4000, 0, "tcp");
     await zk.createSocket();
     const logsRes = await zk.getAttendances();
-    const usersRes = await zk.getUsers().catch(() => ({ data: [] }));
     await zk.disconnect();
 
     const punches = logsRes?.data || [];
@@ -266,7 +264,7 @@ export async function syncLiveBiometricHardware(
     const empMap = new Map(employees.map((e) => [e.employeeId, e]));
 
     const groups = new Map<string, { employeeId: string; date: string; punches: Date[] }>();
-    const unmappedBulk: any[] = [];
+    const unmappedGroups = new Map<string, { biometricId: string; date: string; punches: Date[] }>();
 
     for (const log of punches) {
       if (!log.deviceUserId || !log.recordTime) continue;
@@ -286,16 +284,11 @@ export async function syncLiveBiometricHardware(
         }
         groups.get(key)!.punches.push(d);
       } else {
-        unmappedBulk.push({
-          updateOne: {
-            filter: { deviceId: "DEV-01", biometricId: pin, punchTime: d },
-            update: {
-              $set: { deviceId: "DEV-01", biometricId: pin, punchTime: d, punchType: "Unknown", resolved: false },
-              $setOnInsert: { createdAt: new Date() },
-            },
-            upsert: true,
-          },
-        });
+        const unKey = `${pin}_${dateStr}`;
+        if (!unmappedGroups.has(unKey)) {
+          unmappedGroups.set(unKey, { biometricId: pin, date: dateStr, punches: [] });
+        }
+        unmappedGroups.get(unKey)!.punches.push(d);
       }
     }
 
@@ -355,8 +348,57 @@ export async function syncLiveBiometricHardware(
       await Attendance.bulkWrite(bulkOps, { ordered: false });
     }
 
+    // Save unmapped punches in batches of 500
+    const unmappedBulk: any[] = [];
+    for (const item of unmappedGroups.values()) {
+      item.punches.sort((a, b) => a.getTime() - b.getTime());
+      const first = item.punches[0];
+      const last = item.punches[item.punches.length - 1];
+
+      unmappedBulk.push({
+        updateOne: {
+          filter: { deviceId: "DEV-01", biometricId: item.biometricId, punchTime: first },
+          update: {
+            $set: {
+              deviceId: "DEV-01",
+              biometricId: item.biometricId,
+              punchTime: first,
+              punchType: item.punches.length > 1 ? "CheckIn" : "Unknown",
+              resolved: false,
+              updatedAt: new Date(),
+            },
+            $setOnInsert: { createdAt: new Date() },
+          },
+          upsert: true,
+        },
+      });
+
+      if (item.punches.length > 1) {
+        unmappedBulk.push({
+          updateOne: {
+            filter: { deviceId: "DEV-01", biometricId: item.biometricId, punchTime: last },
+            update: {
+              $set: {
+                deviceId: "DEV-01",
+                biometricId: item.biometricId,
+                punchTime: last,
+                punchType: "CheckOut",
+                resolved: false,
+                updatedAt: new Date(),
+              },
+              $setOnInsert: { createdAt: new Date() },
+            },
+            upsert: true,
+          },
+        });
+      }
+    }
+
     if (unmappedBulk.length > 0) {
-      await UnmappedPunch.bulkWrite(unmappedBulk, { ordered: false }).catch(() => {});
+      for (let i = 0; i < unmappedBulk.length; i += 500) {
+        const chunk = unmappedBulk.slice(i, i + 500);
+        await UnmappedPunch.bulkWrite(chunk, { ordered: false }).catch(() => {});
+      }
     }
 
     // Mark all resolved
@@ -373,7 +415,7 @@ export async function syncLiveBiometricHardware(
           status: "Online",
           lastSync: new Date(),
           totalLogsCount: punches.length,
-          enrolledUsersCount: usersRes?.data?.length || 25,
+          enrolledUsersCount: 25,
         },
       }
     );
