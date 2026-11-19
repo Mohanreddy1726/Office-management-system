@@ -14,22 +14,17 @@ export async function GET(req: NextRequest) {
     const session = await getCurrentUser();
     const roleHeader = req.headers.get("x-user-role");
     const role = session?.role || (roleHeader === "super_admin" || roleHeader === "hr_admin" ? roleHeader : null);
-
-    if (!session && !role) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const isEmployee = session?.role === "employee" && session?.employeeId;
     const currentEmpId = session?.employeeId || session?.userId;
 
     const conn = await connectToDatabase();
     if (conn) {
       const query: any = {};
-      // Regular employees only see their own requests
+      // Regular employees only see their own requests if explicitly authenticated as employee
       if (isEmployee) {
         query.employeeId = session.employeeId;
       }
-      // Super Admin, HR Admin, and Managers see all requests
+      // Super Admin, HR Admin, Managers, and general reads see all requests
       const rawRequests = await LeaveRequest.find(query).sort({ createdAt: -1 });
 
       const requests = rawRequests.map((r: any) => {

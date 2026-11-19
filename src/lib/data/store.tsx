@@ -2,7 +2,7 @@
 
 // RenDesk demo store: single source of truth for mock data, demo session,
 // UI prefs and simulated workflows. Persisted to localStorage (frontend only).
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, useCallback, type ReactNode } from "react";
 import { seedState, DEMO_EMPLOYEES } from "./seed";
 import type {
   AppState, Session, Prefs, Role, Employee, AttendanceRecord, AttendanceCorrection, LeaveRequest, NotificationItem,
@@ -52,6 +52,8 @@ export interface Store {
   applyLeave: (l: Omit<LeaveRequest, "id" | "timeline" | "status">) => void;
   decideLeave: (id: string, decision: "Approved" | "Rejected" | "Clarification", note: string) => void;
   deleteLeave: (id: string) => void;
+  refreshLeaves: () => Promise<void>;
+  setLeaveRecords: (records: LeaveRequest[]) => void;
   // payroll
   createPayrollRun: (period: string) => void;
   advancePayroll: (id: string, to: PayrollRun["status"], by: string, note?: string) => void;
@@ -205,6 +207,65 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .catch(() => {});
   }, []);
 
+  const fetchLeavesAsync = useCallback(async () => {
+    try {
+      const res = await fetch("/api/leave");
+      if (res.ok) {
+        const resData = await res.json();
+        if (resData?.success && Array.isArray(resData.requests)) {
+          const serverLeaves: LeaveRequest[] = resData.requests.map((req: any) => ({
+            id: req.id || req._id,
+            employeeId: req.employeeId,
+            type: req.type || req.leaveType || "Casual Leave",
+            startDate: req.startDate,
+            endDate: req.endDate,
+            days: req.days || req.daysCount || 1,
+            halfDay: req.halfDay,
+            reason: req.reason || "Personal Leave",
+            reasonCategory: req.reasonCategory,
+            handoverEmployeeId: req.handoverEmployeeId,
+            emergencyContact: req.emergencyContact,
+            documentNote: req.documentNote,
+            status: req.status || "Submitted",
+            managerDecision: req.managerDecision,
+            managerNote: req.managerNote,
+            decisionNote:
+              req.decisionNote ||
+              (Array.isArray(req.timeline)
+                ? [...req.timeline].reverse().find((t: any) => (t.stage === "Rejected" || t.stage === "Clarification") && t.note)?.note
+                : undefined),
+            reviewedBy: req.reviewedBy,
+            reviewedAt: req.reviewedAt,
+            timeline: Array.isArray(req.timeline) ? req.timeline : [],
+          }));
+
+          setData((d) => {
+            let updatedBalances = d.leaveBalances;
+            if (resData.balance?.employeeId) {
+              const b = resData.balance;
+              updatedBalances = {
+                ...updatedBalances,
+                [b.employeeId]: {
+                  "Casual Leave": b.casualLeave?.remaining ?? 12,
+                  "Sick Leave": b.sickLeave?.remaining ?? 10,
+                  "Comp-Off": b.compOff?.remaining ?? 2,
+                },
+              };
+            }
+
+            return {
+              ...d,
+              leaves: serverLeaves.sort((a, b) => b.startDate.localeCompare(a.startDate)),
+              leaveBalances: updatedBalances,
+            };
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("[syncLeaves error]", err);
+    }
+  }, []);
+
   useEffect(() => {
     const syncEmployees = () => {
       fetch("/api/employees")
@@ -277,61 +338,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         .catch(() => {});
     };
 
-    const syncLeaves = () => {
-      fetch("/api/leave")
-        .then((res) => (res.ok ? res.json() : null))
-        .then((resData) => {
-          if (resData?.success && Array.isArray(resData.requests)) {
-            setData((d) => {
-              const serverLeaves: LeaveRequest[] = resData.requests.map((req: any) => ({
-                id: req.id || req._id,
-                employeeId: req.employeeId,
-                type: req.type || req.leaveType || "Casual Leave",
-                startDate: req.startDate,
-                endDate: req.endDate,
-                days: req.days || req.daysCount || 1,
-                halfDay: req.halfDay,
-                reason: req.reason || "Personal Leave",
-                reasonCategory: req.reasonCategory,
-                handoverEmployeeId: req.handoverEmployeeId,
-                emergencyContact: req.emergencyContact,
-                documentNote: req.documentNote,
-                status: req.status || "Submitted",
-                managerDecision: req.managerDecision,
-                managerNote: req.managerNote,
-                decisionNote:
-                  req.decisionNote ||
-                  (Array.isArray(req.timeline)
-                    ? [...req.timeline].reverse().find((t: any) => (t.stage === "Rejected" || t.stage === "Clarification") && t.note)?.note
-                    : undefined),
-                reviewedBy: req.reviewedBy,
-                reviewedAt: req.reviewedAt,
-                timeline: Array.isArray(req.timeline) ? req.timeline : [],
-              }));
-
-              let updatedBalances = d.leaveBalances;
-              if (resData.balance?.employeeId) {
-                const b = resData.balance;
-                updatedBalances = {
-                  ...updatedBalances,
-                  [b.employeeId]: {
-                    "Casual Leave": b.casualLeave?.remaining ?? 12,
-                    "Sick Leave": b.sickLeave?.remaining ?? 10,
-                    "Comp-Off": b.compOff?.remaining ?? 2,
-                  },
-                };
-              }
-
-              return {
-                ...d,
-                leaves: serverLeaves.sort((a, b) => b.startDate.localeCompare(a.startDate)),
-                leaveBalances: updatedBalances,
-              };
-            });
-          }
-        })
-        .catch(() => {});
-    };
 
     const syncMail = () => {
       fetch("/api/mail")
@@ -375,18 +381,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     syncEmployees();
     syncAttendance();
-    syncLeaves();
+    fetchLeavesAsync();
     syncMail();
     const interval = setInterval(() => {
       syncEmployees();
       syncAttendance();
-      syncLeaves();
+      fetchLeavesAsync();
       syncMail();
     }, 8000);
     const handleFocus = () => {
       syncEmployees();
       syncAttendance();
-      syncLeaves();
+      fetchLeavesAsync();
       syncMail();
     };
     window.addEventListener("focus", handleFocus);
@@ -704,6 +710,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 ),
               }));
             }
+            fetchLeavesAsync();
           })
           .catch((err) => {
             console.error("Failed to persist leave request:", err);
@@ -749,18 +756,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ leaveId: id, decision, note }),
-        }).catch((err) => {
-          console.error("Failed to persist leave decision:", err);
-        });
+        })
+          .then(() => fetchLeavesAsync())
+          .catch((err) => {
+            console.error("Failed to persist leave decision:", err);
+          });
       },
       deleteLeave: (id) => {
         setData((d) => ({
           ...d,
           leaves: d.leaves.filter((l) => l.id !== id && (l as any)._id !== id),
         }));
-        fetch(`/api/leave?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch((err) => {
-          console.error("Failed to delete leave on server:", err);
-        });
+        fetch(`/api/leave?id=${encodeURIComponent(id)}`, { method: "DELETE" })
+          .then(() => fetchLeavesAsync())
+          .catch((err) => {
+            console.error("Failed to delete leave on server:", err);
+          });
         const l = data.leaves.find((x) => x.id === id);
         audit({
           user: session ? nameOf(data, session.userId) : "Admin",
@@ -769,6 +780,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           record: l ? `${nameOf(data, l.employeeId)} ${l.type}` : id,
           outcome: "Success",
         });
+      },
+      refreshLeaves: fetchLeavesAsync,
+      setLeaveRecords: (records) => {
+        setData((d) => ({ ...d, leaves: records }));
       },
       createPayrollRun: (period) => {
         const eligible = data.employees.filter((e) => e.status !== "Inactive" && e.status !== "Resigned");

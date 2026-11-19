@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/data/store";
 import { TODAY } from "@/lib/data/seed";
@@ -21,7 +21,7 @@ import {
   CalendarDays, Download, Hourglass, Plus, CheckCircle2, Clock,
   Calendar, Check, X, Search, LayoutGrid, List, Building2, Shield,
   ArrowUpRight, FileText, AlertCircle, Sparkles, Plane, HeartPulse,
-  Coffee, Baby, FileQuestion, UserCheck, AlertTriangle, ShieldCheck, Trash2, XCircle
+  Coffee, Baby, FileQuestion, UserCheck, AlertTriangle, ShieldCheck, Trash2, XCircle, RefreshCw
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -32,7 +32,7 @@ const LEAVE_TYPES: LeaveType[] = [
 ];
 
 export default function LeavePage() {
-  const { data, session, applyLeave, decideLeave } = useStore();
+  const { data, session, applyLeave, decideLeave, deleteLeave, refreshLeaves } = useStore();
   const { isAdmin, isManager, isEmployee, uid, inScope } = useScope();
   const nameOf = useNames();
 
@@ -41,6 +41,12 @@ export default function LeavePage() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Sync latest leaves from MongoDB Atlas on mount
+  useEffect(() => {
+    refreshLeaves();
+  }, [refreshLeaves]);
 
   // Modals & Slide-out Sheet
   const [applyOpen, setApplyOpen] = useState(false);
@@ -217,6 +223,20 @@ export default function LeavePage() {
           }
           actions={
             <>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={refreshing}
+                onClick={async () => {
+                  setRefreshing(true);
+                  await refreshLeaves();
+                  toast.success("Leave data synchronized with database");
+                  setRefreshing(false);
+                }}
+                className="gap-1.5 text-xs shadow-sm"
+              >
+                <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} /> Refresh
+              </Button>
               {!isEmployee && (
                 <Button
                   variant="outline"
@@ -289,6 +309,19 @@ export default function LeavePage() {
               onClick={() => setTab("approvals")}
             />
           )}
+          {!isEmployee && (
+            <KpiCard
+              label="Total Leave Records"
+              value={String(scopedLeaves.length)}
+              hint={
+                scopedLeaves.length > 0
+                  ? `${scopedLeaves.filter((l) => l.status === "Approved").length} Approved • ${scopedLeaves.filter((l) => l.status === "Rejected").length} Rejected`
+                  : "No leave records"
+              }
+              icon={<CalendarDays className="h-4 w-4 text-blue-600" />}
+              onClick={() => setTab("all")}
+            />
+          )}
           <KpiCard
             label="On Leave Today"
             value={String(onLeaveToday.length)}
@@ -346,12 +379,74 @@ export default function LeavePage() {
               </div>
 
               {approvals.length === 0 ? (
-                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card p-12 text-center">
-                  <CheckCircle2 className="h-10 w-10 text-emerald-500 mb-2" />
-                  <p className="text-sm font-semibold text-foreground">Zero Pending Approvals</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    You have reviewed all leave requests for your team.
-                  </p>
+                <div className="space-y-6">
+                  <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card p-8 text-center">
+                    <CheckCircle2 className="h-10 w-10 text-emerald-500 mb-2" />
+                    <p className="text-sm font-semibold text-foreground">Zero Pending Approvals</p>
+                    <p className="text-xs text-muted-foreground mt-1 mb-3">
+                      You have reviewed all pending leave requests for your team.
+                    </p>
+                    {scopedLeaves.length > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setTab("all")}
+                        className="text-xs gap-1.5"
+                      >
+                        <List className="h-3.5 w-3.5" /> View Full Leave Register ({scopedLeaves.length})
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* SHOW ALL TEAM REQUESTS & DECISIONS DIRECTLY */}
+                  {scopedLeaves.length > 0 && (
+                    <div className="space-y-3 pt-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-semibold text-foreground text-sm flex items-center gap-2">
+                            <span>All Team Leave Records</span>
+                            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                              {scopedLeaves.length} Total
+                            </span>
+                          </h4>
+                          <p className="text-xs text-muted-foreground">
+                            Processed and historical leave requests (Approved, Rejected, etc.).
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setTab("all")}
+                          className="h-7 text-xs text-primary hover:underline"
+                        >
+                          Advanced Filters & Search →
+                        </Button>
+                      </div>
+
+                      {view === "cards" ? (
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                          {scopedLeaves.map((req) => (
+                            <LeaveRequestCard
+                              key={req.id}
+                              request={req}
+                              isOwn={req.employeeId === uid}
+                              canApprove={false}
+                              onApprove={() => {}}
+                              onReject={() => {}}
+                              onViewDetails={() => setDetailItem(req)}
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <DataTable
+                          columns={tableColumns}
+                          rows={scopedLeaves}
+                          rowKey={(r) => r.id}
+                          onRowClick={setDetailItem}
+                        />
+                      )}
+                    </div>
+                  )}
                 </div>
               ) : view === "cards" ? (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -714,6 +809,11 @@ export default function LeavePage() {
                     setRejectItem(target);
                   }, 60);
                 }}
+                onDelete={() => {
+                  deleteLeave(detailItem.id);
+                  toast.success("Leave request deleted");
+                  setDetailItem(null);
+                }}
               />
             )}
           </SheetContent>
@@ -1048,6 +1148,7 @@ function LeaveDetailSheetContent({
   uid,
   onApprove,
   onReject,
+  onDelete,
 }: {
   request: LeaveRequest;
   isManager: boolean;
@@ -1055,6 +1156,7 @@ function LeaveDetailSheetContent({
   uid: string;
   onApprove: () => void;
   onReject: () => void;
+  onDelete?: () => void;
 }) {
   const { data, session, deleteLeave } = useStore();
   const nameOf = useNames();
@@ -1180,8 +1282,12 @@ function LeaveDetailSheetContent({
             variant="ghost"
             size="sm"
             onClick={() => {
-              deleteLeave(request.id);
-              toast.success("Leave request deleted");
+              if (onDelete) {
+                onDelete();
+              } else {
+                deleteLeave(request.id);
+                toast.success("Leave request deleted");
+              }
             }}
             className="text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40"
           >
