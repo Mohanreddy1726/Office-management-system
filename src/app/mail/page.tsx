@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/data/store";
 import { TODAY, DEPARTMENTS } from "@/lib/data/seed";
@@ -14,18 +14,19 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { AppShell } from "@/components/shell";
 import {
   Inbox, Send, Mail, Download, AlarmClock, CheckCircle2, Clock,
   Search, LayoutGrid, List, Building2, Shield, ArrowUpRight, FileText,
   AlertTriangle, Check, X, ExternalLink, Truck, Package, RefreshCw,
-  SlidersHorizontal, Radio
+  SlidersHorizontal, Radio, Plus
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function MailPage() {
-  const { data, updateMail, setGmail } = useStore();
+  const { data, updateMail, setGmail, addMail, setMailRecords } = useStore();
   const { isAdmin } = useScope();
   const nameOf = useNames();
 
@@ -34,6 +35,59 @@ export default function MailPage() {
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [registerOpen, setRegisterOpen] = useState(false);
+  const [loadingMail, setLoadingMail] = useState(false);
+
+  // Sync mail logs from MongoDB Atlas
+  const loadMail = useCallback(async () => {
+    try {
+      setLoadingMail(true);
+      const res = await fetch("/api/mail");
+      if (res.ok) {
+        const resData = await res.json();
+        if (resData?.success && Array.isArray(resData.logs)) {
+          const formatted: MailEntry[] = resData.logs.map((m: any) => {
+            const createdDate = m.createdAt ? new Date(m.createdAt).toISOString().slice(0, 10) : (m.date || new Date().toISOString().slice(0, 10));
+            const channel = m.channel === "Email" ? "Email" : "Physical";
+            return {
+              id: m._id ? m._id.toString() : (m.id || `ML-${m.refNo}`),
+              refNo: m.refNo || `OUT-${Date.now()}`,
+              direction: m.direction || "Outgoing",
+              date: createdDate,
+              sender: m.sender || "System",
+              recipient: m.recipient || "Employee",
+              subject: m.subject || "Correspondence",
+              department: m.department || "Operations",
+              ownerId: m.ownerId || "OF-1001",
+              priority: m.priority || "Normal",
+              status: m.status || (m.direction === "Incoming" ? "Received" : "Dispatched"),
+              followUpAt: m.followUpDate || m.followUpAt,
+              channel,
+              notes: m.notes || "",
+              trackingNo: m.trackingNumber || m.trackingNo,
+              courierVendor: m.courierVendor || (channel === "Physical" ? (m.channel || "Courier") : "SMTP / Gmail"),
+              timeline: Array.isArray(m.timeline)
+                ? m.timeline.map((t: any) => ({
+                    at: t.at ? (typeof t.at === "string" ? t.at : new Date(t.at).toISOString().slice(0, 16).replace("T", " ")) : new Date().toISOString().slice(0, 16).replace("T", " "),
+                    event: t.event || "Logged",
+                    by: t.by || "System",
+                  }))
+                : [],
+            };
+          });
+          setMailRecords(formatted);
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to load mail logs:", err);
+    } finally {
+      setLoadingMail(false);
+    }
+  }, [setMailRecords]);
+
+  useEffect(() => {
+    loadMail();
+  }, [loadMail]);
 
   // Slide-out Sheet
   const [selectedMailId, setSelectedMailId] = useState<string | null>(null);
@@ -188,7 +242,24 @@ export default function MailPage() {
           title="Office Mail & Correspondence Register"
           description="Log and monitor incoming courier parcels, registered postal mail, formal notices, and integrated Gmail correspondence."
           actions={
-            <>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                className="gap-1.5 text-xs shadow-sm bg-primary text-primary-foreground hover:bg-primary/90"
+                onClick={() => setRegisterOpen(true)}
+              >
+                <Plus className="h-3.5 w-3.5" /> Register Mail
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-xs shadow-sm"
+                onClick={loadMail}
+                disabled={loadingMail}
+              >
+                <RefreshCw className={cn("h-3.5 w-3.5", loadingMail && "animate-spin")} />
+                Refresh
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -215,7 +286,7 @@ export default function MailPage() {
               >
                 <Download className="h-3.5 w-3.5" /> Export Register
               </Button>
-            </>
+            </div>
           }
         />
 
@@ -298,6 +369,10 @@ export default function MailPage() {
                     className="h-8.5 w-36 text-xs"
                     options={[
                       { value: "all", label: "All Statuses" },
+                      { value: "Dispatched", label: "Dispatched" },
+                      { value: "Delivered", label: "Delivered" },
+                      { value: "Received", label: "Received" },
+                      { value: "Action Pending", label: "Action Pending" },
                       { value: "Open", label: "Open" },
                       { value: "In Progress", label: "In Progress" },
                       { value: "Closed", label: "Closed" },
@@ -465,8 +540,241 @@ export default function MailPage() {
             )}
           </SheetContent>
         </Sheet>
+
+        {/* REGISTER MAIL DIALOG */}
+        <RegisterMailDialog
+          open={registerOpen}
+          onClose={() => setRegisterOpen(false)}
+          onSuccess={() => loadMail()}
+        />
       </div>
     </AppShell>
+  );
+}
+
+function RegisterMailDialog({
+  open,
+  onClose,
+  onSuccess,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const { data, addMail } = useStore();
+  const [direction, setDirection] = useState<"Incoming" | "Outgoing">("Incoming");
+  const [channel, setChannel] = useState("Physical Courier");
+  const [sender, setSender] = useState("");
+  const [recipient, setRecipient] = useState("");
+  const [subject, setSubject] = useState("");
+  const [department, setDepartment] = useState("Operations");
+  const [priority, setPriority] = useState<"Normal" | "High" | "Urgent" | "Low">("Normal");
+  const [trackingNumber, setTrackingNumber] = useState("");
+  const [followUpDate, setFollowUpDate] = useState("");
+  const [notes, setNotes] = useState("");
+  const [ownerId, setOwnerId] = useState("OF-1001");
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sender.trim() || !recipient.trim() || !subject.trim()) {
+      toast.error("Please fill in Sender, Recipient, and Subject");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      const res = await fetch("/api/mail", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          direction,
+          channel,
+          sender: sender.trim(),
+          recipient: recipient.trim(),
+          subject: subject.trim(),
+          department,
+          priority,
+          trackingNumber: trackingNumber.trim(),
+          followUpDate,
+          notes: notes.trim(),
+          ownerId,
+        }),
+      });
+      const resData = await res.json();
+      if (!res.ok || !resData.success) {
+        throw new Error(resData?.error || "Failed to register mail");
+      }
+
+      toast.success(`Mail registered successfully! (Ref: ${resData.mail.refNo})`);
+      onSuccess();
+      onClose();
+      // Reset form
+      setSender("");
+      setRecipient("");
+      setSubject("");
+      setTrackingNumber("");
+      setFollowUpDate("");
+      setNotes("");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to register mail");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base font-semibold">
+            <Mail className="h-5 w-5 text-primary" /> Register Inward / Outward Mail
+          </DialogTitle>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+          {/* Direction & Channel */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-foreground">Direction</label>
+              <Sel
+                value={direction}
+                onChange={(v) => setDirection(v as any)}
+                options={[
+                  { value: "Incoming", label: "Inward (Incoming)" },
+                  { value: "Outgoing", label: "Outward (Outgoing)" },
+                ]}
+                className="mt-1 h-9 text-xs"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-foreground">Channel</label>
+              <Sel
+                value={channel}
+                onChange={setChannel}
+                options={[
+                  "Physical Courier",
+                  "Speed Post",
+                  "Hand Delivery",
+                  "Email",
+                ]}
+                className="mt-1 h-9 text-xs"
+              />
+            </div>
+          </div>
+
+          {/* Sender & Recipient */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-foreground">Sender</label>
+              <Input
+                placeholder="e.g. BlueDart / Ministry of Tech"
+                value={sender}
+                onChange={(e) => setSender(e.target.value)}
+                className="mt-1 h-9 text-xs"
+                required
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-foreground">Recipient</label>
+              <Input
+                placeholder="e.g. Regula Shiva / HR Dept"
+                value={recipient}
+                onChange={(e) => setRecipient(e.target.value)}
+                className="mt-1 h-9 text-xs"
+                required
+              />
+            </div>
+          </div>
+
+          {/* Subject */}
+          <div>
+            <label className="text-xs font-semibold text-foreground">Subject / Consignment Description</label>
+            <Input
+              placeholder="e.g. Annual Audit Notice / Laptop consignment"
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              className="mt-1 h-9 text-xs"
+              required
+            />
+          </div>
+
+          {/* Department, Priority & Owner */}
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-foreground">Department</label>
+              <Sel
+                value={department}
+                onChange={setDepartment}
+                options={DEPARTMENTS}
+                className="mt-1 h-9 text-xs"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-foreground">Priority</label>
+              <Sel
+                value={priority}
+                onChange={(v) => setPriority(v as any)}
+                options={["Normal", "High", "Urgent", "Low"]}
+                className="mt-1 h-9 text-xs"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-foreground">Assigned To</label>
+              <Sel
+                value={ownerId}
+                onChange={setOwnerId}
+                options={data.employees.map((e) => ({ value: e.id, label: e.name }))}
+                className="mt-1 h-9 text-xs"
+              />
+            </div>
+          </div>
+
+          {/* Tracking Number & Follow-up Date */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-foreground">Tracking / Waybill No (Optional)</label>
+              <Input
+                placeholder="e.g. BD-892348912"
+                value={trackingNumber}
+                onChange={(e) => setTrackingNumber(e.target.value)}
+                className="mt-1 h-9 text-xs"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-foreground">Follow-up Target Date (Optional)</label>
+              <Input
+                type="date"
+                value={followUpDate}
+                onChange={(e) => setFollowUpDate(e.target.value)}
+                className="mt-1 h-9 text-xs"
+              />
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="text-xs font-semibold text-foreground">Remarks & Notes</label>
+            <Textarea
+              placeholder="Any special handling instructions, package contents, or reference notes..."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="mt-1 text-xs"
+              rows={2}
+            />
+          </div>
+
+          <DialogFooter className="pt-2">
+            <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button type="submit" size="sm" disabled={submitting}>
+              {submitting ? "Registering..." : "Register Mail"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

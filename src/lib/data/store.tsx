@@ -64,6 +64,7 @@ export interface Store {
   // mail
   addMail: (m: Omit<MailEntry, "id" | "refNo" | "timeline" | "channel"> & { channel?: MailEntry["channel"] }) => void;
   updateMail: (id: string, patch: Partial<MailEntry>, event?: string) => void;
+  setMailRecords: (records: MailEntry[]) => void;
   setGmail: (connected: boolean) => void;
   // notifications
   notify: (n: Omit<NotificationItem, "id" | "timestamp" | "read">) => void;
@@ -332,18 +333,61 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         .catch(() => {});
     };
 
+    const syncMail = () => {
+      fetch("/api/mail")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((resData) => {
+          if (resData?.success && Array.isArray(resData.logs)) {
+            const formatted: MailEntry[] = resData.logs.map((m: any) => {
+              const createdDate = m.createdAt ? new Date(m.createdAt).toISOString().slice(0, 10) : (m.date || new Date().toISOString().slice(0, 10));
+              const channel = m.channel === "Email" ? "Email" : "Physical";
+              return {
+                id: m._id ? m._id.toString() : (m.id || `ML-${m.refNo}`),
+                refNo: m.refNo || `OUT-${Date.now()}`,
+                direction: m.direction || "Outgoing",
+                date: createdDate,
+                sender: m.sender || "System",
+                recipient: m.recipient || "Employee",
+                subject: m.subject || "Correspondence",
+                department: m.department || "Operations",
+                ownerId: m.ownerId || "OF-1001",
+                priority: m.priority || "Normal",
+                status: m.status || (m.direction === "Incoming" ? "Received" : "Dispatched"),
+                followUpAt: m.followUpDate || m.followUpAt,
+                channel,
+                notes: m.notes || "",
+                trackingNo: m.trackingNumber || m.trackingNo,
+                courierVendor: m.courierVendor || (channel === "Physical" ? (m.channel || "Courier") : "SMTP / Gmail"),
+                timeline: Array.isArray(m.timeline)
+                  ? m.timeline.map((t: any) => ({
+                      at: t.at ? (typeof t.at === "string" ? t.at : new Date(t.at).toISOString().slice(0, 16).replace("T", " ")) : new Date().toISOString().slice(0, 16).replace("T", " "),
+                      event: t.event || "Logged",
+                      by: t.by || "System",
+                    }))
+                  : [],
+              };
+            });
+            setData((d) => ({ ...d, mail: formatted }));
+          }
+        })
+        .catch(() => {});
+    };
+
     syncEmployees();
     syncAttendance();
     syncLeaves();
+    syncMail();
     const interval = setInterval(() => {
       syncEmployees();
       syncAttendance();
       syncLeaves();
+      syncMail();
     }, 8000);
     const handleFocus = () => {
       syncEmployees();
       syncAttendance();
       syncLeaves();
+      syncMail();
     };
     window.addEventListener("focus", handleFocus);
     return () => {
@@ -776,14 +820,46 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addMail: (m) => {
         const n = data.mail.length + 1;
         const refNo = `${m.direction === "Incoming" ? "IN" : "OUT"}-2026-${String(141 + n).padStart(4, "0")}`;
-        setData((d) => ({ ...d, mail: [{ ...m, channel: m.channel ?? "Physical", id: `ML-${n}`, refNo, timeline: [{ at: stamp(), event: m.direction === "Incoming" ? "Received and registered" : "Dispatched", by: session ? nameOf(d, session.userId) : "Demo" }] }, ...d.mail] }));
-        audit({ user: session ? nameOf(data, session.userId) : "Demo", action: `Registered ${m.direction.toLowerCase()} mail`, module: "Mail Log", record: refNo, outcome: "Success" });
+        const newMailEntry: MailEntry = {
+          ...m,
+          channel: m.channel ?? "Physical",
+          id: `ML-${n}`,
+          refNo,
+          timeline: [{ at: stamp(), event: m.direction === "Incoming" ? "Received and registered" : "Dispatched", by: session ? nameOf(data, session.userId) : "Admin" }],
+        };
+        setData((d) => ({ ...d, mail: [newMailEntry, ...d.mail] }));
+        fetch("/api/mail", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            direction: m.direction,
+            channel: m.channel === "Email" ? "Email" : "Physical Courier",
+            sender: m.sender,
+            recipient: m.recipient,
+            subject: m.subject,
+            department: m.department,
+            priority: m.priority,
+            trackingNumber: m.trackingNo,
+            notes: m.notes,
+            ownerId: m.ownerId,
+            followUpAt: m.followUpAt,
+          }),
+        }).catch(() => {});
+        audit({ user: session ? nameOf(data, session.userId) : "Admin", action: `Registered ${m.direction.toLowerCase()} mail`, module: "Mail Log", record: refNo, outcome: "Success" });
       },
       updateMail: (id, patch, event) => {
         setData((d) => ({
           ...d,
-          mail: d.mail.map((m) => (m.id === id ? { ...m, ...patch, timeline: event ? [...m.timeline, { at: stamp(), event, by: session ? nameOf(d, session.userId) : "Demo" }] : m.timeline } : m)),
+          mail: d.mail.map((m) => (m.id === id ? { ...m, ...patch, timeline: event ? [...m.timeline, { at: stamp(), event, by: session ? nameOf(d, session.userId) : "Admin" }] : m.timeline } : m)),
         }));
+        fetch("/api/mail", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, patch, event }),
+        }).catch(() => {});
+      },
+      setMailRecords: (records) => {
+        setData((d) => ({ ...d, mail: records }));
       },
       setGmail: (connected) => {
         setData((d) => ({
