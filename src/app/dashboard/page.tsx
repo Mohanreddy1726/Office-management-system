@@ -723,6 +723,25 @@ function EmployeeDashboard({ me }: { me: any }) {
   const myAssets = data.assets.filter((a) => a.assignedTo === me.id);
   const myDocs = data.documents.filter((d) => d.ownerId === me.id && d.status !== "Verified");
 
+  const visibleAnnouncements = useMemo(() => {
+    const myBranch = me?.branch || session?.branch;
+    const myDept = me?.department;
+
+    return data.announcements.filter((ann) => {
+      if (ann.audience === "All Employees" || !ann.audience) return true;
+      if (ann.audience === "Managers Only") return false;
+      if (ann.audience === "Selected Branches") {
+        const scope = (ann.scope || "").toLowerCase().trim();
+        return !scope || scope === (myBranch || "").toLowerCase().trim();
+      }
+      if (ann.audience === "Selected Departments") {
+        const scope = (ann.scope || "").toLowerCase().trim();
+        return !scope || scope === (myDept || "").toLowerCase().trim();
+      }
+      return true;
+    });
+  }, [data.announcements, me, session]);
+
   return (
     <div>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -925,12 +944,21 @@ function EmployeeDashboard({ me }: { me: any }) {
             </CardTitle>
           </CardHeader>
           <CardContent className="max-h-[220px] space-y-2 overflow-y-auto p-3 scrollbar-thin">
-            {data.announcements.slice(0, 3).map((a) => (
-              <div key={a.id} className="rounded-md border border-border p-2.5">
-                <p className="text-xs font-semibold text-foreground">{a.title}</p>
-                <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{a.message}</p>
-              </div>
-            ))}
+            {visibleAnnouncements.length === 0 ? (
+              <p className="px-2 py-6 text-xs text-muted-foreground text-center">No announcements published.</p>
+            ) : (
+              visibleAnnouncements.slice(0, 5).map((a) => (
+                <div key={a.id} className="rounded-md border border-border p-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-foreground truncate">{a.title}</p>
+                    {a.priority === "High" && (
+                      <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[9px] font-bold text-rose-700 shrink-0">Urgent</span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{a.message}</p>
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
       </div>

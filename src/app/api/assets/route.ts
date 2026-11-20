@@ -4,6 +4,7 @@ import { Asset } from "@/models/Asset";
 import { Employee } from "@/models/Employee";
 import { getCurrentUser } from "@/lib/auth";
 import { getMockStore } from "@/lib/mock-db";
+import mongoose from "mongoose";
 
 export async function GET() {
   try {
@@ -52,7 +53,12 @@ export async function POST(req: NextRequest) {
         });
         return NextResponse.json({ success: true, asset });
       } else if (action === "issue_asset") {
-        const asset = await Asset.findById(assetId);
+        const asset = await Asset.findOne({
+          $or: [
+            { assetTag: assetId },
+            { _id: mongoose.Types.ObjectId.isValid(assetId) ? assetId : null },
+          ],
+        });
         const employee = await Employee.findOne({ employeeId });
         if (!asset || !employee) return NextResponse.json({ error: "Not found" }, { status: 404 });
         asset.status = "Assigned";
@@ -65,7 +71,12 @@ export async function POST(req: NextRequest) {
         await asset.save();
         return NextResponse.json({ success: true, asset });
       } else if (action === "return_asset") {
-        const asset = await Asset.findById(assetId);
+        const asset = await Asset.findOne({
+          $or: [
+            { assetTag: assetId },
+            { _id: mongoose.Types.ObjectId.isValid(assetId) ? assetId : null },
+          ],
+        });
         if (!asset) return NextResponse.json({ error: "Not found" }, { status: 404 });
         asset.status = "Available";
         asset.assignedTo = undefined;

@@ -11,7 +11,13 @@ export interface INotification extends Document {
   type?: "info" | "warning" | "success" | "danger" | string;
   targetRole?: string; // all, super_admin, hr_admin, manager, employee
   targetUserId?: string; // specific user
+  targetBranch?: string;
+  targetDepartment?: string;
+  audience?: string;
+  scope?: string;
   isAnnouncement?: boolean;
+  publishAt?: string;
+  expiresAt?: string;
   read?: boolean;
   readBy?: string[]; // User IDs who read this
   timestamp?: string;
@@ -33,7 +39,13 @@ const NotificationSchema = new Schema<INotification>(
     },
     targetRole: { type: String, default: "all" },
     targetUserId: { type: String },
+    targetBranch: { type: String },
+    targetDepartment: { type: String },
+    audience: { type: String, default: "All Employees" },
+    scope: { type: String },
     isAnnouncement: { type: Boolean, default: false },
+    publishAt: { type: String },
+    expiresAt: { type: String },
     read: { type: Boolean, default: false },
     readBy: [{ type: String }],
     timestamp: { type: String },

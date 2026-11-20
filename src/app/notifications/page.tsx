@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useStore } from "@/lib/data/store";
 import { TODAY, DEPARTMENTS } from "@/lib/data/seed";
 import { PageHeader, KpiCard, StatusBadge, TabsShell, Field, EmployeeAvatar } from "@/components/shared";
-import { Sel } from "@/components/form-bits";
+import { Sel, useScope } from "@/components/form-bits";
 import type { NotificationItem, Announcement } from "@/lib/data/types";
 import { fmtDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -32,13 +32,36 @@ const NOTIFICATION_TABS = [
 ];
 
 export default function NotificationsPage() {
-  const { data, markRead, markAllRead, clearNotifications, addAnnouncement, me } = useStore();
+  const { data, session, markRead, markAllRead, clearNotifications, addAnnouncement, deleteAnnouncement, me } = useStore();
+  const { isSuperAdmin, isAdmin, isEmployee, role } = useScope();
 
   const [activeTab, setActiveTab] = useState<string>("all");
   const [announcementOpen, setAnnouncementOpen] = useState(false);
 
   const unreadCount = data.notifications.filter((n) => !n.read).length;
   const highPriorityCount = data.notifications.filter((n) => n.priority === "High").length;
+
+  // Filtered announcements based on audience & role
+  const visibleAnnouncements = useMemo(() => {
+    if (isAdmin) return data.announcements;
+    const myEmp = data.employees.find((e) => e.id === session?.employeeId || e.id === session?.userId);
+    const myBranch = myEmp?.branch || session?.branch;
+    const myDept = myEmp?.department;
+
+    return data.announcements.filter((ann) => {
+      if (ann.audience === "All Employees" || !ann.audience) return true;
+      if (ann.audience === "Managers Only") return role === "manager";
+      if (ann.audience === "Selected Branches") {
+        const scope = (ann.scope || "").toLowerCase().trim();
+        return !scope || scope === (myBranch || "").toLowerCase().trim();
+      }
+      if (ann.audience === "Selected Departments") {
+        const scope = (ann.scope || "").toLowerCase().trim();
+        return !scope || scope === (myDept || "").toLowerCase().trim();
+      }
+      return true;
+    });
+  }, [data.announcements, isAdmin, session, role, data.employees]);
 
   // Filtered notifications
   const filteredNotifications = useMemo(() => {
@@ -82,13 +105,15 @@ export default function NotificationsPage() {
               >
                 <Trash2 className="h-3.5 w-3.5" /> Clear Feed
               </Button>
-              <Button
-                size="sm"
-                className="gap-1.5 text-xs shadow-sm bg-primary hover:bg-primary/90 text-primary-foreground"
-                onClick={() => setAnnouncementOpen(true)}
-              >
-                <Plus className="h-3.5 w-3.5" /> Publish Announcement
-              </Button>
+              {isAdmin && (
+                <Button
+                  size="sm"
+                  className="gap-1.5 text-xs shadow-sm bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
+                  onClick={() => setAnnouncementOpen(true)}
+                >
+                  <Plus className="h-3.5 w-3.5" /> Publish Announcement
+                </Button>
+              )}
             </>
           }
         />
@@ -111,7 +136,7 @@ export default function NotificationsPage() {
           />
           <KpiCard
             label="Company Announcements"
-            value={String(data.announcements.length)}
+            value={String(visibleAnnouncements.length)}
             hint="Official broadcasts active"
             icon={<Megaphone className="h-4 w-4 text-amber-500" />}
             onClick={() => setActiveTab("announcements")}
@@ -132,7 +157,7 @@ export default function NotificationsPage() {
             { key: "approvals", label: "Approvals" },
             { key: "attendance", label: "Attendance & Leaves" },
             { key: "payroll", label: "Payroll & Docs" },
-            { key: "announcements", label: `Announcements (${data.announcements.length})` },
+            { key: "announcements", label: `Announcements (${visibleAnnouncements.length})` },
           ]}
           active={activeTab}
           onChange={setActiveTab}
@@ -167,24 +192,32 @@ export default function NotificationsPage() {
                   <h3 className="font-semibold text-foreground text-sm">Official Organization Broadcasts</h3>
                   <p className="text-xs text-muted-foreground">General notices and policy announcements.</p>
                 </div>
-                <Button
-                  size="sm"
-                  className="gap-1.5 text-xs font-semibold"
-                  onClick={() => setAnnouncementOpen(true)}
-                >
-                  <Plus className="h-3.5 w-3.5" /> New Broadcast
-                </Button>
+                {isAdmin && (
+                  <Button
+                    size="sm"
+                    className="gap-1.5 text-xs font-semibold"
+                    onClick={() => setAnnouncementOpen(true)}
+                  >
+                    <Plus className="h-3.5 w-3.5" /> New Broadcast
+                  </Button>
+                )}
               </div>
 
-              {data.announcements.length === 0 ? (
+              {visibleAnnouncements.length === 0 ? (
                 <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card p-12 text-center">
                   <Megaphone className="h-10 w-10 text-muted-foreground/60 mb-2" />
                   <p className="text-sm font-semibold text-foreground">No Announcements Published</p>
+                  <p className="text-xs text-muted-foreground mt-1">Official company notices and broadcasts will appear here.</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  {data.announcements.map((ann) => (
-                    <AnnouncementCard key={ann.id} announcement={ann} />
+                  {visibleAnnouncements.map((ann) => (
+                    <AnnouncementCard
+                      key={ann.id}
+                      announcement={ann}
+                      isSuperAdmin={isSuperAdmin}
+                      onDelete={() => deleteAnnouncement(ann.id)}
+                    />
                   ))}
                 </div>
               )}
@@ -328,36 +361,62 @@ function NotificationCard({
 /* =========================================================================================
  * COMPONENT: AnnouncementCard
  * ========================================================================================= */
-function AnnouncementCard({ announcement }: { announcement: Announcement }) {
+function AnnouncementCard({
+  announcement,
+  isSuperAdmin,
+  onDelete,
+}: {
+  announcement: Announcement;
+  isSuperAdmin?: boolean;
+  onDelete?: () => void;
+}) {
   const isHigh = announcement.priority === "High";
 
   return (
-    <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm dark:bg-card dark:border-border hover:shadow-md transition-shadow">
+    <div className="group relative rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm dark:bg-card dark:border-border hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-amber-600 font-bold border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-amber-600 font-bold border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900 shrink-0">
             <Megaphone className="h-5 w-5" />
           </div>
           <div>
             <h4 className="font-bold text-foreground text-sm">{announcement.title}</h4>
             <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
               <span>Audience: <strong>{announcement.audience}</strong></span>
+              {announcement.scope && (
+                <>
+                  <span>•</span>
+                  <span className="font-medium text-foreground">{announcement.scope}</span>
+                </>
+              )}
               <span>•</span>
               <span>{fmtDate(announcement.publishAt)}</span>
             </div>
           </div>
         </div>
 
-        {isHigh && (
-          <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300">
-            Urgent Notice
-          </span>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          {isHigh && (
+            <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300">
+              Urgent Notice
+            </span>
+          )}
+          {isSuperAdmin && onDelete && (
+            <button
+              type="button"
+              onClick={onDelete}
+              className="rounded-lg p-1 text-muted-foreground hover:bg-rose-50 hover:text-rose-600 transition-colors"
+              title="Delete Announcement"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="my-3 border-t border-slate-100 dark:border-slate-800" />
 
-      <p className="text-xs text-foreground/90 leading-relaxed bg-slate-50 dark:bg-muted/30 p-3 rounded-xl">
+      <p className="text-xs text-foreground/90 leading-relaxed bg-slate-50 dark:bg-muted/30 p-3 rounded-xl whitespace-pre-line">
         {announcement.message}
       </p>
 
@@ -386,9 +445,28 @@ function AnnouncementDialog({
   const [audience, setAudience] = useState<Announcement["audience"]>("All Employees");
   const [scopeDetails, setScopeDetails] = useState("Hyderabad");
   const [priority, setPriority] = useState<Announcement["priority"]>("Normal");
-  const [expiresAt, setExpiresAt] = useState("2026-11-15");
+  const defaultExpiry = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    return d.toISOString().slice(0, 10);
+  }, []);
+  const [expiresAt, setExpiresAt] = useState(defaultExpiry);
 
   const valid = title.trim().length >= 3 && message.trim().length >= 10;
+
+  const handleSubmit = () => {
+    onSubmit({
+      title: title.trim(),
+      message: message.trim(),
+      audience,
+      scope: audience.includes("Selected") ? scopeDetails : undefined,
+      priority,
+      publishAt: new Date().toISOString().slice(0, 10),
+      expiresAt,
+    });
+    setTitle("");
+    setMessage("");
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -482,17 +560,7 @@ function AnnouncementDialog({
           <Button
             size="sm"
             disabled={!valid}
-            onClick={() =>
-              onSubmit({
-                title,
-                message,
-                audience,
-                scope: audience.includes("Selected") ? scopeDetails : undefined,
-                priority,
-                publishAt: TODAY,
-                expiresAt,
-              })
-            }
+            onClick={handleSubmit}
             className="text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
           >
             Publish Broadcast

@@ -14,6 +14,7 @@ export interface MockStore {
   assets: any[];
   mails: any[];
   notifications: any[];
+  announcements: any[];
   auditLogs: any[];
 }
 
@@ -48,6 +49,7 @@ function getInitialStore(): MockStore {
     assets: [],
     mails: [],
     notifications: [],
+    announcements: [],
     auditLogs: [],
   };
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db";
 import { DocumentRecord } from "@/models/Document";
 import { getCurrentUser } from "@/lib/auth";
+import mongoose from "mongoose";
 
 export async function GET() {
   try {
@@ -96,13 +97,18 @@ export async function PATCH(req: NextRequest) {
 
     const conn = await connectToDatabase();
     if (conn) {
-      const doc = await DocumentRecord.findOne({ docId });
+      const doc = await DocumentRecord.findOne({
+        $or: [
+          { docId },
+          { _id: mongoose.Types.ObjectId.isValid(docId) ? docId : null },
+        ],
+      });
       if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
-      doc.status = action === "verify" ? "Verified" : "Rejected";
+      doc.status = (action === "verify" || action === "approve") ? "Verified" : "Rejected";
       await doc.save();
       return NextResponse.json({ success: true, document: doc });
     } else {
-      return NextResponse.json({ success: true, document: { docId, status: action === "verify" ? "Verified" : "Rejected" } });
+      return NextResponse.json({ success: true, document: { docId, status: (action === "verify" || action === "approve") ? "Verified" : "Rejected" } });
     }
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

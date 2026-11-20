@@ -508,6 +508,7 @@ export interface Session {
   name?: string;
   email?: string;
   employeeId?: string;
+  branch?: string;
   originalRole?: Role;
   originalUserId?: string;
   originalName?: string;

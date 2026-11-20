@@ -7,7 +7,7 @@ import { seedState, DEMO_EMPLOYEES } from "./seed";
 import type {
   AppState, Session, Prefs, Role, Employee, AttendanceRecord, AttendanceCorrection, LeaveRequest, NotificationItem,
   DocumentRecord, MailEntry, Announcement, Asset, Goal, UserAccount, AuditEntry, PayrollRun, Reimbursement,
-  BiometricDevice, BiometricMapping, Shift, Holiday, OnboardingTask, Review, ImportBatch, Joiner, Resignation,
+  BiometricDevice, BiometricMapping, Shift, Holiday, OnboardingTask, Review, ImportBatch, Joiner, Resignation, Branch,
 } from "./types";
 
 const KEY = "rendesk-v4";
@@ -74,6 +74,7 @@ export interface Store {
   markAllRead: () => void;
   clearNotifications: () => void;
   addAnnouncement: (a: Omit<Announcement, "id">) => void;
+  deleteAnnouncement: (id: string) => void;
   // assets
   addAsset: (a: Omit<Asset, "id" | "history" | "status">) => void;
   issueAsset: (id: string, employeeId: string, note?: string) => void;
@@ -198,6 +199,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             name: u.name,
             email: u.email,
             employeeId: u.employeeId,
+            branch: u.branch,
             originalRole: origRole,
             originalUserId: origUserId,
             originalName: origName,
@@ -379,22 +381,159 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         .catch(() => {});
     };
 
-    syncEmployees();
-    syncAttendance();
-    fetchLeavesAsync();
-    syncMail();
-    const interval = setInterval(() => {
-      syncEmployees();
-      syncAttendance();
-      fetchLeavesAsync();
-      syncMail();
-    }, 8000);
-    const handleFocus = () => {
-      syncEmployees();
-      syncAttendance();
-      fetchLeavesAsync();
-      syncMail();
+    const syncNotifications = () => {
+      fetch("/api/notifications")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((resData) => {
+          if (resData?.success) {
+            setData((d) => {
+              const annsList = Array.isArray(resData.announcementsList) ? resData.announcementsList : [];
+              const notifsList = Array.isArray(resData.notificationsList) ? resData.notificationsList : [];
+
+              const authoritativeAnnouncements: Announcement[] = annsList.map((ann: any) => ({
+                id: ann.id || ann._id,
+                title: ann.title,
+                message: ann.message || ann.description || "",
+                audience: ann.audience || "All Employees",
+                scope: ann.scope || ann.targetBranch || ann.targetDepartment,
+                priority: (ann.priority === "High" ? "High" : "Normal") as "Normal" | "High",
+                publishAt: ann.publishAt || (ann.createdAt ? new Date(ann.createdAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)),
+                expiresAt: ann.expiresAt || "",
+              }));
+
+              const authoritativeNotifications: NotificationItem[] = notifsList.map((n: any) => ({
+                id: n.id || n._id,
+                category: n.category || "System",
+                title: n.title,
+                description: n.description || n.message || "",
+                timestamp: n.timestamp || (n.createdAt ? new Date(n.createdAt).toISOString().slice(0, 16).replace("T", " ") : "Just now"),
+                read: Array.isArray(n.readBy) && session?.userId ? n.readBy.includes(session.userId) : Boolean(n.read),
+                priority: (n.priority === "High" ? "High" : "Normal") as "Normal" | "High",
+                link: n.link || "/notifications",
+              }));
+
+              // Ensure each active announcement has a matching alert card in the notification feed
+              for (const ann of authoritativeAnnouncements) {
+                const annNotifId = `NT-ANN-${ann.id}`;
+                if (!authoritativeNotifications.some((x) => x.id === annNotifId)) {
+                  authoritativeNotifications.unshift({
+                    id: annNotifId,
+                    category: "Announcements",
+                    title: ann.title,
+                    description: ann.message,
+                    timestamp: ann.publishAt,
+                    read: false,
+                    priority: ann.priority,
+                    link: "/notifications",
+                  });
+                }
+              }
+
+              return {
+                ...d,
+                announcements: authoritativeAnnouncements.length > 0 ? authoritativeAnnouncements : d.announcements,
+                notifications: authoritativeNotifications.length > 0 ? authoritativeNotifications : d.notifications,
+              };
+            });
+          }
+        })
+        .catch(() => {});
     };
+
+    const syncAssets = () => {
+      fetch("/api/assets")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((resData) => {
+          if (resData?.success && Array.isArray(resData.assets) && resData.assets.length > 0) {
+            setData((d) => {
+              const dbAssets: Asset[] = resData.assets.map((a: any) => {
+                const assignedToId = typeof a.assignedTo === "object" ? a.assignedTo?.employeeId : a.assignedTo;
+                return {
+                  id: a.assetTag || a._id || `AST-${Date.now()}`,
+                  name: a.name,
+                  category: a.category || "Laptop",
+                  brandModel: a.brandModel || "",
+                  serial: a.serialNumber || a.serial || "",
+                  branch: (a.branch as Branch) || "Hyderabad",
+                  assignedTo: assignedToId || null,
+                  purchaseDate: a.purchaseDate || new Date().toISOString().slice(0, 10),
+                  purchaseValue: a.purchaseValue || 0,
+                  warrantyExpiry: a.warrantyExpiry || "",
+                  condition: a.condition || (a.assignedTo?.conditionAtIssue as any) || "Good",
+                  status: a.status || "Available",
+                  notes: a.notes,
+                  history: Array.isArray(a.history) ? a.history : [],
+                };
+              });
+              return { ...d, assets: dbAssets };
+            });
+          }
+        })
+        .catch(() => {});
+    };
+
+    const syncDocuments = () => {
+      fetch("/api/documents")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((resData) => {
+          if (resData?.success && Array.isArray(resData.documents) && resData.documents.length > 0) {
+            setData((d) => {
+              const dbDocs: DocumentRecord[] = resData.documents.map((doc: any) => ({
+                id: doc.docId || doc._id || `DOC-${Date.now()}`,
+                name: doc.title,
+                category: doc.category || "Company Policy",
+                ownerId: doc.category === "Company Policy" ? null : (doc.employeeId || null),
+                uploadedBy: doc.employeeName || "Admin",
+                uploadedAt: doc.createdAt ? new Date(doc.createdAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+                expiresAt: doc.expiryDate || "",
+                size: doc.fileSize || "1.2 MB",
+                status: (doc.status === "Pending" ? "Pending Verification" : doc.status) || "Verified",
+                version: doc.version || 1,
+              }));
+              return { ...d, documents: dbDocs };
+            });
+          }
+        })
+        .catch(() => {});
+    };
+
+    const syncAuditLogs = () => {
+      fetch("/api/audit-logs")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((resData) => {
+          if (resData?.success && Array.isArray(resData.logs) && resData.logs.length > 0) {
+            setData((d) => {
+              const dbLogs: AuditEntry[] = resData.logs.map((l: any) => ({
+                id: l._id ? l._id.toString() : (l.id || `AU-${Date.now()}`),
+                timestamp: l.createdAt ? new Date(l.createdAt).toISOString().slice(0, 16).replace("T", " ") : (l.timestamp || "Just now"),
+                user: l.user || "System",
+                action: l.action || "System Event",
+                module: l.module || "System",
+                record: l.details || l.record || "",
+                outcome: l.status === "Failure" ? "Failure" : "Success",
+                details: l.details,
+              }));
+              return { ...d, audit: dbLogs };
+            });
+          }
+        })
+        .catch(() => {});
+    };
+
+    const runAllSync = () => {
+      syncEmployees();
+      syncAttendance();
+      fetchLeavesAsync();
+      syncMail();
+      syncNotifications();
+      syncAssets();
+      syncDocuments();
+      syncAuditLogs();
+    };
+
+    runAllSync();
+    const interval = setInterval(runAllSync, 8000);
+    const handleFocus = () => runAllSync();
     window.addEventListener("focus", handleFocus);
     return () => {
       clearInterval(interval);
@@ -834,11 +973,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         audit({ user: session ? nameOf(data, session.userId) : "Demo", action: `Reimbursement ${status.toLowerCase()}`, module: "Payroll", record: r ? `${nameOf(data, r.employeeId)} ₹${r.amount}` : id, outcome: "Success", details: note });
       },
       addDocument: (doc) => {
-        setData((d) => ({ ...d, documents: [{ ...doc, id: `DOC-${d.documents.length + 1}`, version: 1 }, ...d.documents] }));
+        const id = `DOC-${data.documents.length + 1}`;
+        setData((d) => ({ ...d, documents: [{ ...doc, id, version: 1 }, ...d.documents] }));
+        fetch("/api/documents", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: doc.name,
+            category: doc.category,
+            fileUrl: "https://example.com/doc.pdf",
+            expiryDate: doc.expiresAt,
+          }),
+        }).catch(() => {});
         audit({ user: session ? nameOf(data, session.userId) : "Demo", action: "Uploaded document", module: "Documents", record: doc.name, outcome: "Success" });
       },
       decideDocument: (id, status) => {
         setData((d) => ({ ...d, documents: d.documents.map((x) => (x.id === id ? { ...x, status } : x)) }));
+        fetch("/api/documents", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            docId: id,
+            action: status === "Verified" ? "approve" : "reject",
+          }),
+        }).catch(() => {});
         const doc = data.documents.find((x) => x.id === id);
         audit({ user: session ? nameOf(data, session.userId) : "Demo", action: `Document ${status === "Verified" ? "verified" : "rejected"}`, module: "Documents", record: doc?.name ?? id, outcome: "Success" });
       },
@@ -894,17 +1052,107 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         audit({ user: session ? nameOf(data, session.userId) : "Demo", action: connected ? "Connected Gmail (demo)" : "Disconnected Gmail", module: "Mail Log", record: "Gmail integration", outcome: "Success" });
       },
       notify: (n) => {
-        setData((d) => ({ ...d, notifications: [{ ...n, id: `N-${Date.now()}`, timestamp: stamp(), read: false }, ...d.notifications] }));
+        const notifId = `N-${Date.now()}`;
+        setData((d) => ({ ...d, notifications: [{ ...n, id: notifId, timestamp: stamp(), read: false }, ...d.notifications] }));
+        fetch("/api/notifications", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: n.title,
+            message: n.description,
+            description: n.description,
+            category: n.category,
+            priority: n.priority,
+            link: n.link,
+            isAnnouncement: false,
+          }),
+        }).catch(() => {});
       },
-      markRead: (id) => setData((d) => ({ ...d, notifications: d.notifications.map((n) => (n.id === id ? { ...n, read: true } : n)) })),
-      markAllRead: () => setData((d) => ({ ...d, notifications: d.notifications.map((n) => ({ ...n, read: true })) })),
+      markRead: (id) => {
+        setData((d) => ({ ...d, notifications: d.notifications.map((n) => (n.id === id ? { ...n, read: true } : n)) }));
+        fetch("/api/notifications", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        }).catch(() => {});
+      },
+      markAllRead: () => {
+        setData((d) => ({ ...d, notifications: d.notifications.map((n) => ({ ...n, read: true })) }));
+        fetch("/api/notifications", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ markAllRead: true }),
+        }).catch(() => {});
+      },
       clearNotifications: () => setData((d) => ({ ...d, notifications: [] })),
       addAnnouncement: (a) => {
-        setData((d) => ({ ...d, announcements: [{ ...a, id: `AN-${d.announcements.length + 1}` }, ...d.announcements] }));
-        audit({ user: session ? nameOf(data, session.userId) : "Demo", action: "Published announcement", module: "Notifications", record: a.title, outcome: "Success" });
+        const id = `AN-${Date.now()}`;
+        const newAnn: Announcement = { ...a, id };
+        setData((d) => ({
+          ...d,
+          announcements: [newAnn, ...d.announcements],
+          notifications: [
+            {
+              id: `NT-ANN-${id}`,
+              category: "Announcements",
+              title: a.title,
+              description: a.message,
+              timestamp: a.publishAt,
+              read: false,
+              priority: a.priority,
+              link: "/notifications",
+            },
+            ...d.notifications,
+          ],
+        }));
+
+        fetch("/api/notifications", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: a.title,
+            message: a.message,
+            description: a.message,
+            category: "Announcements",
+            audience: a.audience,
+            scope: a.scope,
+            priority: a.priority,
+            publishAt: a.publishAt,
+            expiresAt: a.expiresAt,
+            isAnnouncement: true,
+          }),
+        }).catch((err) => console.error("Failed to save announcement to server:", err));
+
+        audit({ user: session ? nameOf(data, session.userId) : "Admin", action: "Published announcement", module: "Notifications", record: a.title, outcome: "Success" });
+      },
+      deleteAnnouncement: (id) => {
+        setData((d) => ({
+          ...d,
+          announcements: d.announcements.filter((a) => a.id !== id),
+          notifications: d.notifications.filter((n) => n.id !== `NT-ANN-${id}` && n.id !== id),
+        }));
+
+        fetch(`/api/notifications?id=${encodeURIComponent(id)}`, {
+          method: "DELETE",
+        }).catch((err) => console.error("Failed to delete announcement on server:", err));
+
+        audit({ user: session ? nameOf(data, session.userId) : "Admin", action: "Deleted announcement", module: "Notifications", record: id, outcome: "Success" });
       },
       addAsset: (a) => {
-        setData((d) => ({ ...d, assets: [{ ...a, id: `AST-${String(d.assets.length + 1).padStart(3, "0")}`, status: "Available", history: [] }, ...d.assets] }));
+        const id = `AST-${String(data.assets.length + 1).padStart(3, "0")}`;
+        setData((d) => ({ ...d, assets: [{ ...a, id, status: "Available", history: [] }, ...d.assets] }));
+        fetch("/api/assets", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "create_asset",
+            name: a.name,
+            category: a.category,
+            brandModel: a.brandModel,
+            serialNumber: a.serial,
+            purchaseValue: a.purchaseValue,
+          }),
+        }).catch(() => {});
         audit({ user: session ? nameOf(data, session.userId) : "Demo", action: "Added asset", module: "Assets", record: a.name, outcome: "Success" });
       },
       issueAsset: (id, employeeId, note) => {
@@ -916,6 +1164,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               : a,
           ),
         }));
+        fetch("/api/assets", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "issue_asset",
+            assetId: id,
+            employeeId,
+          }),
+        }).catch(() => {});
         audit({ user: session ? nameOf(data, session.userId) : "Demo", action: "Issued asset", module: "Assets", record: `${id} → ${nameOf(data, employeeId)}`, outcome: "Success" });
       },
       returnAsset: (id, condition, note) => {
@@ -927,6 +1184,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               : a,
           ),
         }));
+        fetch("/api/assets", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "return_asset",
+            assetId: id,
+            condition,
+          }),
+        }).catch(() => {});
         audit({ user: session ? nameOf(data, session.userId) : "Demo", action: "Returned asset", module: "Assets", record: id, outcome: "Success" });
       },
       addGoal: (g) => {
