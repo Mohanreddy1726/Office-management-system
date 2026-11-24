@@ -268,6 +268,78 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const syncNotificationsAsync = useCallback(async () => {
+    try {
+      const res = await fetch("/api/notifications", {
+        headers: {
+          "x-user-role": session?.role || "employee",
+          "x-user-id": session?.userId || session?.employeeId || "",
+          "x-user-branch": session?.branch || "",
+        },
+      });
+      if (res.ok) {
+        const resData = await res.json();
+        if (resData?.success) {
+          setData((d) => {
+            const annsList = Array.isArray(resData.announcementsList) ? resData.announcementsList : [];
+            const notifsList = Array.isArray(resData.notificationsList) ? resData.notificationsList : [];
+
+            const authoritativeAnnouncements: Announcement[] = annsList.map((ann: any) => ({
+              id: ann.id || ann._id,
+              title: ann.title,
+              message: ann.message || ann.description || "",
+              audience: ann.audience || "All Employees",
+              scope: ann.scope || ann.targetBranch || ann.targetDepartment,
+              priority: (ann.priority === "High" ? "High" : "Normal") as "Normal" | "High",
+              publishAt: ann.publishAt || (ann.createdAt ? new Date(ann.createdAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)),
+              expiresAt: ann.expiresAt || "",
+            }));
+
+            const authoritativeNotifications: NotificationItem[] = notifsList.map((n: any) => ({
+              id: n.id || n._id,
+              category: n.category || "System",
+              title: n.title,
+              description: n.description || n.message || "",
+              timestamp: n.timestamp || (n.createdAt ? new Date(n.createdAt).toISOString().slice(0, 16).replace("T", " ") : "Just now"),
+              read: Array.isArray(n.readBy) && session?.userId ? n.readBy.includes(session.userId) : Boolean(n.read),
+              priority: (n.priority === "High" ? "High" : "Normal") as "Normal" | "High",
+              link: n.link || "/notifications",
+            }));
+
+            for (const ann of authoritativeAnnouncements) {
+              const annNotifId = `NT-ANN-${ann.id}`;
+              if (!authoritativeNotifications.some((x) => x.id === annNotifId)) {
+                authoritativeNotifications.unshift({
+                  id: annNotifId,
+                  category: "Announcements",
+                  title: ann.title,
+                  description: ann.message,
+                  timestamp: ann.publishAt,
+                  read: false,
+                  priority: ann.priority,
+                  link: "/notifications",
+                });
+              }
+            }
+
+            const combinedAnnouncements = [...authoritativeAnnouncements];
+            for (const localAnn of d.announcements) {
+              if (!combinedAnnouncements.some((x) => x.id === localAnn.id || x.title === localAnn.title)) {
+                combinedAnnouncements.push(localAnn);
+              }
+            }
+
+            return {
+              ...d,
+              announcements: combinedAnnouncements,
+              notifications: authoritativeNotifications.length > 0 ? authoritativeNotifications : d.notifications,
+            };
+          });
+        }
+      }
+    } catch {}
+  }, [session]);
+
   useEffect(() => {
     const syncEmployees = () => {
       fetch("/api/employees")
@@ -382,62 +454,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
 
     const syncNotifications = () => {
-      fetch("/api/notifications")
-        .then((res) => (res.ok ? res.json() : null))
-        .then((resData) => {
-          if (resData?.success) {
-            setData((d) => {
-              const annsList = Array.isArray(resData.announcementsList) ? resData.announcementsList : [];
-              const notifsList = Array.isArray(resData.notificationsList) ? resData.notificationsList : [];
-
-              const authoritativeAnnouncements: Announcement[] = annsList.map((ann: any) => ({
-                id: ann.id || ann._id,
-                title: ann.title,
-                message: ann.message || ann.description || "",
-                audience: ann.audience || "All Employees",
-                scope: ann.scope || ann.targetBranch || ann.targetDepartment,
-                priority: (ann.priority === "High" ? "High" : "Normal") as "Normal" | "High",
-                publishAt: ann.publishAt || (ann.createdAt ? new Date(ann.createdAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)),
-                expiresAt: ann.expiresAt || "",
-              }));
-
-              const authoritativeNotifications: NotificationItem[] = notifsList.map((n: any) => ({
-                id: n.id || n._id,
-                category: n.category || "System",
-                title: n.title,
-                description: n.description || n.message || "",
-                timestamp: n.timestamp || (n.createdAt ? new Date(n.createdAt).toISOString().slice(0, 16).replace("T", " ") : "Just now"),
-                read: Array.isArray(n.readBy) && session?.userId ? n.readBy.includes(session.userId) : Boolean(n.read),
-                priority: (n.priority === "High" ? "High" : "Normal") as "Normal" | "High",
-                link: n.link || "/notifications",
-              }));
-
-              // Ensure each active announcement has a matching alert card in the notification feed
-              for (const ann of authoritativeAnnouncements) {
-                const annNotifId = `NT-ANN-${ann.id}`;
-                if (!authoritativeNotifications.some((x) => x.id === annNotifId)) {
-                  authoritativeNotifications.unshift({
-                    id: annNotifId,
-                    category: "Announcements",
-                    title: ann.title,
-                    description: ann.message,
-                    timestamp: ann.publishAt,
-                    read: false,
-                    priority: ann.priority,
-                    link: "/notifications",
-                  });
-                }
-              }
-
-              return {
-                ...d,
-                announcements: authoritativeAnnouncements.length > 0 ? authoritativeAnnouncements : d.announcements,
-                notifications: authoritativeNotifications.length > 0 ? authoritativeNotifications : d.notifications,
-              };
-            });
-          }
-        })
-        .catch(() => {});
+      syncNotificationsAsync();
     };
 
     const syncAssets = () => {
@@ -1108,8 +1125,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
         fetch("/api/notifications", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-role": session?.role || "super_admin",
+            "x-user-id": session?.userId || "ADM-001",
+          },
           body: JSON.stringify({
+            id,
             title: a.title,
             message: a.message,
             description: a.message,
@@ -1121,7 +1143,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             expiresAt: a.expiresAt,
             isAnnouncement: true,
           }),
-        }).catch((err) => console.error("Failed to save announcement to server:", err));
+        })
+          .then(() => syncNotificationsAsync())
+          .catch((err) => console.error("Failed to save announcement to server:", err));
 
         audit({ user: session ? nameOf(data, session.userId) : "Admin", action: "Published announcement", module: "Notifications", record: a.title, outcome: "Success" });
       },
@@ -1134,7 +1158,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
         fetch(`/api/notifications?id=${encodeURIComponent(id)}`, {
           method: "DELETE",
-        }).catch((err) => console.error("Failed to delete announcement on server:", err));
+          headers: {
+            "x-user-role": session?.role || "super_admin",
+            "x-user-id": session?.userId || "ADM-001",
+          },
+        })
+          .then(() => syncNotificationsAsync())
+          .catch((err) => console.error("Failed to delete announcement on server:", err));
 
         audit({ user: session ? nameOf(data, session.userId) : "Admin", action: "Deleted announcement", module: "Notifications", record: id, outcome: "Success" });
       },

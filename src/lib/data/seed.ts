@@ -342,7 +342,7 @@ const GMAIL = {
   ],
 };
 
-const NOTIFICATIONS: NotificationItem[] = [
+export const NOTIFICATIONS: NotificationItem[] = [
   { id: "N-1", category: "Approvals", title: "Leave request awaiting your approval", description: "Karthik Reddy applied for Casual Leave (Oct 26–27).", timestamp: "2026-10-22 09:12", read: false, priority: "High", link: "/leave" },
   { id: "N-2", category: "Attendance", title: "Attendance correction submitted", description: "Karthik Reddy requested a correction for Oct 20.", timestamp: "2026-10-22 08:30", read: false, priority: "Normal", link: "/attendance?tab=corrections" },
   { id: "N-3", category: "Attendance", title: "Confirm your attendance for Oct 21", description: "Your attendance for Oct 21 is awaiting your confirmation.", timestamp: "2026-10-22 07:00", read: false, priority: "Normal", link: "/attendance?tab=confirmation" },
@@ -357,7 +357,7 @@ const NOTIFICATIONS: NotificationItem[] = [
   { id: "N-12", category: "Approvals", title: "Quarterly review notification", description: "Q3 reviews updated in audit log.", timestamp: "2026-10-15 09:00", read: true, priority: "Normal", link: "/dashboard" },
 ];
 
-const ANNOUNCEMENTS: Announcement[] = [
+export const ANNOUNCEMENTS: Announcement[] = [
   { id: "AN-1", title: "Diwali holidays: Nov 6–9", message: "The office will remain closed from Nov 6 to Nov 9 for Diwali. Emergency support roster will be shared by team leads.", audience: "All Employees", priority: "High", publishAt: "2026-10-20", expiresAt: "2026-11-09" },
   { id: "AN-2", title: "New leave policy effective November", message: "Casual leave carry-forward cap increases to 5 days from November 1. Review the updated policy in Documents.", audience: "All Employees", priority: "Normal", publishAt: "2026-10-18", expiresAt: "2026-11-30" },
   { id: "AN-3", title: "Q3 performance reviews open", message: "Self-assessment window is open until Oct 31. Managers to complete reviews by Nov 10.", audience: "All Employees", priority: "Normal", publishAt: "2026-10-15", expiresAt: "2026-11-10" },
@@ -553,8 +553,8 @@ export function seedState(): AppState {
     documents: [],
     mail: [],
     gmail: { connected: false, mailbox: "", lastSync: "—", scopes: [], frequency: "Hourly", logs: [] },
-    notifications: [],
-    announcements: [],
+    notifications: NOTIFICATIONS,
+    announcements: ANNOUNCEMENTS,
     assets: [],
     goals: [],
     reviewCycles: [],

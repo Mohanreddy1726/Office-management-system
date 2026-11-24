@@ -728,15 +728,16 @@ function EmployeeDashboard({ me }: { me: any }) {
     const myDept = me?.department;
 
     return data.announcements.filter((ann) => {
-      if (ann.audience === "All Employees" || !ann.audience) return true;
-      if (ann.audience === "Managers Only") return false;
-      if (ann.audience === "Selected Branches") {
+      const aud = (ann.audience || "All Employees").toLowerCase().trim();
+      if (aud === "all employees" || aud === "all" || !aud) return true;
+      if (aud === "managers only") return false;
+      if (aud.includes("branch")) {
         const scope = (ann.scope || "").toLowerCase().trim();
-        return !scope || scope === (myBranch || "").toLowerCase().trim();
+        return !scope || (myBranch || "").toLowerCase().includes(scope) || scope.includes((myBranch || "").toLowerCase());
       }
-      if (ann.audience === "Selected Departments") {
+      if (aud.includes("dept") || aud.includes("department")) {
         const scope = (ann.scope || "").toLowerCase().trim();
-        return !scope || scope === (myDept || "").toLowerCase().trim();
+        return !scope || (myDept || "").toLowerCase().includes(scope) || scope.includes((myDept || "").toLowerCase());
       }
       return true;
     });
