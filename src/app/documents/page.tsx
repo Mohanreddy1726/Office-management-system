@@ -132,10 +132,20 @@ function daysUntil(dateStr: string | undefined, todayIso: string): number | null
   return Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 }
 
+function extractBase64Body(dataUrl?: string): string {
+  if (!dataUrl || !dataUrl.startsWith("data:")) return "";
+  const idx = dataUrl.indexOf(",");
+  return idx >= 0 ? dataUrl.slice(idx + 1).trimStart() : "";
+}
+
 function isImageDocument(fileUrl?: string, fileType?: string, name?: string): boolean {
   if (fileType?.startsWith("image/")) return true;
   if (fileUrl?.startsWith("data:image/")) return true;
   if (name && /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(name)) return true;
+  const b64 = extractBase64Body(fileUrl);
+  if (b64.startsWith("/9j/") || b64.startsWith("iVBOR") || b64.startsWith("R0lGOD") || b64.startsWith("UklGR")) {
+    return true;
+  }
   return false;
 }
 
@@ -143,7 +153,24 @@ function isPdfDocument(fileUrl?: string, fileType?: string, name?: string): bool
   if (fileType === "application/pdf") return true;
   if (fileUrl?.startsWith("data:application/pdf")) return true;
   if (name && /\.pdf$/i.test(name)) return true;
+  const b64 = extractBase64Body(fileUrl);
+  if (b64.startsWith("JVBERi0")) return true;
   return false;
+}
+
+function dataUrlToUint8Array(dataUrl: string): Uint8Array | null {
+  try {
+    const parts = dataUrl.split(",");
+    if (parts.length < 2) return null;
+    const binary = atob(parts.slice(1).join(","));
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+  } catch {
+    return null;
+  }
 }
 
 function dataUrlToBlob(dataUrl: string): Blob | null {
@@ -153,12 +180,9 @@ function dataUrlToBlob(dataUrl: string): Blob | null {
     const header = parts[0];
     const mimeMatch = header.match(/data:([^;]+);base64/i);
     const mime = mimeMatch ? mimeMatch[1] : "application/octet-stream";
-    const binary = atob(parts.slice(1).join(","));
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-      bytes[i] = binary.charCodeAt(i);
-    }
-    return new Blob([bytes], { type: mime });
+    const bytes = dataUrlToUint8Array(dataUrl);
+    if (!bytes) return null;
+    return new Blob([bytes.buffer as ArrayBuffer], { type: mime });
   } catch {
     return null;
   }
@@ -222,6 +246,168 @@ function openDocumentInNewTab(fileUrl?: string) {
     }
   }
   window.open(fileUrl, "_blank", "noopener,noreferrer");
+}
+
+function PdfCanvasPreview({
+  fileUrl,
+  fileName,
+  heightClass,
+  fallbackUrl,
+}: {
+  fileUrl: string;
+  fileName: string;
+  heightClass: string;
+  fallbackUrl: string;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [pageCount, setPageCount] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    let pdfDoc: any = null;
+
+    const renderPdf = async () => {
+      setLoading(true);
+      setError(false);
+      setPageCount(0);
+
+      if (containerRef.current) {
+        containerRef.current.innerHTML = "";
+      }
+
+      try {
+        if (typeof (Promise as any).withResolvers !== "function") {
+          (Promise as any).withResolvers = function <T>() {
+            let resolve!: (value: T | PromiseLike<T>) => void;
+            let reject!: (reason?: unknown) => void;
+            const promise = new Promise<T>((res, rej) => {
+              resolve = res;
+              reject = rej;
+            });
+            return { promise, resolve, reject };
+          };
+        }
+
+        const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
+        if (pdfjsLib.GlobalWorkerOptions) {
+          pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+        }
+
+        const bytes = fileUrl.startsWith("data:") ? dataUrlToUint8Array(fileUrl) : null;
+        const loadingTask = bytes
+          ? pdfjsLib.getDocument({ data: bytes })
+          : pdfjsLib.getDocument({ url: fileUrl });
+
+        pdfDoc = await loadingTask.promise;
+        if (cancelled) return;
+
+        const total = pdfDoc.numPages || 1;
+        setPageCount(total);
+
+        const targetWidth = Math.max(containerRef.current?.clientWidth ? containerRef.current.clientWidth - 16 : 320, 260);
+        const dpr = typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 2) : 1;
+
+        for (let pageNum = 1; pageNum <= total; pageNum++) {
+          if (cancelled) break;
+          const page = await pdfDoc.getPage(pageNum);
+          if (cancelled) break;
+
+          const baseViewport = page.getViewport({ scale: 1 });
+          const fitScale = targetWidth / Math.max(baseViewport.width, 1);
+          const renderViewport = page.getViewport({ scale: fitScale * dpr });
+
+          const wrapper = document.createElement("div");
+          wrapper.className = "w-full overflow-hidden rounded-lg border border-border/70 bg-white shadow-xs";
+
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.floor(renderViewport.width);
+          canvas.height = Math.floor(renderViewport.height);
+          canvas.style.width = "100%";
+          canvas.style.height = "auto";
+          canvas.style.display = "block";
+
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            await page.render({ canvasContext: ctx, viewport: renderViewport }).promise;
+          }
+
+          if (cancelled) break;
+          wrapper.appendChild(canvas);
+          containerRef.current?.appendChild(wrapper);
+        }
+
+        if (!cancelled) setLoading(false);
+      } catch {
+        if (!cancelled) {
+          setError(true);
+          setLoading(false);
+        }
+      }
+    };
+
+    renderPdf();
+
+    return () => {
+      cancelled = true;
+      if (pdfDoc && typeof pdfDoc.destroy === "function") {
+        pdfDoc.destroy().catch(() => {});
+      }
+    };
+  }, [fileUrl]);
+
+  if (error) {
+    return (
+      <div className="space-y-3 bg-muted/15 p-4 text-center">
+        <iframe
+          src={fallbackUrl}
+          title={`Preview of ${fileName}`}
+          className={`hidden w-full border-0 bg-white sm:block ${heightClass}`}
+        />
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card px-4 py-6 sm:hidden">
+          <FileText className="mb-2 h-8 w-8 text-rose-500" />
+          <p className="text-xs font-medium text-foreground">{fileName}</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Tap Open PDF below to view in your device reader.
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="mt-3 gap-1.5 rounded-xl text-xs"
+            onClick={() => openDocumentInNewTab(fileUrl)}
+          >
+            <ExternalLink className="h-3.5 w-3.5" /> Open PDF
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative bg-neutral-100/90 dark:bg-neutral-900/70">
+      {loading && (
+        <div className="flex items-center justify-center gap-2 py-12 text-xs text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          <span>Rendering PDF preview...</span>
+        </div>
+      )}
+      {pageCount > 0 && (
+        <div className="flex items-center justify-between border-b border-border/60 bg-background/70 px-3 py-1 text-[10px] font-medium text-muted-foreground">
+          <span>Rendered for mobile & desktop</span>
+          <span className="font-mono-num">{pageCount} page{pageCount > 1 ? "s" : ""}</span>
+        </div>
+      )}
+      <div
+        ref={containerRef}
+        className={cn(
+          "flex flex-col items-center gap-2.5 overflow-y-auto overscroll-contain p-2 sm:p-3",
+          heightClass
+        )}
+      />
+    </div>
+  );
 }
 
 function DocumentPreviewFrame({
@@ -301,7 +487,7 @@ function DocumentPreviewFrame({
   }
 
   if (isPdf) {
-    const iframeSrc = pdfBlobUrl || fileUrl;
+    const fallbackSrc = pdfBlobUrl || fileUrl;
     return (
       <div className="overflow-hidden rounded-2xl border border-border bg-muted/20 shadow-xs">
         <div className="flex items-center justify-between border-b border-border bg-muted/40 px-3.5 py-2">
@@ -318,10 +504,11 @@ function DocumentPreviewFrame({
             <ExternalLink className="h-3 w-3" /> Open PDF
           </Button>
         </div>
-        <iframe
-          src={iframeSrc}
-          title={`Preview of ${fileName}`}
-          className={`w-full border-0 bg-white ${heightClass}`}
+        <PdfCanvasPreview
+          fileUrl={fileUrl}
+          fileName={fileName}
+          heightClass={heightClass}
+          fallbackUrl={fallbackSrc}
         />
       </div>
     );
@@ -1135,7 +1322,7 @@ function DocumentsPageInner() {
 
         {/* Document Preview & Detail Drawer */}
         <Sheet open={!!selectedDoc} onOpenChange={(o) => !o && setSelectedDocId(null)}>
-          <SheetContent className="w-full overflow-y-auto p-4 sm:max-w-xl sm:p-6">
+          <SheetContent className="w-full max-w-none overflow-y-auto overscroll-contain p-4 sm:max-w-xl sm:p-6">
             {selectedDoc && (
               <DocumentDetailSheetContent
                 doc={selectedDoc}
@@ -1621,7 +1808,7 @@ function UploadDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] overflow-y-auto rounded-2xl p-4 sm:max-w-2xl sm:p-6">
+      <DialogContent className="w-[calc(100vw-1.5rem)] max-h-[90dvh] overflow-y-auto overscroll-contain rounded-2xl p-4 sm:w-full sm:max-w-2xl sm:p-6">
         <DialogHeader className="text-left">
           <DialogTitle>{isAdmin ? "Upload Employee Document" : "Submit Document for HR Approval"}</DialogTitle>
           <DialogDescription>
@@ -1649,7 +1836,7 @@ function UploadDialog({
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.doc,.docx"
+              accept="application/pdf,image/*,.pdf,.png,.jpg,.jpeg,.webp,.gif,.doc,.docx"
               className="hidden"
               onChange={(e) => handleFileChange(e.target.files?.[0])}
             />

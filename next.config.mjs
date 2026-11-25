@@ -5,6 +5,10 @@ const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ['mongoose', 'bcryptjs', 'node-zklib', 'nodemailer'],
   },
+  webpack: (config) => {
+    config.resolve.alias.canvas = false;
+    return config;
+  },
 };
 
 export default nextConfig;
