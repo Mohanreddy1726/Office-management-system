@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
 
-export type LeaveType = "Casual Leave" | "Sick Leave" | "Comp-Off";
+export type LeaveType = "Emergency Leave" | "Comp-Off" | "Casual Leave" | "Sick Leave";
 export type LeaveStage =
   | "Submitted"
   | "Manager Review"
@@ -53,7 +53,7 @@ const LeaveRequestSchema = new Schema<ILeaveRequest>(
     branch: { type: String, default: "Headquarters" },
     leaveType: {
       type: String,
-      enum: ["Casual Leave", "Sick Leave", "Comp-Off"],
+      enum: ["Emergency Leave", "Comp-Off", "Casual Leave", "Sick Leave"],
       required: true,
     },
     type: { type: String },

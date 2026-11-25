@@ -15,8 +15,6 @@ import {
   User,
   LogOut,
   Download,
-  X,
-  Sparkles,
 } from "lucide-react";
 import { useStore } from "@/lib/data/store";
 import { usePwa } from "@/components/pwa-install-prompt";
@@ -140,26 +138,17 @@ export function MobileNavBar() {
       {/* "More" Native Action Drawer Sheet */}
       <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
         <SheetContent side="bottom" className="rounded-t-3xl border-border bg-background p-6 max-h-[85vh] overflow-y-auto">
-          <SheetHeader className="text-left pb-4 border-b border-border">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <EmployeeAvatar id={currentEmp?.id || "USER"} name={currentEmp?.name || session?.name || "User"} size={44} />
-                <div>
-                  <SheetTitle className="text-base font-bold text-foreground">
-                    {currentEmp?.name || session?.name || "Employee"}
-                  </SheetTitle>
-                  <p className="text-xs text-muted-foreground">
-                    {currentEmp?.designation || "Staff"} · {currentEmp?.department || "Operations"}
-                  </p>
-                </div>
+          <SheetHeader className="text-left pb-4 border-b border-border pr-8">
+            <div className="flex items-center gap-3">
+              <EmployeeAvatar id={currentEmp?.id || "USER"} name={currentEmp?.name || session?.name || "User"} size={44} />
+              <div>
+                <SheetTitle className="text-base font-bold text-foreground">
+                  {currentEmp?.name || session?.name || "Employee"}
+                </SheetTitle>
+                <p className="text-xs text-muted-foreground">
+                  {currentEmp?.designation || "Staff"} · {currentEmp?.department || "Operations"}
+                </p>
               </div>
-              <button
-                onClick={() => setMoreOpen(false)}
-                className="rounded-full p-1.5 text-muted-foreground hover:bg-muted"
-                aria-label="Close menu"
-              >
-                <X className="h-5 w-5" />
-              </button>
             </div>
           </SheetHeader>
 

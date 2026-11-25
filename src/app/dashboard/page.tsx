@@ -17,7 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { inr, fmtDate, tenure } from "@/lib/format";
 import { payslipFor } from "@/lib/payroll";
-import { classifyLoginTime, evaluateMonthlyAttendancePolicy, GVK_POLICY } from "@/lib/policies";
+import { classifyLoginTime, computeEmployeeLeaveSummary, evaluateMonthlyAttendancePolicy, GVK_POLICY } from "@/lib/policies";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar,
   PieChart, Pie, Cell, Legend, AreaChart, Area,
@@ -789,8 +789,10 @@ function EmployeeDashboard({ me }: { me: any }) {
   );
 
   const balances = data.leaveBalances[me.id] ?? {};
-  const leaveBalanceEntries = Object.entries(balances).filter(([, v]) => (v as number) > 0);
-  const totalLeaveDays = leaveBalanceEntries.reduce((sum, [, v]) => sum + (Number(v) || 0), 0);
+  const leaveSummary = useMemo(
+    () => computeEmployeeLeaveSummary(me.id, data.leaves, me.joiningDate, balances, realTodayIso),
+    [me.id, data.leaves, me.joiningDate, balances, realTodayIso]
+  );
 
   const myLeaves = data.leaves.filter((l) => l.employeeId === me.id).slice(0, 4);
   const confirmPending = mine.filter((a) => a.confirmation === "Awaiting Employee");
@@ -1131,25 +1133,31 @@ function EmployeeDashboard({ me }: { me: any }) {
         <Card className="overflow-hidden rounded-2xl border-border shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-border/70 bg-muted/20 px-4 py-3">
             <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-              <Plane className="h-4 w-4 text-primary" /> Leave Balances
+              <Plane className="h-4 w-4 text-primary" /> Emergency Leave
             </CardTitle>
             <Badge variant="outline" className="text-[10px] font-semibold">
-              {totalLeaveDays} days left
+              {leaveSummary.totalRemaining} days left
             </Badge>
           </CardHeader>
           <CardContent className="p-4">
-            {leaveBalanceEntries.length === 0 ? (
-              <p className="py-4 text-center text-xs text-muted-foreground">No leave balance available.</p>
-            ) : (
-              <div className="grid grid-cols-2 gap-2.5">
-                {leaveBalanceEntries.map(([type, v]) => (
-                  <div key={type} className="rounded-xl border border-border/80 bg-background/70 px-3 py-2.5">
-                    <p className="text-xl font-bold tabular-nums text-foreground">{v as number}</p>
-                    <p className="truncate text-[11px] text-muted-foreground">{type.replace(" Leave", "")}</p>
-                  </div>
-                ))}
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="rounded-xl border border-border/80 bg-background/70 px-3 py-2.5">
+                <p className="text-xl font-bold tabular-nums text-foreground">{leaveSummary.availableThisMonth}/1</p>
+                <p className="truncate text-[11px] text-muted-foreground">This Month (1/mo)</p>
               </div>
-            )}
+              <div className="rounded-xl border border-border/80 bg-background/70 px-3 py-2.5">
+                <p className="text-xl font-bold tabular-nums text-blue-600 dark:text-blue-400">{leaveSummary.leavesEarned}</p>
+                <p className="truncate text-[11px] text-muted-foreground">Leaves Earned</p>
+              </div>
+              <div className="rounded-xl border border-border/80 bg-background/70 px-3 py-2.5">
+                <p className="text-xl font-bold tabular-nums text-amber-600 dark:text-amber-400">{leaveSummary.leavesUsed}</p>
+                <p className="truncate text-[11px] text-muted-foreground">Leaves Used</p>
+              </div>
+              <div className="rounded-xl border border-border/80 bg-background/70 px-3 py-2.5">
+                <p className="text-xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{leaveSummary.totalRemaining}</p>
+                <p className="truncate text-[11px] text-muted-foreground">Total Remaining</p>
+              </div>
+            </div>
             <Button
               size="sm"
               className="mt-3.5 w-full rounded-xl text-xs font-semibold"
@@ -1158,7 +1166,7 @@ function EmployeeDashboard({ me }: { me: any }) {
               Apply for Leave
             </Button>
             <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground text-center">
-              Max 1 leave/month · No carry-forward · Apply ≥1 day in advance
+              1 leave earned/month · No carry-forward · Apply ≥1 day in advance
             </p>
           </CardContent>
         </Card>

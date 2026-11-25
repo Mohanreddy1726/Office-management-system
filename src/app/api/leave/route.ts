@@ -41,8 +41,8 @@ export async function GET(req: NextRequest) {
           employeeName: r.employeeName || "Employee",
           department: r.department || "Operations",
           branch: r.branch || "Headquarters",
-          type: r.leaveType || r.type || "Casual Leave",
-          leaveType: r.leaveType || r.type || "Casual Leave",
+          type: r.leaveType || r.type || "Emergency Leave",
+          leaveType: r.leaveType || r.type || "Emergency Leave",
           startDate: r.startDate,
           endDate: r.endDate,
           days: r.days || r.daysCount || 1,
@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "startDate is required" }, { status: 400 });
     }
     const applicantId = body.employeeId || session?.employeeId || session?.userId || "OF-1001";
-    const leaveType = body.type || body.leaveType || "Casual Leave";
+    const leaveType = body.type || body.leaveType || "Emergency Leave";
     const startDate = body.startDate;
     const endDate = body.endDate || startDate;
     const days = body.days !== undefined ? Number(body.days) : body.isHalfDay ? 0.5 : 1;
@@ -158,7 +158,7 @@ export async function POST(req: NextRequest) {
         existingLeaves: existingMonthLeaves.map((l: any) => ({
           id: l._id.toString(),
           employeeId: l.employeeId,
-          type: (l.leaveType || l.type || "Casual Leave") as any,
+          type: (l.leaveType || l.type || "Emergency Leave") as any,
           startDate: l.startDate,
           endDate: l.endDate,
           days: l.daysCount || l.days || 1,
@@ -348,11 +348,7 @@ export async function PATCH(req: NextRequest) {
           const bal = await LeaveBalance.findOne({ employeeId: leave.employeeId });
           if (bal) {
             const key =
-              leave.leaveType === "Casual Leave"
-                ? "casualLeave"
-                : leave.leaveType === "Sick Leave"
-                ? "sickLeave"
-                : "compOff";
+              leave.leaveType === "Comp-Off" ? "compOff" : "casualLeave";
             if (bal[key]) {
               const defaultTotal = key === "compOff" ? 0 : 10;
               bal[key].used = (bal[key].used || 0) + (leave.daysCount || leave.days || 1);

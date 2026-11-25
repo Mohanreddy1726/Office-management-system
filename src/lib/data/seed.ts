@@ -173,20 +173,20 @@ function buildLeaves(): LeaveRequest[] {
     ],
   });
   return [
-    lv("LV-1", "OF-1011", "Casual Leave", "2026-10-26", "2026-10-27", 2, "Family function", "Manager Review", "Recommended Approval"),
-    lv("LV-2", "OF-1012", "Sick Leave", "2026-10-20", "2026-10-21", 2, "Fever and cold", "HR Review"),
-    lv("LV-3", "OF-1015", "Casual Leave", "2026-11-02", "2026-11-06", 5, "Vacation", "Manager Review", "Recommended Approval"),
-    lv("LV-4", "OF-1004", "Casual Leave", "2026-10-23", "2026-10-23", 1, "Personal work", "Submitted"),
+    lv("LV-1", "OF-1011", "Emergency Leave", "2026-10-26", "2026-10-27", 2, "Family function", "Manager Review", "Recommended Approval"),
+    lv("LV-2", "OF-1012", "Emergency Leave", "2026-10-20", "2026-10-21", 2, "Medical urgency", "HR Review"),
+    lv("LV-3", "OF-1015", "Emergency Leave", "2026-11-02", "2026-11-06", 5, "Family travel", "Manager Review", "Recommended Approval"),
+    lv("LV-4", "OF-1004", "Emergency Leave", "2026-10-23", "2026-10-23", 1, "Personal work", "Submitted"),
     lv("LV-5", "OF-1022", "Comp-Off", "2026-10-24", "2026-10-24", 1, "Worked on Oct 4 holiday", "HR Review", "Recommended Approval"),
-    lv("LV-6", "OF-1030", "Sick Leave", "2026-10-27", "2026-10-30", 4, "Medical procedure recovery", "Rejected", "Recommended Rejection"),
-    lv("LV-7", "OF-1018", "Casual Leave", "2026-10-01", "2026-10-01", 1, "Medical appointment", "Approved", "Recommended Approval"),
-    lv("LV-8", "OF-1024", "Sick Leave", "2026-09-28", "2026-09-29", 2, "Viral infection", "Approved", "Recommended Approval"),
-    lv("LV-9", "OF-1033", "Casual Leave", "2026-10-19", "2026-10-20", 2, "Sister's wedding", "Approved", "Recommended Approval"),
-    lv("LV-10", "OF-1040", "Casual Leave", "2026-10-26", "2026-10-26", 1, "House shifting", "Clarification"),
-    lv("LV-11", "OF-1044", "Casual Leave", "2026-11-13", "2026-11-14", 2, "Temple visit", "Submitted"),
-    lv("LV-12", "OF-1046", "Sick Leave", "2026-10-14", "2026-10-14", 1, "Dentist", "Approved", "Recommended Approval"),
+    lv("LV-6", "OF-1030", "Emergency Leave", "2026-10-27", "2026-10-30", 4, "Medical procedure recovery", "Rejected", "Recommended Rejection"),
+    lv("LV-7", "OF-1018", "Emergency Leave", "2026-10-01", "2026-10-01", 1, "Medical appointment", "Approved", "Recommended Approval"),
+    lv("LV-8", "OF-1024", "Emergency Leave", "2026-09-28", "2026-09-29", 2, "Medical recovery", "Approved", "Recommended Approval"),
+    lv("LV-9", "OF-1033", "Emergency Leave", "2026-10-19", "2026-10-20", 2, "Sister's wedding", "Approved", "Recommended Approval"),
+    lv("LV-10", "OF-1040", "Emergency Leave", "2026-10-26", "2026-10-26", 1, "House shifting", "Clarification"),
+    lv("LV-11", "OF-1044", "Emergency Leave", "2026-11-13", "2026-11-14", 2, "Temple visit", "Submitted"),
+    lv("LV-12", "OF-1046", "Emergency Leave", "2026-10-14", "2026-10-14", 1, "Dentist", "Approved", "Recommended Approval"),
     lv("LV-13", "OF-1035", "Comp-Off", "2026-10-25", "2026-10-25", 1, "Weekend release work", "Manager Review"),
-    lv("LV-14", "OF-1009", "Casual Leave", "2026-12-01", "2026-12-05", 5, "Year-end travel", "Submitted"),
+    lv("LV-14", "OF-1009", "Emergency Leave", "2026-12-01", "2026-12-05", 5, "Year-end travel", "Submitted"),
   ];
 }
 
@@ -196,8 +196,7 @@ function buildLeaveBalances(): Record<string, Record<string, number>> {
   const out: Record<string, Record<string, number>> = {};
   for (const e of EMPLOYEES) {
     out[e.id] = {
-      "Casual Leave": rint(3, 10),
-      "Sick Leave": rint(4, 10),
+      "Emergency Leave": rint(1, 10),
       "Comp-Off": rint(0, 2),
     };
   }
@@ -348,7 +347,7 @@ const GMAIL = {
 };
 
 export const NOTIFICATIONS: NotificationItem[] = [
-  { id: "N-1", category: "Approvals", title: "Leave request awaiting your approval", description: "Karthik Reddy applied for Casual Leave (Oct 26–27).", timestamp: "2026-10-22 09:12", read: false, priority: "High", link: "/leave" },
+  { id: "N-1", category: "Approvals", title: "Leave request awaiting your approval", description: "Karthik Reddy applied for Emergency Leave (Oct 26–27).", timestamp: "2026-10-22 09:12", read: false, priority: "High", link: "/leave" },
   { id: "N-2", category: "Attendance", title: "Attendance correction submitted", description: "Karthik Reddy requested a correction for Oct 20.", timestamp: "2026-10-22 08:30", read: false, priority: "Normal", link: "/attendance?tab=corrections" },
   { id: "N-3", category: "Attendance", title: "Confirm your attendance for Oct 21", description: "Your attendance for Oct 21 is awaiting your confirmation.", timestamp: "2026-10-22 07:00", read: false, priority: "Normal", link: "/attendance?tab=confirmation" },
   { id: "N-4", category: "Payroll", title: "October payroll calculated", description: "Payroll run for Oct 2026 is ready for review.", timestamp: "2026-10-21 18:00", read: true, priority: "Normal", link: "/payroll" },
@@ -364,7 +363,7 @@ export const NOTIFICATIONS: NotificationItem[] = [
 
 export const ANNOUNCEMENTS: Announcement[] = [
   { id: "AN-1", title: "Diwali holidays: Nov 6–9", message: "The office will remain closed from Nov 6 to Nov 9 for Diwali. Emergency support roster will be shared by team leads.", audience: "All Employees", priority: "High", publishAt: "2026-10-20", expiresAt: "2026-11-09" },
-  { id: "AN-2", title: "New leave policy effective November", message: "Casual leave carry-forward cap increases to 5 days from November 1. Review the updated policy in Documents.", audience: "All Employees", priority: "Normal", publishAt: "2026-10-18", expiresAt: "2026-11-30" },
+  { id: "AN-2", title: "Updated GVK Leave & Login Policy", message: "1 Emergency Leave is earned per month (no carry-forward permitted). Review the updated policy in Leave Policies.", audience: "All Employees", priority: "Normal", publishAt: "2026-10-18", expiresAt: "2026-11-30" },
   { id: "AN-3", title: "Q3 performance reviews open", message: "Self-assessment window is open until Oct 31. Managers to complete reviews by Nov 10.", audience: "All Employees", priority: "Normal", publishAt: "2026-10-15", expiresAt: "2026-11-10" },
   { id: "AN-4", title: "Hyderabad office: parking levels 2–3", message: "From Oct 25, two-wheeler parking moves to levels 2–3 of the basement.", audience: "Selected Branches", scope: "Hyderabad", priority: "Normal", publishAt: "2026-10-14", expiresAt: "2026-10-31" },
 ];

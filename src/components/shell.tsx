@@ -586,13 +586,21 @@ export function AppShell({ children }: { children: ReactNode }) {
         </aside>
         <div className={cn("flex min-h-screen w-full flex-col transition-all duration-200", prefs.sidebarCollapsed ? "lg:pl-[72px]" : "lg:pl-[250px]")}>
           <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/95 px-4 backdrop-blur">
-            <Button variant="ghost" size="icon" className="h-8 w-8 lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open navigation">
-              <Menu className="h-4 w-4" />
-            </Button>
+            {!isEmployee && (
+              <Button variant="ghost" size="icon" className="h-8 w-8 lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open navigation">
+                <Menu className="h-4 w-4" />
+              </Button>
+            )}
             <div className="flex items-center gap-2 lg:hidden">
-              <RenDeskLogo size={24} />
+              <RenDeskLogo size={26} />
               <span className="text-sm font-bold tracking-tight text-foreground">
-                {crumbs[crumbs.length - 1] === "Dashboard" ? "RenDesk" : crumbs[crumbs.length - 1]}
+                {crumbs[crumbs.length - 1] === "Dashboard" ? (
+                  <>
+                    Ren<span className="text-primary font-semibold">Desk</span>
+                  </>
+                ) : (
+                  crumbs[crumbs.length - 1]
+                )}
               </span>
             </div>
             <Button

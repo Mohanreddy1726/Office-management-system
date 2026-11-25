@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useId } from "react";
 import { cn } from "@/lib/utils";
 
 interface LogoProps {
@@ -18,6 +18,11 @@ export function RenDeskLogo({
   textClassName,
   subtext = "Workplace OS",
 }: LogoProps) {
+  const uid = useId().replace(/:/g, "");
+  const bgId = `rd-bg-${uid}`;
+  const primaryId = `rd-primary-${uid}`;
+  const glowId = `rd-glow-${uid}`;
+
   return (
     <div className={cn("flex items-center gap-2.5", className)}>
       <span
@@ -34,28 +39,28 @@ export function RenDeskLogo({
         >
           <defs>
             {/* Japanese Lacquer / Deep Space Gradient background */}
-            <linearGradient id="rd-bg" x1="0" y1="0" x2="36" y2="36" gradientUnits="userSpaceOnUse">
+            <linearGradient id={bgId} x1="0" y1="0" x2="36" y2="36" gradientUnits="userSpaceOnUse">
               <stop offset="0%" stopColor="#0B132B" />
               <stop offset="60%" stopColor="#1C2541" />
               <stop offset="100%" stopColor="#1E1B4B" />
             </linearGradient>
 
             {/* Ren (Connection / Harmony) Gradient */}
-            <linearGradient id="rd-primary" x1="8" y1="8" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+            <linearGradient id={primaryId} x1="8" y1="8" x2="28" y2="28" gradientUnits="userSpaceOnUse">
               <stop offset="0%" stopColor="#38BDF8" />
               <stop offset="50%" stopColor="#3B82F6" />
               <stop offset="100%" stopColor="#6366F1" />
             </linearGradient>
 
             {/* Glowing Accent Node */}
-            <linearGradient id="rd-glow" x1="22" y1="8" x2="28" y2="14" gradientUnits="userSpaceOnUse">
+            <linearGradient id={glowId} x1="22" y1="8" x2="28" y2="14" gradientUnits="userSpaceOnUse">
               <stop offset="0%" stopColor="#22D3EE" />
               <stop offset="100%" stopColor="#06B6D4" />
             </linearGradient>
           </defs>
 
           {/* Premium Base Squircle */}
-          <rect width="36" height="36" rx="9.5" fill="url(#rd-bg)" />
+          <rect width="36" height="36" rx="9.5" fill={`url(#${bgId})`} />
           <rect
             x="0.75"
             y="0.75"
@@ -73,7 +78,7 @@ export function RenDeskLogo({
           {/* Upper Zen / Ren Loop (Continuous Harmony) */}
           <path
             d="M11.7 7.5H18C21.6 7.5 24.2 9.8 24.2 13.2C24.2 16.6 21.6 18.9 18 18.9H11.7V7.5Z"
-            fill="url(#rd-primary)"
+            fill={`url(#${primaryId})`}
           />
 
           {/* Loop Inner Negative Space */}
@@ -85,11 +90,11 @@ export function RenDeskLogo({
           {/* Dynamic Forward Desk Wing / Momentum Kick */}
           <path
             d="M15.8 17.2L22.6 26.6C23.2 27.4 24.4 27.5 25.1 26.8C25.8 26.1 25.7 25 25 24.2L19.4 17.2H15.8Z"
-            fill="url(#rd-primary)"
+            fill={`url(#${primaryId})`}
           />
 
           {/* Ren Nucleus: Connected Employee / Pulse Node */}
-          <circle cx="25.5" cy="10" r="2.2" fill="url(#rd-glow)" />
+          <circle cx="25.5" cy="10" r="2.2" fill={`url(#${glowId})`} />
         </svg>
       </span>
 

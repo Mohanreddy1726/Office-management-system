@@ -212,7 +212,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           const serverLeaves: LeaveRequest[] = resData.requests.map((req: any) => ({
             id: req.id || req._id,
             employeeId: req.employeeId,
-            type: req.type || req.leaveType || "Casual Leave",
+            type: req.type || req.leaveType || "Emergency Leave",
             startDate: req.startDate,
             endDate: req.endDate,
             days: req.days || req.daysCount || 1,
@@ -242,8 +242,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               updatedBalances = {
                 ...updatedBalances,
                 [b.employeeId]: {
-                  "Casual Leave": b.casualLeave?.remaining ?? 10,
-                  "Sick Leave": b.sickLeave?.remaining ?? 10,
+                  "Emergency Leave": b.casualLeave?.remaining ?? 10,
                   "Comp-Off": b.compOff?.remaining ?? 0,
                 },
               };

@@ -34,28 +34,17 @@ export const EXTENUATING_CATEGORIES = [
 export const GVK_LEAVE_POLICIES: LeavePolicy[] = [
   {
     id: "LP-1",
-    type: "Casual Leave",
-    annualEntitlement: 10,
-    accrual: "1st Year: max 1/month (extra = LOP) · Confirmed: 10 leaves / 12 months (max 1/month for first 11 months; balance in 12th month or encashed)",
+    type: "Emergency Leave",
+    annualEntitlement: 12,
+    accrual: "1 leave earned per month (1st Year: max 1/month, additional = LOP · Confirmed: 10 leaves / 12 months, max 1/month for first 11 months; balance in 12th month or encashed)",
     carryForwardCap: 0,
-    expiry: "Carry forward is NOT permitted. Balance in 12th month may be availed or encashed.",
+    expiry: "Carry forward is NOT permitted. Confirmed 12th-month balance may be availed or encashed.",
     halfDayEligible: true,
     negativeBalance: false,
     eligibility: "All employees; must be approved at least 1 day in advance by Regional Director / Operations Head (except accident/demise).",
   },
   {
     id: "LP-2",
-    type: "Sick Leave",
-    annualEntitlement: 10,
-    accrual: "Included within monthly / annual leave cap; personal medical emergency exempt from 15-day LOP cap at management discretion.",
-    carryForwardCap: 0,
-    expiry: "No carry-forward permitted.",
-    halfDayEligible: true,
-    negativeBalance: false,
-    eligibility: "Extenuating circumstances (accident/medical emergency/demise) exempt from 1-day advance approval rule.",
-  },
-  {
-    id: "LP-3",
     type: "Comp-Off",
     annualEntitlement: 0,
     accrual: "Earned when required to attend office on a Holiday/Sunday with prior approval from Regional Director / Operations Head.",
@@ -66,6 +55,84 @@ export const GVK_LEAVE_POLICIES: LeavePolicy[] = [
     eligibility: "Employees with prior-approved holiday/off-day attendance.",
   },
 ];
+
+export interface EmployeeLeaveSummary {
+  year: string;
+  monthlyRate: number;
+  leavesEarned: number;
+  leavesUsed: number;
+  totalRemaining: number;
+  usedThisMonth: number;
+  availableThisMonth: number;
+  compOffRemaining: number;
+}
+
+/**
+ * Computes Emergency Leave monthly accrual (1 leave earned every month),
+ * leaves used this year, and total leaves remaining for an employee.
+ */
+export function computeEmployeeLeaveSummary(
+  employeeId: string,
+  leaves: LeaveRequest[],
+  joiningDate?: string,
+  balances?: Record<string, number>,
+  todayIsoParam?: string
+): EmployeeLeaveSummary {
+  let todayIso = todayIsoParam;
+  if (!todayIso) {
+    try {
+      todayIso = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    } catch {
+      todayIso = new Date().toISOString().slice(0, 10);
+    }
+  }
+
+  const year = todayIso.slice(0, 4);
+  const currentMonth = Number(todayIso.slice(5, 7)) || 1;
+  const currentPeriod = todayIso.slice(0, 7);
+
+  let monthsEarned = currentMonth;
+  if (joiningDate && /^\d{4}-\d{2}-\d{2}/.test(joiningDate)) {
+    const joinYear = Number(joiningDate.slice(0, 4));
+    const joinMonth = Number(joiningDate.slice(5, 7)) || 1;
+    if (joinYear > Number(year)) {
+      monthsEarned = 0;
+    } else if (joinYear === Number(year)) {
+      monthsEarned = Math.max(1, currentMonth - joinMonth + 1);
+    }
+  }
+
+  const leavesEarned = monthsEarned;
+  const myYearLeaves = leaves.filter(
+    (l) =>
+      l.employeeId === employeeId &&
+      l.type !== "Comp-Off" &&
+      l.startDate.startsWith(year)
+  );
+
+  const leavesUsed = myYearLeaves
+    .filter((l) => l.status === "Approved")
+    .reduce((sum, l) => sum + (Number(l.days) || 1), 0);
+
+  const usedThisMonth = myYearLeaves
+    .filter((l) => l.status !== "Rejected" && l.startDate.startsWith(currentPeriod))
+    .reduce((sum, l) => sum + (Number(l.days) || 1), 0);
+
+  const totalRemaining = Math.max(0, leavesEarned - leavesUsed);
+  const availableThisMonth = Math.max(0, 1 - usedThisMonth);
+  const compOffRemaining = balances?.["Comp-Off"] ?? 0;
+
+  return {
+    year,
+    monthlyRate: 1,
+    leavesEarned,
+    leavesUsed,
+    totalRemaining,
+    usedThisMonth,
+    availableThisMonth,
+    compOffRemaining,
+  };
+}
 
 /**
  * Parses "10:15", "10:15 AM", "02:30 pm", etc. into minutes since midnight.

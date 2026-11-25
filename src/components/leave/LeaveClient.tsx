@@ -17,7 +17,7 @@ export function LeaveClient({ currentRole }: LeaveClientProps) {
 
   // Form State
   const [formData, setFormData] = useState({
-    leaveType: "Casual Leave",
+    leaveType: "Emergency Leave",
     startDate: new Date().toISOString().slice(0, 10),
     endDate: new Date().toISOString().slice(0, 10),
     isHalfDay: false,
@@ -59,7 +59,7 @@ export function LeaveClient({ currentRole }: LeaveClientProps) {
       toast.success("Leave application submitted successfully!");
       setShowApplyModal(false);
       setFormData({
-        leaveType: "Casual Leave",
+        leaveType: "Emergency Leave",
         startDate: new Date().toISOString().slice(0, 10),
         endDate: new Date().toISOString().slice(0, 10),
         isHalfDay: false,
@@ -131,27 +131,16 @@ export function LeaveClient({ currentRole }: LeaveClientProps) {
 
       {/* Leave Balances Cards */}
       {balance && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="rounded-xl border border-border bg-card p-5 shadow-xs">
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Casual Leave (CL)
+              Emergency Leave (1 / Month)
             </span>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="text-3xl font-extrabold text-foreground">{balance.casualLeave.remaining}</span>
-              <span className="text-xs text-muted-foreground">/ {balance.casualLeave.total} days left</span>
+              <span className="text-xs text-muted-foreground">/ {balance.casualLeave.total} days remaining</span>
             </div>
-            <p className="text-[11px] text-muted-foreground mt-1">{balance.casualLeave.used} days taken</p>
-          </div>
-
-          <div className="rounded-xl border border-border bg-card p-5 shadow-xs">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Sick Leave (SL)
-            </span>
-            <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold text-foreground">{balance.sickLeave.remaining}</span>
-              <span className="text-xs text-muted-foreground">/ {balance.sickLeave.total} days left</span>
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-1">{balance.sickLeave.used} days taken</p>
+            <p className="text-[11px] text-muted-foreground mt-1">{balance.casualLeave.used} days used · No carry-forward</p>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5 shadow-xs">
@@ -159,10 +148,10 @@ export function LeaveClient({ currentRole }: LeaveClientProps) {
               Comp-Off (CO)
             </span>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold text-foreground">{balance.earnedLeave?.remaining ?? 2}</span>
+              <span className="text-3xl font-extrabold text-foreground">{balance.compOff?.remaining ?? 0}</span>
               <span className="text-xs text-muted-foreground">days balance</span>
             </div>
-            <p className="text-[11px] text-muted-foreground mt-1">Per approved extra work</p>
+            <p className="text-[11px] text-muted-foreground mt-1">Per approved holiday work</p>
           </div>
         </div>
       )}
@@ -285,8 +274,7 @@ export function LeaveClient({ currentRole }: LeaveClientProps) {
                   onChange={(e) => setFormData({ ...formData, leaveType: e.target.value })}
                   className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs focus:border-primary focus:outline-none"
                 >
-                  <option value="Casual Leave">Casual Leave (CL)</option>
-                  <option value="Sick Leave">Sick Leave (SL)</option>
+                  <option value="Emergency Leave">Emergency Leave (1/Month)</option>
                   <option value="Comp-Off">Comp-Off (CO)</option>
                 </select>
               </div>

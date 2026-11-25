@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/data/store";
-import { GVK_POLICY, validateLeavePolicyRequest } from "@/lib/policies";
+import { GVK_POLICY, computeEmployeeLeaveSummary, validateLeavePolicyRequest } from "@/lib/policies";
 import { PageHeader, KpiCard, StatusBadge, TabsShell, Field, Timeline, EmployeeAvatar } from "@/components/shared";
 import { DataTable, exportCsv, type Column } from "@/components/data-table";
 import { Person, Sel, useScope, useNames } from "@/components/form-bits";
@@ -26,8 +26,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const LEAVE_TYPES: LeaveType[] = [
-  "Casual Leave",
-  "Sick Leave",
+  "Emergency Leave",
   "Comp-Off",
 ];
 
@@ -101,12 +100,21 @@ export default function LeavePage() {
     }
   }, []);
 
-  // Current user's balance
+  // Current user's balance & monthly accrual summary (1 leave earned every month)
   const myBalances = data.leaveBalances[uid] ?? {
-    "Casual Leave": 10,
-    "Sick Leave": 10,
+    "Emergency Leave": 1,
     "Comp-Off": 0,
   };
+
+  const currentEmp = useMemo(
+    () => data.employees.find((e) => e.id === uid || e.id === session?.employeeId),
+    [data.employees, uid, session?.employeeId]
+  );
+
+  const myLeaveSummary = useMemo(
+    () => computeEmployeeLeaveSummary(uid, data.leaves, currentEmp?.joiningDate, myBalances, todayIso),
+    [uid, data.leaves, currentEmp?.joiningDate, myBalances, todayIso]
+  );
 
   // Staff currently on approved leave today
   const onLeaveToday = useMemo(() => {
@@ -284,31 +292,34 @@ export default function LeavePage() {
         {/* Top KPI Cards Row */}
         <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <KpiCard
-            label="Casual Leave Balance"
-            value={`${myBalances["Casual Leave"] ?? 0} Days`}
-            hint="Available for personal matters"
-            icon={<Coffee className="h-4 w-4 text-amber-500" />}
+            label="Emergency Leave"
+            value={`${myLeaveSummary.availableThisMonth} / 1 Month`}
+            hint="1 leave earned every month"
+            icon={<AlertTriangle className="h-4 w-4 text-amber-500" />}
           />
           <KpiCard
-            label="Sick Leave Balance"
-            value={`${myBalances["Sick Leave"] ?? 0} Days`}
-            hint="Medical & illness recovery"
-            icon={<HeartPulse className="h-4 w-4 text-rose-500" />}
+            label="Leaves Earned"
+            value={`${myLeaveSummary.leavesEarned} Days`}
+            hint={`Accrued in ${myLeaveSummary.year} (1/mo)`}
+            icon={<CalendarDays className="h-4 w-4 text-blue-600" />}
           />
           <KpiCard
-            label="Comp-Off Balance"
-            value={`${myBalances["Comp-Off"] ?? 0} Days`}
-            hint="Accrued from extra work"
-            icon={<ShieldCheck className="h-4 w-4 text-purple-500" />}
+            label="Leaves Used"
+            value={`${myLeaveSummary.leavesUsed} Days`}
+            hint={`Approved in ${myLeaveSummary.year}`}
+            icon={<CheckCircle2 className="h-4 w-4 text-rose-500" />}
           />
-          {isEmployee ? (
-            <KpiCard
-              label="My Pending Requests"
-              value={String(myLeaves.filter((l) => !["Approved", "Rejected"].includes(l.status)).length)}
-              hint="Awaiting manager sign-off"
-              icon={<Hourglass className="h-4 w-4 text-primary" />}
-            />
-          ) : (
+          <KpiCard
+            label="Total Leaves Remaining"
+            value={`${myLeaveSummary.totalRemaining} Days`}
+            hint={
+              myLeaveSummary.compOffRemaining > 0
+                ? `+ ${myLeaveSummary.compOffRemaining} Comp-Off · No carry-forward`
+                : "No carry-forward permitted"
+            }
+            icon={<ShieldCheck className="h-4 w-4 text-emerald-600" />}
+          />
+          {!isEmployee && (
             <KpiCard
               label="Awaiting My Approval"
               value={String(approvals.length)}
@@ -319,23 +330,12 @@ export default function LeavePage() {
           )}
           {!isEmployee && (
             <KpiCard
-              label="Total Leave Records"
-              value={String(scopedLeaves.length)}
-              hint={
-                scopedLeaves.length > 0
-                  ? `${scopedLeaves.filter((l) => l.status === "Approved").length} Approved • ${scopedLeaves.filter((l) => l.status === "Rejected").length} Rejected`
-                  : "No leave records"
-              }
-              icon={<CalendarDays className="h-4 w-4 text-blue-600" />}
-              onClick={() => setTab("all")}
+              label="On Leave Today"
+              value={String(onLeaveToday.length)}
+              hint={onLeaveToday.length > 0 ? `${onLeaveToday.length} staff out today` : "Full team present"}
+              icon={<UserCheck className="h-4 w-4 text-emerald-600" />}
             />
           )}
-          <KpiCard
-            label="On Leave Today"
-            value={String(onLeaveToday.length)}
-            hint={onLeaveToday.length > 0 ? `${onLeaveToday.length} staff out today` : "Full team present"}
-            icon={<CheckCircle2 className="h-4 w-4 text-emerald-600" />}
-          />
         </div>
 
         {/* Tabs Shell */}
@@ -673,27 +673,27 @@ export default function LeavePage() {
               {/* User's Personal Balance Overview */}
               <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
                 <div className="mb-4">
-                  <h3 className="font-semibold text-foreground text-sm">Your Personal Leave Balances (2026)</h3>
-                  <p className="text-xs text-muted-foreground">Annual quota allocation and current available balance.</p>
+                  <h3 className="font-semibold text-foreground text-sm">Your Emergency Leave Summary ({myLeaveSummary.year})</h3>
+                  <p className="text-xs text-muted-foreground">1 Emergency Leave earned every month · No carry-forward permitted.</p>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <BalanceMetricCard
-                    type="Casual Leave"
-                    available={myBalances["Casual Leave"] ?? 0}
-                    total={10}
+                    type="Emergency Leave (Remaining)"
+                    available={myLeaveSummary.totalRemaining}
+                    total={myLeaveSummary.leavesEarned}
+                    color="blue"
+                  />
+                  <BalanceMetricCard
+                    type="Leaves Used This Year"
+                    available={myLeaveSummary.leavesUsed}
+                    total={myLeaveSummary.leavesEarned}
                     color="amber"
                   />
                   <BalanceMetricCard
-                    type="Sick Leave"
-                    available={myBalances["Sick Leave"] ?? 0}
-                    total={10}
-                    color="rose"
-                  />
-                  <BalanceMetricCard
                     type="Comp-Off"
-                    available={myBalances["Comp-Off"] ?? 0}
-                    total={4}
+                    available={myLeaveSummary.compOffRemaining}
+                    total={Math.max(2, myLeaveSummary.compOffRemaining)}
                     color="purple"
                   />
                 </div>
@@ -705,7 +705,7 @@ export default function LeavePage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-semibold text-foreground text-sm">Team Quota Matrix</h3>
-                      <p className="text-xs text-muted-foreground">Individual employee balance directory.</p>
+                      <p className="text-xs text-muted-foreground">Monthly accrual (1/mo), leaves used, and remaining balances.</p>
                     </div>
                   </div>
 
@@ -715,10 +715,10 @@ export default function LeavePage() {
                         <tr>
                           <th className="px-4 py-3">Employee</th>
                           <th className="px-4 py-3">Department</th>
-                          <th className="px-4 py-3 text-center">Casual (CL)</th>
-                          <th className="px-4 py-3 text-center">Sick (SL)</th>
-                          <th className="px-4 py-3 text-center">Comp-Off (CO)</th>
-                          <th className="px-4 py-3 text-right">Total Available</th>
+                          <th className="px-4 py-3 text-center">Earned (1/mo)</th>
+                          <th className="px-4 py-3 text-center">Used</th>
+                          <th className="px-4 py-3 text-center">Comp-Off</th>
+                          <th className="px-4 py-3 text-right">Total Remaining</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
@@ -727,10 +727,7 @@ export default function LeavePage() {
                           .slice(0, 30)
                           .map((e) => {
                             const b = data.leaveBalances[e.id] ?? {};
-                            const cl = b["Casual Leave"] ?? 0;
-                            const sl = b["Sick Leave"] ?? 0;
-                            const co = b["Comp-Off"] ?? 0;
-                            const total = cl + sl + co;
+                            const sum = computeEmployeeLeaveSummary(e.id, data.leaves, e.joiningDate, b, todayIso);
 
                             return (
                               <tr key={e.id} className="hover:bg-muted/30 transition-colors">
@@ -741,18 +738,18 @@ export default function LeavePage() {
                                   </Link>
                                 </td>
                                 <td className="px-4 py-3 text-muted-foreground">{e.department}</td>
-                                <td className="px-4 py-3 text-center font-semibold text-amber-700 dark:text-amber-400">
-                                  {cl}
+                                <td className="px-4 py-3 text-center font-semibold text-blue-700 dark:text-blue-400">
+                                  {sum.leavesEarned}
                                 </td>
-                                <td className="px-4 py-3 text-center font-semibold text-rose-700 dark:text-rose-400">
-                                  {sl}
+                                <td className="px-4 py-3 text-center font-semibold text-amber-700 dark:text-amber-400">
+                                  {sum.leavesUsed}
                                 </td>
                                 <td className="px-4 py-3 text-center font-semibold text-purple-700 dark:text-purple-400">
-                                  {co}
+                                  {sum.compOffRemaining}
                                 </td>
                                 <td className="px-4 py-3 text-right font-bold text-foreground">
                                   <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] text-primary">
-                                    {total} Days
+                                    {sum.totalRemaining} Days
                                   </span>
                                 </td>
                               </tr>
@@ -1389,7 +1386,7 @@ function ApplyLeaveDialog({
   }, []);
 
   const [applicant, setApplicant] = useState(uid);
-  const [type, setType] = useState<string>("Casual Leave");
+  const [type, setType] = useState<string>("Emergency Leave");
   const [start, setStart] = useState(defaultTomorrow);
   const [end, setEnd] = useState(defaultTomorrow);
   const [isHalfDay, setIsHalfDay] = useState(false);
@@ -1402,9 +1399,13 @@ function ApplyLeaveDialog({
 
   const applicantEmp = data.employees.find((e) => e.id === applicant);
   const effectiveBalances = data.leaveBalances[applicant] ?? balances;
+  const applicantSummary = useMemo(
+    () => computeEmployeeLeaveSummary(applicant, data.leaves, applicantEmp?.joiningDate, effectiveBalances),
+    [applicant, data.leaves, applicantEmp?.joiningDate, effectiveBalances]
+  );
   const rawDays = Math.max(0, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 86400000) + 1);
   const days = isHalfDay ? 0.5 : rawDays;
-  const balance = effectiveBalances[type];
+  const balance = type === "Comp-Off" ? effectiveBalances["Comp-Off"] : applicantSummary.totalRemaining;
   const isOver = type === "Comp-Off" && balance !== undefined && days > balance;
 
   const policyCheck = useMemo(
@@ -1462,7 +1463,11 @@ function ApplyLeaveDialog({
           <div className="col-span-2">
             <Field
               label="Leave Type"
-              hint={balance !== undefined ? `Remaining quota for applicant: ${balance} Day(s)` : undefined}
+              hint={
+                type === "Comp-Off"
+                  ? `Comp-Off remaining: ${applicantSummary.compOffRemaining} Day(s)`
+                  : `Emergency Leave: ${applicantSummary.availableThisMonth}/1 this month · ${applicantSummary.totalRemaining} remaining (${applicantSummary.leavesEarned} earned, ${applicantSummary.leavesUsed} used)`
+              }
             >
               <Sel value={type} onChange={setType} options={LEAVE_TYPES} />
             </Field>
@@ -1514,7 +1519,7 @@ function ApplyLeaveDialog({
                 "Personal / Family",
                 "Accident / Medical Emergency",
                 "Bereavement / Demise",
-                "Medical / Sick Leave",
+                "Medical Emergency",
                 "Planned Vacation",
                 "Examination / Studies",
                 "Emergency",

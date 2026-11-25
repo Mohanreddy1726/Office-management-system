@@ -99,7 +99,7 @@ export interface AttendanceCorrection {
   decisionNote?: string;
 }
 
-export type LeaveType = "Casual Leave" | "Sick Leave" | "Comp-Off";
+export type LeaveType = "Emergency Leave" | "Comp-Off" | "Casual Leave" | "Sick Leave";
 export type LeaveStage = "Submitted" | "Manager Review" | "HR Review" | "Approved" | "Rejected" | "Clarification";
 
 export interface LeaveRequest {
