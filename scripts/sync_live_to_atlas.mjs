@@ -8,9 +8,42 @@ try {
 
 const MONGODB_URI = "mongodb+srv://mohanreddy:mohanreddy1726@cluster0.5ghmukt.mongodb.net/rendesk?retryWrites=true&w=majority";
 
+async function resolveSrvUriWithPublicDns(srvUri) {
+  if (!srvUri.startsWith("mongodb+srv://")) return null;
+  const parsed = new URL(srvUri);
+  const resolver = new dns.Resolver();
+  resolver.setServers(["8.8.8.8", "1.1.1.1"]);
+  const srvRecords = await new Promise((resolve, reject) =>
+    resolver.resolveSrv(`_mongodb._tcp.${parsed.hostname}`, (err, recs) => (err ? reject(err) : resolve(recs)))
+  );
+  const txtChunks = await new Promise((resolve) =>
+    resolver.resolveTxt(parsed.hostname, (err, recs) => (err ? resolve([]) : resolve(recs)))
+  );
+  const hosts = srvRecords.map((r) => `${r.name}:${r.port}`).join(",");
+  const params = new URLSearchParams(parsed.searchParams.toString());
+  for (const chunk of txtChunks) {
+    new URLSearchParams(chunk.join("")).forEach((v, k) => {
+      if (!params.has(k)) params.set(k, v);
+    });
+  }
+  if (!params.has("tls") && !params.has("ssl")) params.set("tls", "true");
+  const auth = parsed.username ? `${encodeURIComponent(decodeURIComponent(parsed.username))}:${encodeURIComponent(decodeURIComponent(parsed.password))}@` : "";
+  return `mongodb://${auth}${hosts}${parsed.pathname || "/"}?${params.toString()}`;
+}
+
 async function syncAll() {
   console.log("Connecting to MongoDB Atlas...");
-  await mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 8000 });
+  try {
+    await mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 8000 });
+  } catch (err) {
+    if (String(err?.message || "").includes("querySrv")) {
+      const direct = await resolveSrvUriWithPublicDns(MONGODB_URI);
+      if (direct) await mongoose.connect(direct, { serverSelectionTimeoutMS: 8000 });
+      else throw err;
+    } else {
+      throw err;
+    }
+  }
   console.log("Connected to MongoDB!");
 
   const Schema = mongoose.Schema;
@@ -95,9 +128,8 @@ async function syncAll() {
     }
 
     const firstMinutes = first.getHours() * 60 + first.getMinutes();
-    // General Shift starts at 10:00 AM with 15 mins grace period (10:15 AM)
-    const isLate = firstMinutes > (10 * 60 + 15);
-    let status = isLate ? "Late" : "Present";
+    // GVK Policy: 10:00 AM - 6:30 PM, 10-min grace (10:10 AM), > 12:00 PM = Half-day cut
+    let status = firstMinutes > 12 * 60 ? "Half-day" : firstMinutes > 10 * 60 + 10 ? "Late" : "Present";
     if (totalHours > 0 && totalHours < 4.5 && item.punches.length > 1) {
       status = "Half-day";
     }

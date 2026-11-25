@@ -3,6 +3,7 @@ const nextConfig = {
   reactStrictMode: true,
   swcMinify: false,
   experimental: {
+    instrumentationHook: true,
     serverComponentsExternalPackages: ['mongoose', 'bcryptjs', 'node-zklib', 'nodemailer'],
   },
 };

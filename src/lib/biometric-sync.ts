@@ -1,3 +1,4 @@
+import { connectToDatabase } from "@/lib/db";
 import { Attendance } from "@/models/Attendance";
 import { BiometricMapping, BiometricDevice, UnmappedPunch } from "@/models/Biometric";
 import { Employee } from "@/models/Employee";
@@ -480,6 +481,7 @@ const gAuto = globalThis as unknown as {
   __bioAutoSyncLastAt?: number;
   __bioAutoSyncBackoffUntil?: number;
   __bioAutoSyncInFlight?: Promise<void> | null;
+  __bioBgIntervalStarted?: boolean;
 };
 
 /**
@@ -488,6 +490,7 @@ const gAuto = globalThis as unknown as {
  * backoff if running in cloud/off-LAN.
  */
 export async function autoSyncBiometricIfStale(): Promise<void> {
+  startBackgroundBiometricSync();
   const now = Date.now();
   if (gAuto.__bioAutoSyncInFlight) {
     return gAuto.__bioAutoSyncInFlight;
@@ -527,4 +530,36 @@ export async function autoSyncBiometricIfStale(): Promise<void> {
   })();
 
   return gAuto.__bioAutoSyncInFlight;
+}
+
+/**
+ * Starts a persistent background interval (every 2 minutes) on the Node.js server
+ * so biometric punches continuously sync to MongoDB Atlas even when no user
+ * manually opens /attendance.
+ */
+export function startBackgroundBiometricSync(): void {
+  if (typeof window !== "undefined") return;
+  if (gAuto.__bioBgIntervalStarted) return;
+  gAuto.__bioBgIntervalStarted = true;
+
+  const tick = async () => {
+    try {
+      const conn = await connectToDatabase();
+      if (!conn) return;
+      await autoSyncBiometricIfStale();
+    } catch {
+      // Silently ignore; next tick retries cleanly
+    }
+  };
+
+  setTimeout(() => {
+    void tick();
+  }, 5000);
+
+  const timer = setInterval(() => {
+    void tick();
+  }, 2 * 60 * 1000);
+  if (typeof timer.unref === "function") {
+    timer.unref();
+  }
 }

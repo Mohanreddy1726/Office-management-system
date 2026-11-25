@@ -121,13 +121,17 @@ export async function POST(req: NextRequest) {
           success: true,
           records,
           syncedFrom: "cloud_database",
+          terminalReachable: false,
           message: cloudResult.updatedRecords > 0
             ? `Reconciled ${cloudResult.updatedRecords} attendance records for mapped employees (${totalCount} total in database).`
-            : `Refreshed ${records.length} attendance records from database. Physical terminal is on office LAN (192.168.29.201).`,
+            : `Refreshed ${records.length} attendance records from MongoDB. (${liveResult.error || "Physical terminal is on office LAN 192.168.29.201"})`,
           summary: { processed: cloudResult.processedPunches, updatedRecords: cloudResult.updatedRecords },
         });
       }
-      return NextResponse.json({ success: true, message: "Sync simulated in memory", records: [] });
+      return NextResponse.json(
+        { error: "Database unavailable. Could not connect to MongoDB Atlas for biometric sync." },
+        { status: 503 }
+      );
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });

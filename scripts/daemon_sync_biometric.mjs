@@ -23,14 +23,47 @@ try {
   }
 } catch {}
 
-const INTERVAL_MS = 3 * 60 * 1000; // 3 minutes
+const INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
+
+async function resolveSrvUriWithPublicDns(srvUri) {
+  if (!srvUri.startsWith("mongodb+srv://")) return null;
+  const parsed = new URL(srvUri);
+  const resolver = new dns.Resolver();
+  resolver.setServers(["8.8.8.8", "1.1.1.1"]);
+  const srvRecords = await new Promise((resolve, reject) =>
+    resolver.resolveSrv(`_mongodb._tcp.${parsed.hostname}`, (err, recs) => (err ? reject(err) : resolve(recs)))
+  );
+  const txtChunks = await new Promise((resolve) =>
+    resolver.resolveTxt(parsed.hostname, (err, recs) => (err ? resolve([]) : resolve(recs)))
+  );
+  const hosts = srvRecords.map((r) => `${r.name}:${r.port}`).join(",");
+  const params = new URLSearchParams(parsed.searchParams.toString());
+  for (const chunk of txtChunks) {
+    new URLSearchParams(chunk.join("")).forEach((v, k) => {
+      if (!params.has(k)) params.set(k, v);
+    });
+  }
+  if (!params.has("tls") && !params.has("ssl")) params.set("tls", "true");
+  const auth = parsed.username ? `${encodeURIComponent(decodeURIComponent(parsed.username))}:${encodeURIComponent(decodeURIComponent(parsed.password))}@` : "";
+  return `mongodb://${auth}${hosts}${parsed.pathname || "/"}?${params.toString()}`;
+}
 
 async function runSyncIteration() {
   const timestamp = new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" });
   console.log(`\n[${timestamp}] Starting biometric synchronization...`);
 
   if (mongoose.connection.readyState !== 1) {
-    await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 10000 });
+    try {
+      await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 10000 });
+    } catch (err) {
+      if (String(err?.message || "").includes("querySrv")) {
+        const direct = await resolveSrvUriWithPublicDns(mongoUri);
+        if (direct) await mongoose.connect(direct, { serverSelectionTimeoutMS: 10000 });
+        else throw err;
+      } else {
+        throw err;
+      }
+    }
   }
 
   const Schema = mongoose.Schema;
@@ -122,8 +155,7 @@ async function runSyncIteration() {
     }
 
     const firstMinutes = first.getHours() * 60 + first.getMinutes();
-    const isLate = firstMinutes > (10 * 60 + 15);
-    let status = isLate ? "Late" : "Present";
+    let status = firstMinutes > 12 * 60 ? "Half-day" : firstMinutes > 10 * 60 + 10 ? "Late" : "Present";
     if (totalHours > 0 && totalHours < 4.5 && item.punches.length > 1) {
       status = "Half-day";
     }

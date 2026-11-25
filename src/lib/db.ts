@@ -55,6 +55,7 @@ const MONGODB_URI =
 interface MongooseCache {
   conn: typeof mongoose | null;
   promise: Promise<typeof mongoose | null> | null;
+  directUri?: string | null;
 }
 
 declare global {
@@ -88,8 +89,9 @@ export async function connectToDatabase(): Promise<typeof mongoose | null> {
       } catch {}
 
       try {
-        const m = await mongoose.connect(MONGODB_URI, opts);
-        const dbHost = MONGODB_URI.split("@").pop()?.split("?")[0] || "database";
+        const uriToUse = cached.directUri || MONGODB_URI;
+        const m = await mongoose.connect(uriToUse, opts);
+        const dbHost = uriToUse.split("@").pop()?.split("?")[0] || "database";
         console.log(`[MongoDB] Connected successfully to ${dbHost}`);
         return m;
       } catch (err: any) {
@@ -97,6 +99,7 @@ export async function connectToDatabase(): Promise<typeof mongoose | null> {
         if (msg.includes("querySrv") || msg.includes("ECONNREFUSED") || msg.includes("ETIMEOUT")) {
           const directUri = await resolveSrvUriWithPublicDns(MONGODB_URI);
           if (directUri) {
+            cached.directUri = directUri;
             try {
               const m = await mongoose.connect(directUri, opts);
               console.log("[MongoDB] Connected successfully via public DNS SRV resolver");
