@@ -87,39 +87,7 @@ export default function EmployeesPage() {
   const [resetEmp, setResetEmp] = useState<Employee | null>(null);
   const [deleteEmp, setDeleteEmp] = useState<Employee | null>(null);
 
-  // Sync employees from MongoDB API to ensure real status is immediately enforced and non-existent employees are pruned
-  useEffect(() => {
-    const syncStatus = () => {
-      fetch("/api/employees")
-        .then((res) => (res.ok ? res.json() : null))
-        .then((resData) => {
-          if (resData?.success && Array.isArray(resData.employees)) {
-            const validIds = new Set(resData.employees.map((e: any) => e.employeeId));
-
-            // Immediately prune any ghost/unverified employee not in the database
-            data.employees.forEach((localEmp) => {
-              if (!validIds.has(localEmp.id)) {
-                deleteEmployee(localEmp.id);
-              }
-            });
-
-            resData.employees.forEach((dbEmp: any) => {
-              const id = dbEmp.employeeId;
-              updateEmployee(id, {
-                status: dbEmp.status,
-                workEmail: dbEmp.workEmail || dbEmp.email,
-                personalEmail: dbEmp.personalEmail,
-              });
-            });
-          }
-        })
-        .catch((err) => console.warn("Failed to sync employees from DB:", err));
-    };
-
-    syncStatus();
-    const interval = setInterval(syncStatus, 3000);
-    return () => clearInterval(interval);
-  }, [data.employees, deleteEmployee, updateEmployee]);
+  // Employee directory is kept synchronized centrally by StoreProvider (/api/employees)
 
   const rows = useMemo(() => {
     let list = data.employees;

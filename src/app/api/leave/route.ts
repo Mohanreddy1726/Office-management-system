@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
         query.employeeId = session.employeeId;
       }
       // Super Admin, HR Admin, Managers, and general reads see all requests
-      const rawRequests = await LeaveRequest.find(query).sort({ createdAt: -1 });
+      const rawRequests = await LeaveRequest.find(query).sort({ createdAt: -1 }).lean();
 
       const requests = rawRequests.map((r: any) => {
         const id = r._id.toString();

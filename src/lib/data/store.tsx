@@ -530,26 +530,41 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         .catch(() => {});
     };
 
-    const runAllSync = () => {
+    let lastSyncAt = 0;
+    const runAllSync = (force = false) => {
+      if (!session) return;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      const now = Date.now();
+      if (!force && now - lastSyncAt < 15_000) return;
+      lastSyncAt = now;
+
+      const isSuperAdmin = session.role === "super_admin";
+      const isAdminOrHr = isSuperAdmin || session.role === "hr_admin";
+
       syncEmployees();
       syncAttendance();
       fetchLeavesAsync();
-      syncMail();
       syncNotifications();
       syncAssets();
       syncDocuments();
-      syncAuditLogs();
+      if (isAdminOrHr) syncMail();
+      if (isSuperAdmin) syncAuditLogs();
     };
 
-    runAllSync();
-    const interval = setInterval(runAllSync, 8000);
-    const handleFocus = () => runAllSync();
+    runAllSync(true);
+    const interval = setInterval(() => runAllSync(false), 60_000);
+    const handleFocus = () => runAllSync(false);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") runAllSync(false);
+    };
     window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
     return () => {
       clearInterval(interval);
       window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, []);
+  }, [session, fetchLeavesAsync, syncNotificationsAsync]);
 
   useEffect(() => {
     if (!hydrated) return;

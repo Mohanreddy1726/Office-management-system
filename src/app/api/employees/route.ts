@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
       if (department && department !== "All") query.department = department;
       if (status && status !== "All") query.status = status;
 
-      const employees = await Employee.find(query).sort({ employeeId: 1 });
+      const employees = await Employee.find(query).sort({ employeeId: 1 }).lean();
 
       // Auto-standardize departments to: Telecaller, Operations, Digital, Business Development
       for (const emp of employees) {
@@ -99,7 +99,7 @@ export async function GET(req: NextRequest) {
         const myEmpId = session.employeeId || session.userId;
         const sanitized = employees.map((e: any) => {
           if (e.employeeId === myEmpId) return e;
-          const obj = typeof e.toObject === "function" ? e.toObject() : { ...e };
+          const obj = { ...e };
           delete obj.salary;
           delete obj.bankDetails;
           delete obj.aadhaarNumber;

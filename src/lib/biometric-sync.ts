@@ -557,12 +557,14 @@ const gAuto = globalThis as unknown as {
   __bioBgIntervalStarted?: boolean;
 };
 
+const isCloudEnvironment = () => Boolean(process.env.VERCEL || process.env.VERCEL_ENV);
+
 /**
- * Automatically syncs recent punches (last 30 days) from the live biometric terminal
- * at most once every 60s when reachable on LAN, failing fast (1.5s) with a 3-min
- * backoff if running in cloud/off-LAN.
+ * Automatically syncs recent punches from the live biometric terminal
+ * at most once every 60s when running on the office LAN (disabled on Vercel cloud).
  */
 export async function autoSyncBiometricIfStale(): Promise<void> {
+  if (isCloudEnvironment()) return;
   startBackgroundBiometricSync();
   const now = Date.now();
   if (gAuto.__bioAutoSyncInFlight) {
@@ -612,6 +614,7 @@ export async function autoSyncBiometricIfStale(): Promise<void> {
  */
 export function startBackgroundBiometricSync(): void {
   if (typeof window !== "undefined") return;
+  if (isCloudEnvironment()) return;
   if (gAuto.__bioBgIntervalStarted) return;
   gAuto.__bioBgIntervalStarted = true;
 

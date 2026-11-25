@@ -13,7 +13,7 @@ export async function GET() {
 
     const conn = await connectToDatabase();
     if (conn) {
-      const logs = await AuditLog.find().sort({ timestamp: -1 }).limit(100);
+      const logs = await AuditLog.find().sort({ timestamp: -1 }).limit(100).lean();
       return NextResponse.json({ success: true, logs });
     } else {
       const store = getMockStore();

@@ -16,10 +16,10 @@ export async function GET() {
     const conn = await connectToDatabase();
     if (conn) {
       const [devices, mappings, unmapped, employees] = await Promise.all([
-        BiometricDevice.find().sort({ createdAt: -1 }),
-        BiometricMapping.find().sort({ createdAt: -1 }),
-        UnmappedPunch.find({ resolved: false }),
-        Employee.find({ status: { $in: ["Active", "Probation", "Pending Verification"] } }, "employeeId name"),
+        BiometricDevice.find().sort({ createdAt: -1 }).lean(),
+        BiometricMapping.find().sort({ createdAt: -1 }).lean(),
+        UnmappedPunch.find({ resolved: false }).sort({ punchTime: -1 }).limit(200).lean(),
+        Employee.find({ status: { $in: ["Active", "Probation", "Pending Verification"] } }, "employeeId name").lean(),
       ]);
       return NextResponse.json({ success: true, devices, mappings, unmapped, employees });
     } else {

@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
 
     const conn = await connectToDatabase();
     if (conn) {
-      const logs = await MailLog.find().sort({ createdAt: -1 });
+      const logs = await MailLog.find().sort({ createdAt: -1 }).lean();
       return NextResponse.json({ success: true, logs });
     } else {
       const store = getMockStore();

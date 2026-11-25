@@ -14,8 +14,8 @@ export async function GET() {
     const conn = await connectToDatabase();
     if (conn) {
       const [assets, employees] = await Promise.all([
-        Asset.find().sort({ createdAt: -1 }),
-        Employee.find({ status: "Active" }, "employeeId name"),
+        Asset.find().sort({ createdAt: -1 }).lean(),
+        Employee.find({ status: "Active" }, "employeeId name").lean(),
       ]);
       return NextResponse.json({ success: true, assets, employees });
     } else {

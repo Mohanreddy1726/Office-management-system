@@ -15,7 +15,7 @@ export async function GET() {
       if (session.role === "employee" && session.employeeId) {
         query.$or = [{ employeeId: session.employeeId }, { category: "Company Policy" }];
       }
-      const docs = await DocumentRecord.find(query).sort({ createdAt: -1 });
+      const docs = await DocumentRecord.find(query).sort({ createdAt: -1 }).lean();
       return NextResponse.json({ success: true, documents: docs });
     } else {
       const sampleDocs = [

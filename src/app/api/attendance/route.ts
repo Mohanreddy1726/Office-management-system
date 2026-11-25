@@ -43,18 +43,13 @@ export async function GET(req: NextRequest) {
 
     const conn = await connectToDatabase();
     if (conn) {
-      // Automatically pull recent punches from live eSSL terminal if stale (>60s) and on LAN
-      try {
-        await autoSyncBiometricIfStale();
-      } catch (autoErr) {
-        console.warn("[Attendance Auto-Sync Warning]", autoErr);
-      }
-
-      // Automatic Self-Healing: Reconcile any unmapped punches matching active biometric mappings
-      try {
-        await reconcileAllActiveMappings();
-      } catch (selfHealErr) {
-        console.warn("[Attendance Self-Heal Warning]", selfHealErr);
+      // Automatically pull recent punches from live eSSL terminal when running on office LAN (never on Vercel cloud)
+      if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
+        try {
+          await autoSyncBiometricIfStale();
+        } catch (autoErr) {
+          console.warn("[Attendance Auto-Sync Warning]", autoErr);
+        }
       }
 
       const query: any = {};
@@ -64,7 +59,7 @@ export async function GET(req: NextRequest) {
       if (isEmployee) {
         query.employeeId = session.employeeId;
       }
-      const rawRecords = await Attendance.find(query).sort({ date: -1, checkIn: 1 });
+      const rawRecords = await Attendance.find(query).sort({ date: -1, checkIn: 1 }).lean();
       const records = rawRecords.map(formatAttendanceRecord);
       return NextResponse.json({ success: true, records, date });
     } else {

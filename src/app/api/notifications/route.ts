@@ -9,6 +9,8 @@ import mongoose from "mongoose";
 
 export const dynamic = "force-dynamic";
 
+let announcementsSeededChecked = false;
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getCurrentUser();
@@ -22,43 +24,49 @@ export async function GET(req: NextRequest) {
 
     const conn = await connectToDatabase();
     if (conn) {
-      // Auto-seed default company announcements if none exist in the database
-      try {
-        const annCount = await Notification.countDocuments({ isAnnouncement: true });
-        if (annCount === 0 && Array.isArray(ANNOUNCEMENTS) && ANNOUNCEMENTS.length > 0) {
-          for (const a of ANNOUNCEMENTS) {
-            await Notification.create({
-              id: a.id,
-              title: a.title,
-              message: a.message,
-              description: a.message,
-              category: "Announcements",
-              type: a.priority === "High" ? "warning" : "info",
-              priority: a.priority || "Normal",
-              audience: a.audience || "All Employees",
-              scope: a.scope,
-              targetRole: a.audience === "Managers Only" ? "manager" : "all",
-              targetBranch: a.audience === "Selected Branches" ? a.scope : undefined,
-              targetDepartment: a.audience === "Selected Departments" ? a.scope : undefined,
-              isAnnouncement: true,
-              publishAt: a.publishAt,
-              expiresAt: a.expiresAt || "",
-              read: false,
-              readBy: [],
-              timestamp: `${a.publishAt} 09:00`,
-            });
+      // Auto-seed default company announcements once per server lifecycle if none exist
+      if (!announcementsSeededChecked) {
+        try {
+          const annCount = await Notification.countDocuments({ isAnnouncement: true });
+          if (annCount === 0 && Array.isArray(ANNOUNCEMENTS) && ANNOUNCEMENTS.length > 0) {
+            for (const a of ANNOUNCEMENTS) {
+              await Notification.create({
+                id: a.id,
+                title: a.title,
+                message: a.message,
+                description: a.message,
+                category: "Announcements",
+                type: a.priority === "High" ? "warning" : "info",
+                priority: a.priority || "Normal",
+                audience: a.audience || "All Employees",
+                scope: a.scope,
+                targetRole: a.audience === "Managers Only" ? "manager" : "all",
+                targetBranch: a.audience === "Selected Branches" ? a.scope : undefined,
+                targetDepartment: a.audience === "Selected Departments" ? a.scope : undefined,
+                isAnnouncement: true,
+                publishAt: a.publishAt,
+                expiresAt: a.expiresAt || "",
+                read: false,
+                readBy: [],
+                timestamp: `${a.publishAt} 09:00`,
+              });
+            }
           }
+          announcementsSeededChecked = true;
+        } catch (seedErr) {
+          console.warn("[Notifications] Auto-seed failed:", seedErr);
         }
-      } catch (seedErr) {
-        console.warn("[Notifications] Auto-seed failed:", seedErr);
       }
 
       // Look up employee record for department / branch matching if not directly provided
       if (userEmpId && (!userDept || userBranch === "Headquarters")) {
         try {
-          const emp = await Employee.findOne({
-            $or: [{ employeeId: userEmpId }, { email: session?.email?.toLowerCase().trim() }],
-          });
+          const emp = await Employee.findOne(
+            {
+              $or: [{ employeeId: userEmpId }, { email: session?.email?.toLowerCase().trim() }],
+            },
+            "branch department"
+          ).lean();
           if (emp) {
             userBranch = emp.branch || userBranch;
             userDept = emp.department || userDept;
@@ -66,7 +74,7 @@ export async function GET(req: NextRequest) {
         } catch {}
       }
 
-      const allNotifs = await Notification.find().sort({ createdAt: -1 });
+      const allNotifs = await Notification.find().sort({ createdAt: -1 }).lean();
 
       const visible = allNotifs.filter((n: any) => {
         if (isSuperOrHR) return true;
