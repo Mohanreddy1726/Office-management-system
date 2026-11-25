@@ -30,7 +30,8 @@ export function payslipFor(
   structures: SalaryStructure[],
   unpaidDays = 0,
   incentives = 0,
-  miscDeductions = 0
+  miscDeductions = 0,
+  options?: { allowOver15DaysLop?: boolean }
 ): PayslipBreakdown {
   const baseGross = e.monthlyGross;
   const st = structures.find((s) => s.id === e.salaryStructureId) ?? structures[0]!;
@@ -39,9 +40,13 @@ export function payslipFor(
   const hra = Math.round(basic * 0.5);
   const special = Math.max(0, baseGross - basic - hra);
 
-  // Loss of Pay (LOP) calculation based on standard 30-day month
+  // Loss of Pay (LOP) calculation based on Gross Salary (30-day month).
+  // Policy: Except for maternity or personal medical emergency, LOP cannot exceed 15 days.
+  const effectiveUnpaidDays = options?.allowOver15DaysLop
+    ? Math.max(0, unpaidDays)
+    : Math.min(15, Math.max(0, unpaidDays));
   const perDay = Math.round(baseGross / 30);
-  const lop = Math.round(perDay * unpaidDays);
+  const lop = Math.round(perDay * effectiveUnpaidDays);
 
   // Statutory: PF and ESI are 0 as per company policy
   const pf = 0;
@@ -97,6 +102,11 @@ export function runTotals(
 
 export function runFromState(run: PayrollRun) {
   return run;
+}
+
+export function compOffEncashmentAmount(e: Employee, holidayDaysWorked: number): number {
+  if (holidayDaysWorked <= 0) return 0;
+  return Math.round((e.monthlyGross / 30) * holidayDaysWorked);
 }
 
 export const payMoney = inr;

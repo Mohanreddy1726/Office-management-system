@@ -4,6 +4,7 @@
 // UI prefs and simulated workflows. Persisted to localStorage (frontend only).
 import { createContext, useContext, useEffect, useMemo, useState, useCallback, type ReactNode } from "react";
 import { seedState, DEMO_EMPLOYEES } from "./seed";
+import { classifyLoginTime, GVK_LEAVE_POLICIES } from "@/lib/policies";
 import type {
   AppState, Session, Prefs, Role, Employee, AttendanceRecord, AttendanceCorrection, LeaveRequest, NotificationItem,
   DocumentRecord, MailEntry, Announcement, Asset, Goal, UserAccount, AuditEntry, PayrollRun, Reimbursement,
@@ -135,7 +136,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             start: "10:00",
             end: "18:30",
             breakMinutes: 60,
-            graceMinutes: 15,
+            graceMinutes: 10,
             weeklyOffs: ["Sunday"],
             minFullDayHours: 7.5,
             minHalfDayHours: 4,
@@ -143,23 +144,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             branches: ["Hyderabad", "Warangal", "Vijayawada", "Visakhapatnam"],
             overnight: false,
           };
-          // Enforce only General Shift across the system
+          // Enforce General Shift & official GVK Leave Policies
           parsed.data.shifts = [generalShift];
+          parsed.data.leavePolicies = GVK_LEAVE_POLICIES;
 
           if (Array.isArray(parsed.data.attendance)) {
             parsed.data.attendance = parsed.data.attendance.map((rec: any) => {
-              const recShift = generalShift;
               const updatedRec = { ...rec, shiftId: "SH-GEN" };
               if (rec.checkIn && !["Leave", "Absent", "Holiday", "Week Off"].includes(rec.status)) {
-                const inMins = parseTimeToMinutes(rec.checkIn);
-                const shiftStartMins = parseTimeToMinutes(recShift.start);
-                if (inMins !== null && shiftStartMins !== null) {
-                  const grace = recShift.graceMinutes ?? 15;
-                  const isLate = inMins > shiftStartMins + grace;
-                  const lateMinutes = isLate ? inMins - shiftStartMins : 0;
-                  const status = isLate ? "Late" : (rec.status === "Late" ? "Present" : rec.status);
-                  return { ...updatedRec, lateMinutes, status };
-                }
+                const cls = classifyLoginTime(rec.checkIn);
+                return { ...updatedRec, lateMinutes: cls.lateMinutes, status: cls.status };
               }
               return updatedRec;
             });
@@ -248,9 +242,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               updatedBalances = {
                 ...updatedBalances,
                 [b.employeeId]: {
-                  "Casual Leave": b.casualLeave?.remaining ?? 12,
+                  "Casual Leave": b.casualLeave?.remaining ?? 10,
                   "Sick Leave": b.sickLeave?.remaining ?? 10,
-                  "Comp-Off": b.compOff?.remaining ?? 2,
+                  "Comp-Off": b.compOff?.remaining ?? 0,
                 },
               };
             }
@@ -779,7 +773,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           let updatedAttendance = d.attendance;
           if (targetShift && (patch.start !== undefined || patch.end !== undefined || patch.graceMinutes !== undefined)) {
             const shiftStartMins = parseTimeToMinutes(targetShift.start);
-            const grace = targetShift.graceMinutes ?? 15;
+            const grace = targetShift.graceMinutes ?? 10;
 
             if (shiftStartMins !== null) {
               updatedAttendance = d.attendance.map((rec) => {
@@ -793,9 +787,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
                 const checkInMins = parseTimeToMinutes(rec.checkIn);
                 if (checkInMins === null) return rec;
-                const isLate = checkInMins > shiftStartMins + grace;
-                const lateMinutes = isLate ? checkInMins - shiftStartMins : 0;
-                const status = isLate ? "Late" : (rec.status === "Late" ? "Present" : rec.status);
+                const isHalfDay = checkInMins > 12 * 60;
+                const isLate = !isHalfDay && checkInMins > shiftStartMins + grace;
+                const lateMinutes = checkInMins > shiftStartMins ? checkInMins - shiftStartMins : 0;
+                const status = isHalfDay ? "Half Day" : isLate ? "Late" : "Present";
 
                 return {
                   ...rec,

@@ -117,9 +117,9 @@ const LeaveBalanceSchema = new Schema<ILeaveBalance>({
   employeeId: { type: String, required: true, unique: true, index: true },
   year: { type: Number, default: new Date().getFullYear() },
   casualLeave: {
-    total: { type: Number, default: 12 },
+    total: { type: Number, default: 10 },
     used: { type: Number, default: 0 },
-    remaining: { type: Number, default: 12 },
+    remaining: { type: Number, default: 10 },
   },
   sickLeave: {
     total: { type: Number, default: 10 },
@@ -127,9 +127,9 @@ const LeaveBalanceSchema = new Schema<ILeaveBalance>({
     remaining: { type: Number, default: 10 },
   },
   compOff: {
-    total: { type: Number, default: 2 },
+    total: { type: Number, default: 0 },
     used: { type: Number, default: 0 },
-    remaining: { type: Number, default: 2 },
+    remaining: { type: Number, default: 0 },
   },
 });
 

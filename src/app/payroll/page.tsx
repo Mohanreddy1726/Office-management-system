@@ -11,6 +11,7 @@ import { Person, useScope, useNames, Sel } from "@/components/form-bits";
 import type { Employee, PayrollRun, SalaryStructure } from "@/lib/data/types";
 import { inr, fmtDate } from "@/lib/format";
 import { payslipFor, PayslipBreakdown } from "@/lib/payroll";
+import { evaluateMonthlyAttendancePolicy, GVK_POLICY } from "@/lib/policies";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -81,6 +82,7 @@ interface LopOverride {
   employeeId: string;
   unpaidDays: number;
   reason: string;
+  allowOver15?: boolean;
   status: "Calculated" | "Adjusted" | "Confirmed";
 }
 
@@ -126,7 +128,24 @@ export default function PayrollPage() {
   const [payrunMode, setPayrunMode] = useState<"dashboard" | "wizard">("dashboard");
 
   // State for active period
-  const activePeriod = CURRENT_PERIOD; // "2026-10"
+  const activePeriod = useMemo(() => {
+    try {
+      return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }).slice(0, 7);
+    } catch {
+      return CURRENT_PERIOD;
+    }
+  }, []);
+  const activePeriodLabel = useMemo(() => {
+    try {
+      return new Date(activePeriod + "-01T00:00:00Z").toLocaleDateString("en-IN", {
+        month: "long",
+        year: "numeric",
+        timeZone: "UTC",
+      });
+    } catch {
+      return activePeriod;
+    }
+  }, [activePeriod]);
   const currentRun = data.payrollRuns.find((p) => p.period === activePeriod);
 
   // 1. Verified Structures Tracking (Set of employee IDs whose structure is verified)
@@ -169,7 +188,7 @@ export default function PayrollPage() {
     });
   }, [eligible, q]);
 
-  // Calculations per employee
+  // Calculations per employee (including automatic policy-driven LOP & Comp-Off encashment)
   const payrollItems = useMemo(() => {
     return eligible.map((e) => {
       const empIncentives = incentives.filter((i) => i.employeeId === e.id);
@@ -178,8 +197,26 @@ export default function PayrollPage() {
       const empDeductions = miscDeductions.filter((d) => d.employeeId === e.id);
       const totalMiscDed = empDeductions.reduce((s, d) => s + d.amount, 0);
 
-      const unpaidDays = lopRecords[e.id]?.unpaidDays ?? 0;
-      const breakdown = payslipFor(e, data.salaryStructures, unpaidDays, totalIncentives, totalMiscDed);
+      const policySummary = evaluateMonthlyAttendancePolicy(
+        e.id,
+        activePeriod,
+        data.attendance,
+        data.leaves,
+        e,
+        data.holidays
+      );
+
+      const override = lopRecords[e.id];
+      const unpaidDays = override ? override.unpaidDays : policySummary.cappedLopDays;
+      const allowOver15DaysLop = Boolean(override?.allowOver15);
+      const breakdown = payslipFor(
+        e,
+        data.salaryStructures,
+        unpaidDays,
+        totalIncentives,
+        totalMiscDed,
+        { allowOver15DaysLop }
+      );
       const bank = getBankDetails(e);
 
       return {
@@ -190,11 +227,12 @@ export default function PayrollPage() {
         deductions: empDeductions,
         totalMiscDed,
         unpaidDays,
+        policySummary,
         breakdown,
         isVerified: verifiedIds.has(e.id),
       };
     });
-  }, [eligible, incentives, miscDeductions, lopRecords, verifiedIds, data.salaryStructures]);
+  }, [eligible, incentives, miscDeductions, lopRecords, verifiedIds, data.salaryStructures, data.attendance, data.leaves, data.holidays, activePeriod]);
 
   // Aggregate metrics
   const totalBaseGross = payrollItems.reduce((s, p) => s + p.employee.monthlyGross, 0);
@@ -300,9 +338,9 @@ export default function PayrollPage() {
           <div className="rounded-2xl border border-border/80 bg-card p-6 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="font-semibold text-foreground text-base">October 2026 Salary Statement</h3>
+                <h3 className="font-semibold text-foreground text-base">{activePeriodLabel} Salary Statement</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Verified salary calculation with zero PF/ESI deductions
+                  Gross-based LOP (max {GVK_POLICY.maxMonthlyLopDays} days/mo) · Zero PF/ESI · Annual salary/bonus discussions in {GVK_POLICY.salaryDiscussionMonth} only
                 </p>
               </div>
               {self && (
@@ -1323,7 +1361,7 @@ export default function PayrollPage() {
                   Loss of Pay (LOP) Review & Unpaid Absence Reconciliation
                 </h4>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Calculated automatically: <code className="bg-muted px-1.5 py-0.5 rounded text-[11px]">Daily Rate = Monthly Gross / 30</code>. HR can adjust days or waive LOP before final payout.
+                  Calculated on Gross Salary (<code className="bg-muted px-1.5 py-0.5 rounded text-[11px]">Monthly Gross / 30</code>) from absences, post-12 PM half-days, 3 late logins/mo, and excess leaves. Capped at {GVK_POLICY.maxMonthlyLopDays} days except maternity/medical emergency.
                 </p>
               </div>
 
@@ -1422,9 +1460,10 @@ export default function PayrollPage() {
                         </div>
                       </div>
 
-                      {lopRecords[e.id]?.reason && (
+                      {(lopRecords[e.id]?.reason || p.policySummary.breakdownText !== "No LOP deductions") && (
                         <p className="mt-3 text-[11px] text-muted-foreground italic bg-muted/20 p-2 rounded">
-                          Note: "{lopRecords[e.id].reason}"
+                          {lopRecords[e.id]?.reason ? `Note: "${lopRecords[e.id].reason}"` : `Policy auto-calc: ${p.policySummary.breakdownText}`}
+                          {p.policySummary.isLopCapped && !lopRecords[e.id]?.allowOver15 ? " (Capped at 15d)" : ""}
                         </p>
                       )}
                     </div>
@@ -1881,18 +1920,21 @@ export default function PayrollPage() {
                   const form = e.target as HTMLFormElement;
                   const days = parseFloat((form.elements.namedItem("days") as HTMLInputElement).value) || 0;
                   const reason = (form.elements.namedItem("reason") as HTMLTextAreaElement).value;
+                  const allowOver15 = (form.elements.namedItem("allowOver15") as HTMLInputElement)?.checked || false;
+                  const appliedDays = allowOver15 ? days : Math.min(GVK_POLICY.maxMonthlyLopDays, days);
 
                   setLopRecords((prev) => ({
                     ...prev,
                     [adjustLopOpen.id]: {
                       employeeId: adjustLopOpen.id,
-                      unpaidDays: days,
+                      unpaidDays: appliedDays,
                       reason,
+                      allowOver15,
                       status: "Adjusted",
                     },
                   }));
 
-                  toast.success(`LOP days updated to ${days} days for ${adjustLopOpen.name}`);
+                  toast.success(`LOP days updated to ${appliedDays} days for ${adjustLopOpen.name}`);
                   setAdjustLopOpen(null);
                 }}
                 className="space-y-4 pt-2"
@@ -1916,14 +1958,31 @@ export default function PayrollPage() {
                     step="0.5"
                     min="0"
                     max="30"
-                    defaultValue={lopRecords[adjustLopOpen.id]?.unpaidDays ?? 0}
+                    defaultValue={
+                      lopRecords[adjustLopOpen.id]?.unpaidDays ??
+                      payrollItems.find((p) => p.employee.id === adjustLopOpen.id)?.unpaidDays ??
+                      0
+                    }
                     className="h-9 text-xs"
                     required
                   />
                   <span className="text-[11px] text-muted-foreground mt-1 block">
-                    Enter 0 to completely waive LOP for this employee.
+                    Enter 0 to waive LOP. Policy caps LOP at {GVK_POLICY.maxMonthlyLopDays} days unless exception applies.
                   </span>
                 </div>
+
+                <label className="flex items-start gap-2 rounded-lg border border-border bg-muted/20 p-2.5 text-[11px] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    name="allowOver15"
+                    defaultChecked={Boolean(lopRecords[adjustLopOpen.id]?.allowOver15)}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    <strong className="text-foreground block">Maternity / Personal Medical Emergency Exception</strong>
+                    <span className="text-muted-foreground">Allow LOP to exceed {GVK_POLICY.maxMonthlyLopDays} days (management discretion).</span>
+                  </span>
+                </label>
 
                 <div>
                   <label className="text-xs font-semibold text-foreground mb-1 block">HR Adjustment Justification</label>
@@ -1954,7 +2013,7 @@ export default function PayrollPage() {
         <ConfirmDialog
           open={lockConfirmOpen}
           onOpenChange={setLockConfirmOpen}
-          title="Authorize & Lock October 2026 Bank Transfer?"
+          title={`Authorize & Lock ${activePeriodLabel} Bank Transfer?`}
           description={`This will finalize the net payout of ${inr(totalNetPayout)} across ${eligible.length} employees and record the transaction in the company audit log.`}
           confirmLabel="Authorize & Record Transfer"
           onConfirm={() => {

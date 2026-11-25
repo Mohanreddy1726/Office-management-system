@@ -2,6 +2,7 @@ import { Attendance } from "@/models/Attendance";
 import { BiometricMapping, BiometricDevice, UnmappedPunch } from "@/models/Biometric";
 import { Employee } from "@/models/Employee";
 import ZKLib from "node-zklib";
+import { classifyLoginTime } from "@/lib/policies";
 
 export function getISTDateComponents(date: Date) {
   const dateStr = date.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }); // YYYY-MM-DD
@@ -91,10 +92,8 @@ export async function reconcileEmployeePunches(
       totalHours = Math.round((diffMs / (1000 * 60 * 60)) * 10) / 10;
     }
 
-    const firstMinutes = firstComp.hour24 * 60 + firstComp.minute;
-    // General Shift starts at 10:00 AM with 15 mins grace period (10:15 AM)
-    const isLate = firstMinutes > (10 * 60 + 15);
-    let status = isLate ? "Late" : "Present";
+    const loginClass = classifyLoginTime(checkInTime);
+    let status = loginClass.status === "Half Day" ? "Half-day" : loginClass.status;
     if (totalHours > 0 && totalHours < 4.5 && hasMultiplePunches) {
       status = "Half-day";
     }
@@ -190,10 +189,8 @@ export async function reconcileAllActiveMappings(): Promise<{ processedPunches: 
       totalHours = Math.round((diffMs / (1000 * 60 * 60)) * 10) / 10;
     }
 
-    const firstMinutes = firstComp.hour24 * 60 + firstComp.minute;
-    // General Shift starts at 10:00 AM with 15 mins grace period (10:15 AM)
-    const isLate = firstMinutes > (10 * 60 + 15);
-    let status = isLate ? "Late" : "Present";
+    const loginClass = classifyLoginTime(checkInTime);
+    let status = loginClass.status === "Half Day" ? "Half-day" : loginClass.status;
     if (totalHours > 0 && totalHours < 4.5 && hasMultiplePunches) {
       status = "Half-day";
     }
@@ -309,10 +306,8 @@ export async function syncLiveBiometricHardware(
         totalHours = Math.round((diffMs / (1000 * 60 * 60)) * 10) / 10;
       }
 
-      const firstMinutes = firstComp.hour24 * 60 + firstComp.minute;
-      // General Shift starts at 10:00 AM with 15 mins grace period (10:15 AM)
-      const isLate = firstMinutes > (10 * 60 + 15);
-      let status = isLate ? "Late" : "Present";
+      const loginClass = classifyLoginTime(checkInTime);
+      let status = loginClass.status === "Half Day" ? "Half-day" : loginClass.status;
       if (totalHours > 0 && totalHours < 4.5 && hasMultiplePunches) {
         status = "Half-day";
       }

@@ -7,6 +7,7 @@ import type {
   ReviewCycle, Review, OnboardingTask, Joiner, Resignation, FormerEmployee, UserAccount,
   PermissionMatrix, AuditEntry, Employee, Branch, Role, PermissionAction,
 } from "./types";
+import { GVK_LEAVE_POLICIES } from "@/lib/policies";
 
 export const TODAY = "2026-11-09";
 export const CURRENT_PERIOD = "2026-11";
@@ -76,7 +77,7 @@ export const DEMO_EMPLOYEES = {
 
 function buildShifts(): Shift[] {
   return [
-    { id: "SH-GEN", name: "General Shift", start: "10:00", end: "18:30", breakMinutes: 60, graceMinutes: 15, weeklyOffs: ["Sunday"], minFullDayHours: 7.5, minHalfDayHours: 4, overtimeEligible: false, branches: ["Hyderabad", "Warangal", "Vijayawada", "Visakhapatnam"], overnight: false },
+    { id: "SH-GEN", name: "General Shift", start: "10:00", end: "18:30", breakMinutes: 60, graceMinutes: 10, weeklyOffs: ["Sunday"], minFullDayHours: 7.5, minHalfDayHours: 4, overtimeEligible: false, branches: ["Hyderabad", "Warangal", "Vijayawada", "Visakhapatnam"], overnight: false },
   ];
 }
 
@@ -189,29 +190,33 @@ function buildLeaves(): LeaveRequest[] {
   ];
 }
 
-const LEAVE_POLICIES: LeavePolicy[] = [
-  { id: "LP-1", type: "Casual Leave", annualEntitlement: 12, accrual: "Monthly credit (1 day/month)", carryForwardCap: 5, expiry: "Carry-forward lapses Mar 31", halfDayEligible: true, negativeBalance: false, eligibility: "All full-time employees" },
-  { id: "LP-2", type: "Sick Leave", annualEntitlement: 10, accrual: "Annual grant (credited Jan 1)", carryForwardCap: 0, expiry: "No carry-forward", halfDayEligible: true, negativeBalance: false, eligibility: "All full-time employees" },
-  { id: "LP-3", type: "Comp-Off", annualEntitlement: 0, accrual: "Per approved weekend/holiday work", carryForwardCap: 6, expiry: "90 days from accrual", halfDayEligible: false, negativeBalance: false, eligibility: "Employees with approved holiday work" },
-];
+const LEAVE_POLICIES: LeavePolicy[] = GVK_LEAVE_POLICIES;
 
 function buildLeaveBalances(): Record<string, Record<string, number>> {
   const out: Record<string, Record<string, number>> = {};
   for (const e of EMPLOYEES) {
     out[e.id] = {
-      "Casual Leave": rint(3, 12),
+      "Casual Leave": rint(3, 10),
       "Sick Leave": rint(4, 10),
-      "Comp-Off": rint(0, 3),
+      "Comp-Off": rint(0, 2),
     };
   }
   return out;
 }
 
 const HOLIDAYS: Holiday[] = [
-  { id: "H-1", name: "Gandhi Jayanti", date: "2026-10-02", branches: "All" },
-  { id: "H-2", name: "Diwali", date: "2026-11-08", branches: "All" },
-  { id: "H-3", name: "Christmas", date: "2026-12-25", branches: "All" },
-  { id: "H-4", name: "Sankranti", date: "2027-01-14", branches: ["Hyderabad", "Warangal", "Vijayawada", "Visakhapatnam"] },
+  { id: "H-1", name: "Sankranti / Pongal", date: "2026-01-14", branches: "All" },
+  { id: "H-2", name: "Republic Day", date: "2026-01-26", branches: "All" },
+  { id: "H-3", name: "Maha Shivaratri", date: "2026-02-15", branches: "All" },
+  { id: "H-4", name: "Holi", date: "2026-03-04", branches: "All" },
+  { id: "H-5", name: "Ugadi", date: "2026-03-19", branches: ["Hyderabad", "Warangal", "Vijayawada", "Visakhapatnam"] },
+  { id: "H-6", name: "Good Friday", date: "2026-04-03", branches: "All" },
+  { id: "H-7", name: "Independence Day", date: "2026-08-15", branches: "All" },
+  { id: "H-8", name: "Ganesh Chaturthi", date: "2026-09-14", branches: "All" },
+  { id: "H-9", name: "Gandhi Jayanti", date: "2026-10-02", branches: "All" },
+  { id: "H-10", name: "Dussehra (Vijaya Dashami)", date: "2026-10-20", branches: "All" },
+  { id: "H-11", name: "Diwali", date: "2026-11-08", branches: "All" },
+  { id: "H-12", name: "Christmas", date: "2026-12-25", branches: "All" },
 ];
 
 const DEVICES: BiometricDevice[] = [

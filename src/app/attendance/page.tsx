@@ -8,6 +8,7 @@ import { DataTable, exportCsv, type Column } from "@/components/data-table";
 import { Sel, Person, useScope, useNames } from "@/components/form-bits";
 import { BRANCHES, type Branch, type AttendanceRecord, type AttendanceCorrection, type Shift, type Holiday } from "@/lib/data/types";
 import { fmtDate, attColor, initials, avatarColor } from "@/lib/format";
+import { GVK_POLICY } from "@/lib/policies";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -1634,7 +1635,7 @@ function ShiftsAndHolidaysView({
               <div className="mt-3 grid grid-cols-3 gap-2 border-t border-slate-100 pt-3 text-xs dark:border-slate-800">
                 <div>
                   <span className="text-muted-foreground text-[10px] uppercase">Grace Period</span>
-                  <p className="font-semibold text-foreground">{shift.graceMinutes} mins</p>
+                  <p className="font-semibold text-foreground">{shift.graceMinutes} mins (3/mo)</p>
                 </div>
                 <div>
                   <span className="text-muted-foreground text-[10px] uppercase">Meal Break</span>
@@ -1647,6 +1648,20 @@ function ShiftsAndHolidaysView({
               </div>
             </div>
           ))}
+
+          {/* Official GVK Login & Late Policy Card */}
+          <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 shadow-xs space-y-2">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-primary">
+              Official Login, Late &amp; LOP Policy ({GVK_POLICY.shiftLabel})
+            </h4>
+            <ul className="space-y-1 text-xs text-muted-foreground list-disc pl-4">
+              <li><strong className="text-foreground">10-Minute Grace:</strong> Up to 10:10 AM accepted for {GVK_POLICY.graceMonthlyLimit} logins per month.</li>
+              <li><strong className="text-foreground">Up to 12:00 Noon:</strong> Considered a Late Login (3 late logins in a month = Loss of Pay).</li>
+              <li><strong className="text-foreground">After 12:00 Noon:</strong> Half-day salary cut (0.5 day LOP).</li>
+              <li><strong className="text-foreground">Holiday Work:</strong> Prior-approved work on Sunday/Holiday earns Comp-Off or 1-day Gross Salary encashment.</li>
+              <li><strong className="text-foreground">5-Day Rule &amp; LOP Cap:</strong> 5 consecutive absent days without permission = abandonment; LOP max {GVK_POLICY.maxMonthlyLopDays} days/month (except maternity/medical emergency).</li>
+            </ul>
+          </div>
         </div>
       </div>
 

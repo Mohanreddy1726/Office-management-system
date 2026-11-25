@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { inr, fmtDate, tenure } from "@/lib/format";
 import { payslipFor } from "@/lib/payroll";
+import { classifyLoginTime, evaluateMonthlyAttendancePolicy, GVK_POLICY } from "@/lib/policies";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar,
   PieChart, Pie, Cell, Legend, AreaChart, Area,
@@ -769,6 +770,24 @@ function EmployeeDashboard({ me }: { me: any }) {
   const workingDays = month.filter((a) => !["Week Off", "Holiday"].includes(a.status)).length;
   const attendanceRate = workingDays > 0 ? Math.round((counts.present / workingDays) * 100) : 0;
 
+  const policySummary = useMemo(
+    () =>
+      evaluateMonthlyAttendancePolicy(
+        me.id,
+        activePeriod,
+        data.attendance,
+        data.leaves,
+        me,
+        data.holidays
+      ),
+    [me, activePeriod, data.attendance, data.leaves, data.holidays]
+  );
+
+  const todayLoginClass = useMemo(
+    () => (todayRec?.checkIn ? classifyLoginTime(todayRec.checkIn, Math.max(0, policySummary.graceUsed - 1)) : null),
+    [todayRec?.checkIn, policySummary.graceUsed]
+  );
+
   const balances = data.leaveBalances[me.id] ?? {};
   const leaveBalanceEntries = Object.entries(balances).filter(([, v]) => (v as number) > 0);
   const totalLeaveDays = leaveBalanceEntries.reduce((sum, [, v]) => sum + (Number(v) || 0), 0);
@@ -778,7 +797,7 @@ function EmployeeDashboard({ me }: { me: any }) {
   const latestRun = data.payrollRuns
     .filter((r) => r.status === "Payment Recorded")
     .sort((a, b) => b.period.localeCompare(a.period))[0];
-  const slip = latestRun ? payslipFor(me, data.salaryStructures) : null;
+  const slip = latestRun ? payslipFor(me, data.salaryStructures, policySummary.cappedLopDays) : null;
   const myAssets = data.assets.filter((a) => a.assignedTo === me.id);
   const myDocs = data.documents.filter((d) => d.ownerId === me.id && d.status !== "Verified");
   const unreadNotifs = data.notifications.filter((n) => !n.read);
@@ -956,17 +975,21 @@ function EmployeeDashboard({ me }: { me: any }) {
                 <p className="mt-0.5 text-xl font-bold tracking-tight text-foreground">
                   {todayRec?.status ?? "Awaiting Punch"}
                 </p>
-                {todayRec?.lateMinutes ? (
-                  <p className="mt-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400">
-                    Late by {todayRec.lateMinutes} mins
-                  </p>
-                ) : todayRec?.checkIn ? (
-                  <p className="mt-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                    Synced from biometric scanner
+                {todayLoginClass && todayRec?.checkIn ? (
+                  <p
+                    className={`mt-0.5 text-[11px] font-medium ${
+                      todayLoginClass.tier === "half_day"
+                        ? "text-rose-600 dark:text-rose-400"
+                        : todayLoginClass.tier === "late"
+                        ? "text-amber-600 dark:text-amber-400"
+                        : "text-emerald-600 dark:text-emerald-400"
+                    }`}
+                  >
+                    {todayLoginClass.label}
                   </p>
                 ) : (
                   <p className="mt-0.5 text-[11px] text-muted-foreground">
-                    Auto-synced from office biometric device
+                    10:00 AM – 6:30 PM · 10 min grace ({policySummary.graceUsed}/{GVK_POLICY.graceMonthlyLimit} used)
                   </p>
                 )}
               </div>
@@ -1060,6 +1083,45 @@ function EmployeeDashboard({ me }: { me: any }) {
               </div>
               <Progress value={attendanceRate} className="h-2" />
             </div>
+
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 text-[11px]">
+              <div className="rounded-xl border border-border/60 bg-background/60 px-2.5 py-2">
+                <span className="text-muted-foreground block">10m Grace Used</span>
+                <span className="font-bold text-foreground">
+                  {policySummary.graceUsed}/{GVK_POLICY.graceMonthlyLimit} this mo
+                </span>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-background/60 px-2.5 py-2">
+                <span className="text-muted-foreground block">Late (to 12 PM)</span>
+                <span className="font-bold text-amber-600 dark:text-amber-400">
+                  {policySummary.lateLogins} (3 = LOP)
+                </span>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-background/60 px-2.5 py-2">
+                <span className="text-muted-foreground block">After 12 PM Cut</span>
+                <span className="font-bold text-rose-600 dark:text-rose-400">
+                  {policySummary.halfDayAfterNoonCount} half-day
+                </span>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-background/60 px-2.5 py-2">
+                <span className="text-muted-foreground block">Est. Policy LOP</span>
+                <span
+                  className={`font-bold ${
+                    policySummary.cappedLopDays > 0
+                      ? "text-rose-600 dark:text-rose-400"
+                      : "text-emerald-600 dark:text-emerald-400"
+                  }`}
+                >
+                  {policySummary.cappedLopDays}d {policySummary.isLopCapped ? "(15d cap)" : ""}
+                </span>
+              </div>
+            </div>
+
+            {policySummary.abandonmentRisk && (
+              <div className="rounded-xl border border-rose-300 bg-rose-50 px-3 py-2 text-[11px] text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200">
+                <strong>Policy Alert:</strong> {policySummary.consecutiveAbsentMax} consecutive unapproved absent days recorded. 5+ consecutive days without permission/overstay is treated as abandonment.
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -1095,6 +1157,9 @@ function EmployeeDashboard({ me }: { me: any }) {
             >
               Apply for Leave
             </Button>
+            <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground text-center">
+              Max 1 leave/month · No carry-forward · Apply ≥1 day in advance
+            </p>
           </CardContent>
         </Card>
 

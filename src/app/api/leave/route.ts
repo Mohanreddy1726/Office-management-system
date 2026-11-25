@@ -6,6 +6,7 @@ import { Employee } from "@/models/Employee";
 import { AuditLog } from "@/models/AuditLog";
 import { getCurrentUser } from "@/lib/auth";
 import { getMockStore } from "@/lib/mock-db";
+import { validateLeavePolicyRequest } from "@/lib/policies";
 
 export const dynamic = "force-dynamic";
 
@@ -142,6 +143,42 @@ export async function POST(req: NextRequest) {
       const empDept = emp?.department || "Operations";
       const empBranch = emp?.branch || "Headquarters";
 
+      const targetMonth = startDate.slice(0, 7);
+      const existingMonthLeaves = await LeaveRequest.find({
+        employeeId: applicantId,
+        startDate: { $regex: `^${targetMonth}` },
+      });
+
+      const policyCheck = validateLeavePolicyRequest({
+        startDate,
+        days,
+        type: leaveType,
+        reasonCategory: body.reasonCategory || reason,
+        joiningDate: emp?.joiningDate,
+        existingLeaves: existingMonthLeaves.map((l: any) => ({
+          id: l._id.toString(),
+          employeeId: l.employeeId,
+          type: (l.leaveType || l.type || "Casual Leave") as any,
+          startDate: l.startDate,
+          endDate: l.endDate,
+          days: l.daysCount || l.days || 1,
+          reason: l.reason || "",
+          status: l.status,
+          timeline: [],
+        })),
+        employeeId: applicantId,
+      });
+
+      const isAdminOverride = role === "super_admin" || role === "hr_admin";
+      if (policyCheck.blockingError && !isAdminOverride) {
+        return NextResponse.json({ error: policyCheck.blockingError }, { status: 400 });
+      }
+
+      const policyNote =
+        policyCheck.warnings.length > 0
+          ? `Policy note: ${policyCheck.warnings.join(" ")}`
+          : "Application submitted for review";
+
       const leave = await LeaveRequest.create({
         employeeId: applicantId,
         employeeName: empName,
@@ -166,7 +203,7 @@ export async function POST(req: NextRequest) {
             stage: "Submitted",
             actor: empName,
             at: new Date(),
-            note: "Application submitted for review",
+            note: policyNote,
           },
         ],
       });
@@ -317,8 +354,9 @@ export async function PATCH(req: NextRequest) {
                 ? "sickLeave"
                 : "compOff";
             if (bal[key]) {
+              const defaultTotal = key === "compOff" ? 0 : 10;
               bal[key].used = (bal[key].used || 0) + (leave.daysCount || leave.days || 1);
-              bal[key].remaining = Math.max(0, (bal[key].total || 12) - bal[key].used);
+              bal[key].remaining = Math.max(0, (bal[key].total ?? defaultTotal) - bal[key].used);
               await bal.save();
             }
           }

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/data/store";
-import { TODAY } from "@/lib/data/seed";
+import { GVK_POLICY, validateLeavePolicyRequest } from "@/lib/policies";
 import { PageHeader, KpiCard, StatusBadge, TabsShell, Field, Timeline, EmployeeAvatar } from "@/components/shared";
 import { DataTable, exportCsv, type Column } from "@/components/data-table";
 import { Person, Sel, useScope, useNames } from "@/components/form-bits";
@@ -93,17 +93,25 @@ export default function LeavePage() {
     });
   }, [scopedLeaves, typeFilter, statusFilter, searchQuery, data.employees]);
 
+  const todayIso = useMemo(() => {
+    try {
+      return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    } catch {
+      return new Date().toISOString().slice(0, 10);
+    }
+  }, []);
+
   // Current user's balance
   const myBalances = data.leaveBalances[uid] ?? {
-    "Casual Leave": 12,
+    "Casual Leave": 10,
     "Sick Leave": 10,
-    "Comp-Off": 2,
+    "Comp-Off": 0,
   };
 
   // Staff currently on approved leave today
   const onLeaveToday = useMemo(() => {
-    return scopedLeaves.filter((l) => l.status === "Approved" && l.startDate <= TODAY && l.endDate >= TODAY);
-  }, [scopedLeaves]);
+    return scopedLeaves.filter((l) => l.status === "Approved" && l.startDate <= todayIso && l.endDate >= todayIso);
+  }, [scopedLeaves, todayIso]);
 
   // Table Columns
   const tableColumns: Column<LeaveRequest>[] = [
@@ -673,7 +681,7 @@ export default function LeavePage() {
                   <BalanceMetricCard
                     type="Casual Leave"
                     available={myBalances["Casual Leave"] ?? 0}
-                    total={12}
+                    total={10}
                     color="amber"
                   />
                   <BalanceMetricCard
@@ -760,10 +768,51 @@ export default function LeavePage() {
 
           {/* TAB 5: LEAVE POLICIES */}
           {tab === "policies" && (
-            <div className="space-y-4">
+            <div className="space-y-5">
               <div>
-                <h3 className="text-base font-semibold text-foreground">Company Leave & Time-Off Policies</h3>
-                <p className="text-xs text-muted-foreground">Standard annual quotas, carry-forward caps, and rules.</p>
+                <h3 className="text-base font-semibold text-foreground">GVK Edutech Holidays, Leaves &amp; Login Policies</h3>
+                <p className="text-xs text-muted-foreground">Official employment terms from Annexure A, B &amp; C.</p>
+              </div>
+
+              {/* Official Policy Rules Matrix */}
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <div className="rounded-2xl border border-border bg-card p-5 shadow-sm space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-semibold text-sm text-foreground">Holidays &amp; Monthly Off</h4>
+                    <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary">12 Public / Yr</span>
+                  </div>
+                  <ul className="space-y-1.5 text-xs text-muted-foreground list-disc pl-4">
+                    <li><strong className="text-foreground">{GVK_POLICY.publicHolidaysPerYear} public holidays</strong> granted per calendar year (location-based).</li>
+                    <li><strong className="text-foreground">{GVK_POLICY.monthlyHolidaysPerMonth} monthly day off</strong> per month apart from Sundays &amp; public holidays, sanctioned by Regional Director / Operations Head.</li>
+                  </ul>
+                </div>
+
+                <div className="rounded-2xl border border-border bg-card p-5 shadow-sm space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-semibold text-sm text-foreground">Leave Quota &amp; Procedure</h4>
+                    <span className="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300">No Carry Forward</span>
+                  </div>
+                  <ul className="space-y-1.5 text-xs text-muted-foreground list-disc pl-4">
+                    <li><strong className="text-foreground">1st Year:</strong> Max 1 leave/month. Extra leaves = Loss of Pay (LOP).</li>
+                    <li><strong className="text-foreground">After Confirmation:</strong> 10 leaves / 12 months (max 1/month for first 11 months; balance in 12th month or encashed).</li>
+                    <li><strong className="text-foreground">1-Day Advance Approval:</strong> Required by RD / Operations Head (except accident/demise). Unsanctioned = LOP &amp; breach.</li>
+                    <li><strong className="text-foreground">5 Consecutive Days Absence:</strong> Unapproved absence or overstay = deemed abandonment.</li>
+                  </ul>
+                </div>
+
+                <div className="rounded-2xl border border-border bg-card p-5 shadow-sm space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-semibold text-sm text-foreground">Login, Late &amp; LOP Policy</h4>
+                    <span className="rounded-full bg-rose-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-rose-700 dark:text-rose-300">{GVK_POLICY.shiftLabel}</span>
+                  </div>
+                  <ul className="space-y-1.5 text-xs text-muted-foreground list-disc pl-4">
+                    <li><strong className="text-foreground">Grace Time:</strong> Up to 10 mins (10:10 AM) for 3 logins/month.</li>
+                    <li><strong className="text-foreground">10:11 AM – 12:00 PM:</strong> Considered a late login.</li>
+                    <li><strong className="text-foreground">After 12:00 noon:</strong> Half-day salary cut.</li>
+                    <li><strong className="text-foreground">3 Late Logins / Month:</strong> Results in Loss of Pay (Gross Salary basis, max 15 days LOP except maternity/medical emergency).</li>
+                    <li><strong className="text-foreground">Salary Discussions:</strong> Held only in <strong className="text-foreground">{GVK_POLICY.salaryDiscussionMonth}</strong>.</li>
+                  </ul>
+                </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -1101,17 +1150,17 @@ function BalanceMetricCard({
  * ========================================================================================= */
 function LeavePolicyCard({ policy }: { policy: LeavePolicy }) {
   return (
-    <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm dark:bg-card dark:border-border">
-      <div className="flex items-start justify-between">
-        <div>
+    <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm dark:bg-card dark:border-border flex flex-col justify-between">
+      <div>
+        <div className="flex items-start justify-between gap-2">
           <h4 className="font-semibold text-foreground text-sm">{policy.type}</h4>
-          <span className="mt-1 inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
-            {policy.annualEntitlement > 0 ? `${policy.annualEntitlement} Days / Year` : "As per approval"}
+          <span className="shrink-0 inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+            {policy.annualEntitlement > 0 ? `${policy.annualEntitlement} Days / 12 Mos` : "Approved Holiday Work"}
           </span>
         </div>
-        <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700 dark:bg-muted dark:text-muted-foreground">
+        <p className="mt-2 rounded-lg bg-slate-50 px-2.5 py-2 text-[11px] leading-relaxed text-slate-700 dark:bg-muted/40 dark:text-muted-foreground">
           {policy.accrual}
-        </span>
+        </p>
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 text-xs dark:border-slate-800">
@@ -1324,12 +1373,25 @@ function ApplyLeaveDialog({
   onOpenChange: (v: boolean) => void;
   onSubmit: (l: Omit<LeaveRequest, "id" | "timeline" | "status">) => void;
 }) {
-  const { data, session, deleteLeave } = useStore();
+  const { data } = useStore();
   const { uid, isEmployee, inScope } = useScope();
+
+  const defaultTomorrow = useMemo(() => {
+    try {
+      const istToday = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+      const d = new Date(istToday + "T00:00:00Z");
+      d.setUTCDate(d.getUTCDate() + 1);
+      return d.toISOString().slice(0, 10);
+    } catch {
+      const d = new Date(Date.now() + 86400000);
+      return d.toISOString().slice(0, 10);
+    }
+  }, []);
+
   const [applicant, setApplicant] = useState(uid);
   const [type, setType] = useState<string>("Casual Leave");
-  const [start, setStart] = useState("2026-10-28");
-  const [end, setEnd] = useState("2026-10-29");
+  const [start, setStart] = useState(defaultTomorrow);
+  const [end, setEnd] = useState(defaultTomorrow);
   const [isHalfDay, setIsHalfDay] = useState(false);
   const [halfSession, setHalfSession] = useState<"First Half" | "Second Half">("First Half");
   const [category, setCategory] = useState("Personal / Family");
@@ -1338,12 +1400,29 @@ function ApplyLeaveDialog({
   const [emergencyPhone, setEmergencyPhone] = useState("");
   const [docNote, setDocNote] = useState("");
 
+  const applicantEmp = data.employees.find((e) => e.id === applicant);
   const effectiveBalances = data.leaveBalances[applicant] ?? balances;
   const rawDays = Math.max(0, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 86400000) + 1);
   const days = isHalfDay ? 0.5 : rawDays;
   const balance = effectiveBalances[type];
-  const isOver = balance !== undefined && days > balance;
-  const valid = days > 0 && reason.trim().length >= 4 && !isOver;
+  const isOver = type === "Comp-Off" && balance !== undefined && days > balance;
+
+  const policyCheck = useMemo(
+    () =>
+      validateLeavePolicyRequest({
+        startDate: start,
+        days,
+        type,
+        reasonCategory: category,
+        joiningDate: applicantEmp?.joiningDate,
+        existingLeaves: data.leaves,
+        employeeId: applicant,
+      }),
+    [start, days, type, category, applicantEmp?.joiningDate, data.leaves, applicant]
+  );
+
+  const policyBlocked = Boolean(policyCheck.blockingError) && isEmployee;
+  const valid = days > 0 && reason.trim().length >= 4 && !isOver && !policyBlocked;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1433,10 +1512,11 @@ function ApplyLeaveDialog({
               onChange={setCategory}
               options={[
                 "Personal / Family",
+                "Accident / Medical Emergency",
+                "Bereavement / Demise",
                 "Medical / Sick Leave",
                 "Planned Vacation",
                 "Examination / Studies",
-                "Bereavement",
                 "Emergency",
                 "Other",
               ]}
@@ -1484,6 +1564,27 @@ function ApplyLeaveDialog({
               />
             </Field>
           </div>
+
+          {(policyCheck.blockingError || policyCheck.warnings.length > 0) && (
+            <div className="col-span-2 space-y-1.5">
+              {policyCheck.blockingError && (
+                <div className="rounded-xl border border-rose-300 bg-rose-50 px-3 py-2 text-[11px] text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200">
+                  <span className="font-semibold">Advance Notice Policy: </span>
+                  {policyCheck.blockingError}
+                </div>
+              )}
+              {!policyCheck.blockingError &&
+                policyCheck.warnings.map((w, idx) => (
+                  <div
+                    key={idx}
+                    className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+                  >
+                    <span className="font-semibold">Policy Notice: </span>
+                    {w}
+                  </div>
+                ))}
+            </div>
+          )}
         </div>
 
         <DialogFooter className="gap-2 pt-2 border-t border-border">
