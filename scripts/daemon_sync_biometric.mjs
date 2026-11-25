@@ -103,6 +103,18 @@ async function runSyncIteration() {
 
   if (punches.length === 0) return;
 
+  const empMaxDates = await Attendance.aggregate([
+    { $group: { _id: "$employeeId", maxDate: { $max: "$date" } } },
+  ]);
+  const empCutoffMap = new Map();
+  for (const row of empMaxDates) {
+    if (row._id && row.maxDate) {
+      const d = new Date(row.maxDate + "T00:00:00Z");
+      d.setUTCDate(d.getUTCDate() - 1);
+      empCutoffMap.set(row._id, d.toISOString().slice(0, 10));
+    }
+  }
+
   const groups = new Map();
   const unmappedGroups = new Map();
 
@@ -114,15 +126,14 @@ async function runSyncIteration() {
     const d = new Date(log.recordTime);
     if (isNaN(d.getTime()) || d.getFullYear() < 2020) continue;
 
+    const dateKey = d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
     const istStr = d.toLocaleString("en-US", { timeZone: "Asia/Kolkata" });
     const istDate = new Date(istStr);
-    const y = istDate.getFullYear();
-    const m = String(istDate.getMonth() + 1).padStart(2, "0");
-    const day = String(istDate.getDate()).padStart(2, "0");
-    const dateKey = `${y}-${m}-${day}`;
 
     const mapping = pinToMapping.get(pin);
     if (mapping) {
+      const cut = empCutoffMap.get(mapping.employeeId);
+      if (cut && dateKey < cut) continue;
       const key = `${dateKey}_${mapping.employeeId}`;
       if (!groups.has(key)) {
         groups.set(key, { date: dateKey, employeeId: mapping.employeeId, punches: [] });

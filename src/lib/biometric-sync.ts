@@ -267,7 +267,15 @@ export async function syncLiveBiometricHardware(
   overrideIp?: string,
   overridePort?: number,
   options?: { recentOnlyDays?: number; connectTimeoutMs?: number }
-): Promise<{ success: boolean; totalLogs: number; updatedRecords: number; userCount?: number; error?: string }> {
+): Promise<{
+  success: boolean;
+  totalLogs: number;
+  recentLogsChecked?: number;
+  skippedOldLogs?: number;
+  updatedRecords: number;
+  userCount?: number;
+  error?: string;
+}> {
   let targetIp = overrideIp || "192.168.29.201";
   let targetPort = overridePort || 4370;
   let commKey = 0;
@@ -303,12 +311,40 @@ export async function syncLiveBiometricHardware(
     const employees = await Employee.find({});
     const empMap = new Map(employees.map((e) => [e.employeeId, e]));
 
-    const cutoffIso = options?.recentOnlyDays
+    // Determine incremental watermark per mapped employee (keep 1-day overlap to catch evening check-outs)
+    const empMaxDates: Array<{ _id: string; maxDate: string }> = await Attendance.aggregate([
+      { $group: { _id: "$employeeId", maxDate: { $max: "$date" } } },
+    ]);
+    const empCutoffMap = new Map<string, string>();
+    for (const row of empMaxDates) {
+      if (row._id && row.maxDate) {
+        const d = new Date(row.maxDate + "T00:00:00Z");
+        d.setUTCDate(d.getUTCDate() - 1);
+        empCutoffMap.set(row._id, d.toISOString().slice(0, 10));
+      }
+    }
+
+    // Determine incremental watermark for unmapped punches (only store new/recent unmapped punches)
+    const latestUnmapped = await UnmappedPunch.findOne({})
+      .sort({ punchTime: -1 })
+      .select("punchTime")
+      .lean();
+    let unmappedCutoffIso: string | null = null;
+    if (latestUnmapped?.punchTime) {
+      const latestDateStr = getISTDateComponents(new Date(latestUnmapped.punchTime)).dateStr;
+      const d = new Date(latestDateStr + "T00:00:00Z");
+      d.setUTCDate(d.getUTCDate() - 1);
+      unmappedCutoffIso = d.toISOString().slice(0, 10);
+    }
+
+    const explicitCutoffIso = options?.recentOnlyDays
       ? getISTDateComponents(new Date(Date.now() - options.recentOnlyDays * 86400000)).dateStr
       : null;
 
     const groups = new Map<string, { employeeId: string; date: string; punches: Date[] }>();
     const unmappedGroups = new Map<string, { biometricId: string; date: string; punches: Date[] }>();
+    let recentLogsChecked = 0;
+    let skippedOldLogs = 0;
 
     for (const log of punches) {
       if (!log.deviceUserId || !log.recordTime) continue;
@@ -319,17 +355,31 @@ export async function syncLiveBiometricHardware(
       if (isNaN(d.getTime()) || d.getFullYear() < 2020) continue;
 
       const { dateStr } = getISTDateComponents(d);
-      if (cutoffIso && dateStr < cutoffIso) continue;
+      if (explicitCutoffIso && dateStr < explicitCutoffIso) {
+        skippedOldLogs++;
+        continue;
+      }
 
       const mapping = pinToMapping.get(pin);
 
       if (mapping) {
+        const empCutoff = empCutoffMap.get(mapping.employeeId);
+        if (empCutoff && dateStr < empCutoff) {
+          skippedOldLogs++;
+          continue;
+        }
+        recentLogsChecked++;
         const key = `${mapping.employeeId}_${dateStr}`;
         if (!groups.has(key)) {
           groups.set(key, { employeeId: mapping.employeeId, date: dateStr, punches: [] });
         }
         groups.get(key)!.punches.push(d);
       } else {
+        if (unmappedCutoffIso && dateStr < unmappedCutoffIso) {
+          skippedOldLogs++;
+          continue;
+        }
+        recentLogsChecked++;
         const unKey = `${pin}_${dateStr}`;
         if (!unmappedGroups.has(unKey)) {
           unmappedGroups.set(unKey, { biometricId: pin, date: dateStr, punches: [] });
@@ -337,6 +387,16 @@ export async function syncLiveBiometricHardware(
         unmappedGroups.get(unKey)!.punches.push(d);
       }
     }
+
+    // Fetch existing attendance docs for candidate dates so we only write records that are new or actually changed
+    const candidateDates = Array.from(new Set(Array.from(groups.values()).map((g) => g.date)));
+    const existingAttDocs =
+      candidateDates.length > 0
+        ? await Attendance.find({ date: { $in: candidateDates } }).lean()
+        : [];
+    const existingAttMap = new Map(
+      existingAttDocs.map((doc: any) => [`${doc.employeeId}_${doc.date}`, doc])
+    );
 
     const bulkOps: any[] = [];
     for (const item of groups.values()) {
@@ -359,6 +419,17 @@ export async function syncLiveBiometricHardware(
       let status = loginClass.status === "Half Day" ? "Half-day" : loginClass.status;
       if (totalHours > 0 && totalHours < 4.5 && hasMultiplePunches) {
         status = "Half-day";
+      }
+
+      const existing = existingAttMap.get(`${item.employeeId}_${item.date}`);
+      if (
+        existing &&
+        (existing.checkIn || null) === (checkInTime || null) &&
+        (existing.checkOut || null) === (checkOutTime || null) &&
+        existing.status === status &&
+        Number(existing.totalHours || 0) === totalHours
+      ) {
+        continue;
       }
 
       const emp = empMap.get(item.employeeId);
@@ -392,7 +463,7 @@ export async function syncLiveBiometricHardware(
       await Attendance.bulkWrite(bulkOps, { ordered: false });
     }
 
-    // Save unmapped punches in batches of 500
+    // Save only recent/new unmapped punches in batches of 500
     const unmappedBulk: any[] = [];
     for (const item of unmappedGroups.values()) {
       item.punches.sort((a, b) => a.getTime() - b.getTime());
@@ -445,11 +516,11 @@ export async function syncLiveBiometricHardware(
       }
     }
 
-    // Mark all resolved
+    // Mark mapped pins resolved only if any unresolved remain
     const mappedPins = Array.from(pinToMapping.keys());
     if (mappedPins.length > 0) {
       await UnmappedPunch.updateMany(
-        { biometricId: { $in: mappedPins } },
+        { biometricId: { $in: mappedPins }, resolved: false },
         { $set: { resolved: true, updatedAt: new Date() } }
       );
     }
@@ -469,6 +540,8 @@ export async function syncLiveBiometricHardware(
     return {
       success: true,
       totalLogs: punches.length,
+      recentLogsChecked,
+      skippedOldLogs,
       updatedRecords: bulkOps.length,
       userCount: enrolledUsersCount,
     };

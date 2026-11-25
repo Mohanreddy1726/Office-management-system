@@ -107,8 +107,15 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({
             success: true,
             records,
-            message: `Synced ${liveResult.totalLogs} punch records from eSSL K30 Pro terminal (${liveResult.updatedRecords} attendance records updated).`,
-            summary: { processed: liveResult.totalLogs, updatedRecords: liveResult.updatedRecords },
+            message:
+              liveResult.updatedRecords > 0
+                ? `Synced ${liveResult.recentLogsChecked ?? liveResult.totalLogs} recent punches (${liveResult.updatedRecords} updated, ${liveResult.skippedOldLogs ?? 0} old skipped).`
+                : `Already up to date (${liveResult.recentLogsChecked ?? 0} recent punches checked, ${liveResult.skippedOldLogs ?? 0} old skipped).`,
+            summary: {
+              processed: liveResult.recentLogsChecked ?? liveResult.totalLogs,
+              skippedOld: liveResult.skippedOldLogs ?? 0,
+              updatedRecords: liveResult.updatedRecords,
+            },
           });
         }
 

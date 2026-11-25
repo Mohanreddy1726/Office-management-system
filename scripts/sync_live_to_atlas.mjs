@@ -81,8 +81,29 @@ async function syncAll() {
   await zk.disconnect();
   console.log("Disconnected from machine.");
 
-  // Group by (dateKey, pin)
+  const empMaxDates = await Attendance.aggregate([
+    { $group: { _id: "$employeeId", maxDate: { $max: "$date" } } },
+  ]);
+  const empCutoffMap = new Map();
+  for (const row of empMaxDates) {
+    if (row._id && row.maxDate) {
+      const d = new Date(row.maxDate + "T00:00:00Z");
+      d.setUTCDate(d.getUTCDate() - 1);
+      empCutoffMap.set(row._id, d.toISOString().slice(0, 10));
+    }
+  }
+  const latestUnmapped = await UnmappedPunch.findOne({}).sort({ punchTime: -1 }).select("punchTime").lean();
+  let unmappedCutoffIso = null;
+  if (latestUnmapped?.punchTime) {
+    const ld = new Date(latestUnmapped.punchTime).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    const d = new Date(ld + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() - 1);
+    unmappedCutoffIso = d.toISOString().slice(0, 10);
+  }
+
+  // Group by (dateKey, pin) - filter out old already-synced records
   const groups = new Map();
+  let skippedOld = 0;
   for (const log of punches) {
     if (!log.deviceUserId || !log.recordTime) continue;
     const pin = String(log.deviceUserId).trim();
@@ -91,12 +112,21 @@ async function syncAll() {
     const d = new Date(log.recordTime);
     if (isNaN(d.getTime()) || d.getFullYear() < 2020) continue;
 
+    const dateKey = d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
     const istStr = d.toLocaleString("en-US", { timeZone: "Asia/Kolkata" });
     const istDate = new Date(istStr);
-    const y = istDate.getFullYear();
-    const m = String(istDate.getMonth() + 1).padStart(2, "0");
-    const day = String(istDate.getDate()).padStart(2, "0");
-    const dateKey = `${y}-${m}-${day}`;
+
+    const mapping = pinToMapping.get(pin);
+    if (mapping) {
+      const cut = empCutoffMap.get(mapping.employeeId);
+      if (cut && dateKey < cut) {
+        skippedOld++;
+        continue;
+      }
+    } else if (unmappedCutoffIso && dateKey < unmappedCutoffIso) {
+      skippedOld++;
+      continue;
+    }
 
     const key = `${dateKey}_${pin}`;
     if (!groups.has(key)) {
@@ -105,7 +135,7 @@ async function syncAll() {
     groups.get(key).punches.push(istDate);
   }
 
-  console.log(`Grouped into ${groups.size} (date, pin) attendance sessions.`);
+  console.log(`Grouped into ${groups.size} recent/new sessions (${skippedOld} old logs skipped).`);
 
   const bulkOps = [];
   const unmappedBulk = [];
