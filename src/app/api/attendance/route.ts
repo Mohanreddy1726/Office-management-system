@@ -3,7 +3,7 @@ import { connectToDatabase } from "@/lib/db";
 import { Attendance } from "@/models/Attendance";
 import { getCurrentUser } from "@/lib/auth";
 import { getMockStore } from "@/lib/mock-db";
-import { autoSyncBiometricIfStale, reconcileAllActiveMappings, syncLiveBiometricHardware } from "@/lib/biometric-sync";
+import { reconcileAllActiveMappings, syncLiveBiometricHardware } from "@/lib/biometric-sync";
 import { classifyLoginTime } from "@/lib/policies";
 
 export const dynamic = "force-dynamic";
@@ -43,15 +43,6 @@ export async function GET(req: NextRequest) {
 
     const conn = await connectToDatabase();
     if (conn) {
-      // Automatically pull recent punches from live eSSL terminal when running on office LAN (never on Vercel cloud)
-      if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
-        try {
-          await autoSyncBiometricIfStale();
-        } catch (autoErr) {
-          console.warn("[Attendance Auto-Sync Warning]", autoErr);
-        }
-      }
-
       const query: any = {};
       if (!all && date && date !== "all") {
         query.date = date;
