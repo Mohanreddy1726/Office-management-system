@@ -1,0 +1,69 @@
+{
+  "name": "RenDesk Workplace OS",
+  "short_name": "RenDesk",
+  "description": "RenDesk Employee Self-Service & Workplace Operations Portal",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0B0F17",
+  "theme_color": "#2563EB",
+  "lang": "en",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable-icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Punch Attendance",
+      "short_name": "Punch In/Out",
+      "description": "Mark attendance or view shift punch timings",
+      "url": "/attendance",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Apply Leave",
+      "short_name": "Leave",
+      "description": "Apply for casual, sick, or earned leave",
+      "url": "/leave?open=apply",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "My Payslips",
+      "short_name": "Payslips",
+      "description": "View monthly payslip and salary structure",
+      "url": "/payroll",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Company Announcements",
+      "short_name": "Announcements",
+      "description": "Read official corporate broadcasts and alerts",
+      "url": "/notifications",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    }
+  ]
+}

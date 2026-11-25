@@ -22,6 +22,7 @@ import {
 } from "recharts";
 import { ROLE_LABELS, DEPARTMENT_LIST } from "@/lib/data/departments";
 import { AppShell } from "@/components/shell";
+import { MobilePunchCard } from "@/components/mobile-punch-card";
 
 const COLORS = ["#356AE6", "#16845B", "#D98E04", "#5B61D6", "#D64545", "#0E7490"];
 
@@ -754,6 +755,39 @@ function EmployeeDashboard({ me }: { me: any }) {
             {me.designation} · {me.department} · {me.branch} · {fmtDate(TODAY)}
           </p>
         </div>
+      </div>
+
+      {/* Mobile-Native Live Punch Clock Widget */}
+      <div className="mb-4 lg:hidden">
+        <MobilePunchCard employeeId={me.id} />
+      </div>
+
+      {/* Mobile-Native Quick Action Buttons */}
+      <div className="mb-4 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none lg:hidden">
+        <button
+          onClick={() => router.push("/leave?open=apply")}
+          className="flex shrink-0 items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-3.5 py-1.5 text-xs font-semibold text-primary active:scale-95 transition-transform shadow-xs"
+        >
+          <Plane className="h-3.5 w-3.5" /> Apply Leave
+        </button>
+        <button
+          onClick={() => router.push("/payroll")}
+          className="flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs font-semibold text-foreground active:scale-95 transition-transform shadow-xs"
+        >
+          <Wallet className="h-3.5 w-3.5 text-emerald-600" /> My Payslip
+        </button>
+        <button
+          onClick={() => router.push("/attendance?tab=confirmation")}
+          className="flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs font-semibold text-foreground active:scale-95 transition-transform shadow-xs"
+        >
+          <CalendarCheck2 className="h-3.5 w-3.5 text-amber-600" /> Attendance Log
+        </button>
+        <button
+          onClick={() => router.push("/documents")}
+          className="flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs font-semibold text-foreground active:scale-95 transition-transform shadow-xs"
+        >
+          <FileText className="h-3.5 w-3.5 text-purple-600" /> Documents
+        </button>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">

@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { AppShell } from "@/components/shell";
+import { MobilePunchCard } from "@/components/mobile-punch-card";
 import {
   CalendarCheck2, Clock, Download, Lock, Plus, UserX, Plane,
   LayoutGrid, List, Search, Building2, Shield, ArrowUpRight,
@@ -422,6 +423,13 @@ export default function AttendancePage() {
             </>
           }
         />
+
+        {/* Mobile Real-time Punch Card for Employees */}
+        {isEmployee && (
+          <div className="mb-4 lg:hidden">
+            <MobilePunchCard employeeId={uid} />
+          </div>
+        )}
 
         {/* Top KPI Cards Row */}
         <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-4">

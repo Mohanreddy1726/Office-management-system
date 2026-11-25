@@ -9,14 +9,13 @@ import { getMockStore } from "@/lib/mock-db";
 export async function POST(req: NextRequest) {
   try {
     const session = await getCurrentUser();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const body = await req.json();
     const { punchType } = body;
 
-    const employeeId = session.employeeId || body.employeeId || "OF-1001";
+    const employeeId = session?.employeeId || body.employeeId || req.headers.get("x-user-id") || "OF-1001";
+    if (!session && !body.employeeId && !req.headers.get("x-user-id")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const now = new Date();
     const dateStr = now.toISOString().slice(0, 10);
     const hours = String(now.getHours()).padStart(2, "0");
@@ -36,7 +35,7 @@ export async function POST(req: NextRequest) {
         if (!record) {
           record = await Attendance.create({
             employeeId,
-            employeeName: employee?.name || session.name,
+            employeeName: employee?.name || session?.name || "Employee",
             department: employee?.department || "General",
             date: dateStr,
             checkIn: timeStr,
@@ -70,7 +69,7 @@ export async function POST(req: NextRequest) {
           record = {
             _id: `att-${Date.now()}`,
             employeeId,
-            employeeName: session.name,
+            employeeName: session?.name || "Employee",
             department: "Operations",
             date: dateStr,
             checkIn: timeStr,

@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Users, UserPlus, Building2, CalendarCheck, Fingerprint, CalendarDays, Wallet,
   FileText, Mails, Boxes, Bell, BarChart3, Settings, ScrollText, PanelLeftClose,
   PanelLeftOpen, Menu, Search, Plus, ChevronDown, LogOut, RefreshCcw, UserCog, MapPin,
-  ShieldCheck, UserCheck, Eye, Undo2, Briefcase,
+  ShieldCheck, UserCheck, Eye, Undo2, Briefcase, Download,
 } from "lucide-react";
 import { AccountSelectorModal, type AccountOption } from "@/components/account-selector-modal";
 import { useStore } from "@/lib/data/store";
@@ -22,6 +22,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { EmployeeAvatar } from "@/components/shared";
+import { MobileNavBar } from "@/components/mobile-nav";
+import { usePwa } from "@/components/pwa-install-prompt";
 
 interface NavItem { to: string; label: string; icon: typeof Users; roles: Role[] }
 interface NavGroup { group: string; items: NavItem[] }
@@ -534,6 +536,7 @@ function UserMenu() {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { prefs, setPref, session, emp, switchRole } = useStore();
+  const { isInstallable, isStandalone, promptInstall } = usePwa();
   const router = useRouter();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -602,6 +605,16 @@ export function AppShell({ children }: { children: ReactNode }) {
               ))}
             </nav>
             <div className="ml-auto flex items-center gap-2">
+              {isInstallable && !isStandalone && (
+                <button
+                  onClick={promptInstall}
+                  className="flex items-center gap-1.5 rounded-full bg-primary/10 hover:bg-primary/20 text-primary px-2.5 py-1 text-xs font-semibold lg:hidden active:scale-95 transition-transform border border-primary/20 shadow-sm"
+                  title="Install RenDesk Native App"
+                >
+                  <Download className="h-3.5 w-3.5 animate-bounce" />
+                  <span className="text-[11px]">Install App</span>
+                </button>
+              )}
               <GlobalSearch />
               <BranchSelector />
               <NotificationsBell />
@@ -667,12 +680,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           )}
 
-          <main className="flex-1 p-4 md:p-6"><RoleGate pathname={pathname}>{children}</RoleGate></main>
-          <footer className="px-6 pb-4 text-center text-[10px] text-muted-foreground">
+          <main className="flex-1 p-3 sm:p-4 md:p-6 pb-28 md:pb-6"><RoleGate pathname={pathname}>{children}</RoleGate></main>
+          <footer className="hidden md:block px-6 pb-4 text-center text-[10px] text-muted-foreground">
             RenDesk Workplace Operations OS · Unified workforce lifecycle platform.
           </footer>
         </div>
       </div>
+      <MobileNavBar />
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" className="w-[260px] border-border bg-sidebar p-0">
           <SheetTitle className="sr-only">Navigation</SheetTitle>
