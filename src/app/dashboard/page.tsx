@@ -704,7 +704,7 @@ function ManagerDashboard() {
 /* ---------- Employee dashboard ---------- */
 
 function EmployeeDashboard({ me }: { me: any }) {
-  const { data, session } = useStore();
+  const { data, session, pendingDocumentsCount } = useStore();
   const router = useRouter();
   const [showPay, setShowPay] = useState(true);
 
@@ -801,7 +801,7 @@ function EmployeeDashboard({ me }: { me: any }) {
     .sort((a, b) => b.period.localeCompare(a.period))[0];
   const slip = latestRun ? payslipFor(me, data.salaryStructures, policySummary.cappedLopDays) : null;
   const myAssets = data.assets.filter((a) => a.assignedTo === me.id);
-  const myDocs = data.documents.filter((d) => d.ownerId === me.id && d.status !== "Verified");
+  const myDocs = data.documents.filter((d) => d.ownerId === me.id && d.status === "Verified");
   const unreadNotifs = data.notifications.filter((n) => !n.read);
 
   const userShift =
@@ -873,7 +873,7 @@ function EmployeeDashboard({ me }: { me: any }) {
     },
     {
       label: "Documents",
-      sub: myDocs.length > 0 ? `${myDocs.length} pending` : "All verified",
+      sub: pendingDocumentsCount > 0 ? `${pendingDocumentsCount} pending HR` : `${myDocs.length} verified`,
       icon: FileText,
       tone: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
       onClick: () => router.push("/documents"),
@@ -1349,11 +1349,19 @@ function EmployeeDashboard({ me }: { me: any }) {
               Manage <ChevronRight className="h-3.5 w-3.5" />
             </Button>
           </CardHeader>
-          <CardContent className="p-3">
+          <CardContent className="p-3 space-y-2">
+            {pendingDocumentsCount > 0 && (
+              <div className="flex items-center gap-2 rounded-xl bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+                <Clock className="h-3.5 w-3.5 shrink-0" />
+                <span>
+                  {pendingDocumentsCount} uploaded document{pendingDocumentsCount > 1 ? "s" : ""} awaiting HR/Super Admin approval.
+                </span>
+              </div>
+            )}
             {myDocs.length === 0 ? (
-              <div className="flex items-center gap-2 rounded-xl bg-emerald-500/8 px-3 py-3 text-xs text-emerald-700 dark:text-emerald-300">
-                <CheckCircle2 className="h-4 w-4 shrink-0" />
-                <span>All required documents are verified.</span>
+              <div className="flex items-center gap-2 rounded-xl bg-muted/50 px-3 py-3 text-xs text-muted-foreground">
+                <FileText className="h-4 w-4 shrink-0" />
+                <span>No approved employee documents yet.</span>
               </div>
             ) : (
               <div className="space-y-1.5">

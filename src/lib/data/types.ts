@@ -254,13 +254,18 @@ export interface DocumentRecord {
   subType?: string;
   docNumber?: string;
   confidentiality?: "Public" | "Internal" | "Restricted" | "Strictly Confidential";
-  ownerId: string | null; // null = company policy
+  ownerId: string | null;
   uploadedBy: string;
   uploadedAt: string;
   version: number;
   status: "Verified" | "Pending Verification" | "Rejected";
   expiresAt?: string;
+  issueDate?: string;
   size: string;
+  fileUrl?: string;
+  fileType?: string;
+  verifiedBy?: string;
+  notes?: string;
 }
 
 export type MailDirection = "Incoming" | "Outgoing";

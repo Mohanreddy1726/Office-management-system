@@ -301,22 +301,7 @@ const REIMBURSEMENTS: Reimbursement[] = [
   { id: "RB-8", employeeId: "OF-1044", type: "Telephone", amount: 900, date: "2026-10-12", status: "Approved", payrollPeriod: "2026-10" },
 ];
 
-const DOCUMENTS: DocumentRecord[] = [
-  { id: "DOC-1", name: "Offer Letter — Karthik Reddy", category: "Offer Letters", ownerId: "OF-1011", uploadedBy: "OF-1010", uploadedAt: "2025-04-10", version: 1, status: "Verified", size: "184 KB" },
-  { id: "DOC-2", name: "Appointment Letter — Karthik Reddy", category: "Employment", ownerId: "OF-1011", uploadedBy: "OF-1010", uploadedAt: "2025-04-21", version: 1, status: "Verified", size: "201 KB" },
-  { id: "DOC-3", name: "Aadhaar — Karthik Reddy", category: "Identity", ownerId: "OF-1011", uploadedBy: "OF-1011", uploadedAt: "2025-04-19", version: 2, status: "Verified", expiresAt: "2027-04-19", size: "512 KB" },
-  { id: "DOC-4", name: "PAN — Karthik Reddy", category: "Identity", ownerId: "OF-1011", uploadedBy: "OF-1011", uploadedAt: "2025-04-19", version: 1, status: "Pending Verification", size: "289 KB" },
-  { id: "DOC-5", name: "B.E. Certificate — Karthik Reddy", category: "Education", ownerId: "OF-1011", uploadedBy: "OF-1011", uploadedAt: "2025-04-22", version: 1, status: "Verified", size: "1.2 MB" },
-  { id: "DOC-6", name: "Employee Handbook 2026", category: "Policies", ownerId: null, uploadedBy: "OF-1010", uploadedAt: "2026-01-05", version: 4, status: "Verified", size: "3.4 MB" },
-  { id: "DOC-7", name: "Leave Policy 2026", category: "Policies", ownerId: null, uploadedBy: "OF-1010", uploadedAt: "2026-01-05", version: 2, status: "Verified", size: "410 KB" },
-  { id: "DOC-8", name: "Anti-Harassment Policy", category: "Policies", ownerId: null, uploadedBy: "OF-1010", uploadedAt: "2026-02-11", version: 1, status: "Verified", size: "295 KB" },
-  { id: "DOC-9", name: "Degree Certificate — Aarav Gupta", category: "Education", ownerId: "OF-1012", uploadedBy: "OF-1012", uploadedAt: "2026-09-28", version: 1, status: "Pending Verification", size: "890 KB" },
-  { id: "DOC-10", name: "Relieving Letter — Ravi Teja", category: "Exit", ownerId: "OF-1047", uploadedBy: "OF-1010", uploadedAt: "2026-08-30", version: 1, status: "Verified", size: "156 KB" },
-  { id: "DOC-11", name: "Rent Agreement — Pooja Hegde", category: "Others", ownerId: "OF-1016", uploadedBy: "OF-1016", uploadedAt: "2026-05-14", version: 1, status: "Verified", expiresAt: "2026-11-13", size: "760 KB" },
-  { id: "DOC-12", name: "Passport — Divya Iyer", category: "Identity", ownerId: "OF-1015", uploadedBy: "OF-1015", uploadedAt: "2026-03-02", version: 1, status: "Verified", expiresAt: "2026-12-20", size: "640 KB" },
-  { id: "DOC-13", name: "Offer Letter — Sneha Kulkarni", category: "Offer Letters", ownerId: "OF-1048", uploadedBy: "OF-1010", uploadedAt: "2026-10-12", version: 1, status: "Verified", size: "178 KB" },
-  { id: "DOC-14", name: "Medical Certificate — Om Prakash", category: "Others", ownerId: "OF-1015", uploadedBy: "OF-1015", uploadedAt: "2026-09-29", version: 1, status: "Rejected", size: "120 KB" },
-];
+const DOCUMENTS: DocumentRecord[] = [];
 
 const MAIL: MailEntry[] = [
   { id: "ML-1", refNo: "IN-2026-0141", direction: "Incoming", date: "2026-10-21", sender: "Income Tax Dept", recipient: "Finance", subject: "TDS return acknowledgment for Q2", department: "Finance", ownerId: "OF-1006", priority: "High", status: "In Progress", channel: "Physical", notes: "Filed acknowledgment copy in records.", timeline: [{ at: "2026-10-21", event: "Received and registered", by: "OF-1009" }] },

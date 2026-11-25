@@ -62,8 +62,10 @@ export interface Store {
   addReimbursement: (r: Omit<Reimbursement, "id">) => void;
   decideReimbursement: (id: string, status: Reimbursement["status"], note?: string) => void;
   // documents
-  addDocument: (d: Omit<DocumentRecord, "id" | "version">) => void;
-  decideDocument: (id: string, status: DocumentRecord["status"]) => void;
+  pendingDocumentsCount: number;
+  refreshDocuments: () => Promise<void>;
+  addDocument: (d: Omit<DocumentRecord, "id" | "version">) => Promise<{ ok: boolean; error?: string; status?: DocumentRecord["status"] }>;
+  decideDocument: (id: string, status: DocumentRecord["status"]) => Promise<void>;
   // mail
   addMail: (m: Omit<MailEntry, "id" | "refNo" | "timeline" | "channel"> & { channel?: MailEntry["channel"] }) => void;
   updateMail: (id: string, patch: Partial<MailEntry>, event?: string) => void;
@@ -112,10 +114,38 @@ const parseTimeToMinutes = (str?: string): number | null => {
   return h * 60 + m;
 };
 
+function mapApiDocument(doc: any): DocumentRecord | null {
+  if (!doc?.employeeId || doc.category === "Company Policy" || doc.category === "Policies") {
+    return null;
+  }
+  return {
+    id: doc.docId || doc._id || `DOC-${Date.now()}`,
+    name: doc.title || "Untitled Document",
+    category: doc.category || "Identity",
+    ownerId: doc.employeeId,
+    uploadedBy: doc.uploadedBy || doc.employeeName || "HR Admin",
+    uploadedAt: doc.createdAt
+      ? new Date(doc.createdAt).toISOString().slice(0, 10)
+      : new Date().toISOString().slice(0, 10),
+    expiresAt: doc.expiryDate || "",
+    size: doc.fileSize || "—",
+    status: (doc.status === "Pending" ? "Pending Verification" : doc.status) || "Verified",
+    version: doc.version || 1,
+    fileUrl: doc.fileUrl || undefined,
+    fileType: doc.fileType || undefined,
+    verifiedBy: doc.verifiedBy || undefined,
+    notes: doc.notes || undefined,
+    docNumber: doc.docNumber || undefined,
+    confidentiality: doc.confidentiality || undefined,
+    issueDate: doc.issueDate || undefined,
+  };
+}
+
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<AppState>(() => seedState());
   const [session, setSession] = useState<Session | null>(null);
   const [prefs, setPrefs] = useState<Prefs>({ sidebarCollapsed: false, branch: "All Branches" });
+  const [pendingDocumentsCount, setPendingDocumentsCount] = useState(0);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -163,6 +193,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           // Filter out stale unverified employees lingering in localStorage
           if (Array.isArray(parsed.data.employees)) {
             parsed.data.employees = parsed.data.employees.filter((e: any) => e.status !== "Pending Verification");
+          }
+          // Authoritative employee-only documents always come from MongoDB
+          if (Array.isArray(parsed.data.documents)) {
+            parsed.data.documents = parsed.data.documents.filter(
+              (doc: any) => Boolean(doc?.ownerId) && doc?.category !== "Company Policy" && doc?.category !== "Policies"
+            );
           }
           setData(parsed.data);
         }
@@ -346,6 +382,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, [session]);
 
+  const syncDocumentsAsync = useCallback(async () => {
+    if (!session) return;
+    try {
+      const res = await fetch("/api/documents");
+      if (!res.ok) return;
+      const resData = await res.json();
+      if (resData?.success && Array.isArray(resData.documents)) {
+        const dbDocs = resData.documents
+          .map(mapApiDocument)
+          .filter((x: DocumentRecord | null): x is DocumentRecord => x !== null);
+        setPendingDocumentsCount(typeof resData.pendingCount === "number" ? resData.pendingCount : 0);
+        setData((d) => ({ ...d, documents: dbDocs }));
+      }
+    } catch {}
+  }, [session]);
+
   useEffect(() => {
     const syncEmployees = () => {
       fetch("/api/employees")
@@ -495,31 +547,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         .catch(() => {});
     };
 
-    const syncDocuments = () => {
-      fetch("/api/documents")
-        .then((res) => (res.ok ? res.json() : null))
-        .then((resData) => {
-          if (resData?.success && Array.isArray(resData.documents) && resData.documents.length > 0) {
-            setData((d) => {
-              const dbDocs: DocumentRecord[] = resData.documents.map((doc: any) => ({
-                id: doc.docId || doc._id || `DOC-${Date.now()}`,
-                name: doc.title,
-                category: doc.category || "Company Policy",
-                ownerId: doc.category === "Company Policy" ? null : (doc.employeeId || null),
-                uploadedBy: doc.employeeName || "Admin",
-                uploadedAt: doc.createdAt ? new Date(doc.createdAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
-                expiresAt: doc.expiryDate || "",
-                size: doc.fileSize || "1.2 MB",
-                status: (doc.status === "Pending" ? "Pending Verification" : doc.status) || "Verified",
-                version: doc.version || 1,
-              }));
-              return { ...d, documents: dbDocs };
-            });
-          }
-        })
-        .catch(() => {});
-    };
-
     const syncAuditLogs = () => {
       fetch("/api/audit-logs")
         .then((res) => (res.ok ? res.json() : null))
@@ -559,7 +586,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       fetchLeavesAsync();
       syncNotifications();
       syncAssets();
-      syncDocuments();
+      syncDocumentsAsync();
       if (isAdminOrHr) syncMail();
       if (isSuperAdmin) syncAuditLogs();
     };
@@ -577,13 +604,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [session, fetchLeavesAsync, syncNotificationsAsync]);
+  }, [session, fetchLeavesAsync, syncNotificationsAsync, syncDocumentsAsync]);
 
   useEffect(() => {
     if (!hydrated) return;
     const timer = setTimeout(() => {
       try {
-        window.localStorage.setItem(KEY, JSON.stringify({ data, session, prefs }));
+        // Omit large inline data URLs from localStorage cache; MongoDB holds full document previews
+        const cacheableData: AppState = {
+          ...data,
+          documents: data.documents.map((doc) =>
+            doc.fileUrl && doc.fileUrl.length > 50_000 ? { ...doc, fileUrl: undefined } : doc
+          ),
+        };
+        window.localStorage.setItem(KEY, JSON.stringify({ data: cacheableData, session, prefs }));
       } catch {
         // storage full — demo continues in memory
       }
@@ -597,7 +631,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setData((d) => ({ ...d, audit: [{ id: `AU-${Date.now()}`, timestamp: stamp(), ...e }, ...d.audit] }));
 
     const s: Store = {
-      data, session, prefs, hydrated,
+      data, session, prefs, hydrated, pendingDocumentsCount,
+      refreshDocuments: syncDocumentsAsync,
       signIn: (role, details) => {
         const origRole = (details?.originalRole || role) as Role;
         const origUserId = details?.originalUserId || details?.userId || details?.employeeId || DEMO_EMPLOYEES[role];
@@ -1014,33 +1049,81 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const r = data.reimbursements.find((x) => x.id === id);
         audit({ user: session ? nameOf(data, session.userId) : "Demo", action: `Reimbursement ${status.toLowerCase()}`, module: "Payroll", record: r ? `${nameOf(data, r.employeeId)} ₹${r.amount}` : id, outcome: "Success", details: note });
       },
-      addDocument: (doc) => {
-        const id = `DOC-${data.documents.length + 1}`;
-        setData((d) => ({ ...d, documents: [{ ...doc, id, version: 1 }, ...d.documents] }));
-        fetch("/api/documents", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: doc.name,
-            category: doc.category,
-            fileUrl: "https://example.com/doc.pdf",
-            expiryDate: doc.expiresAt,
-          }),
-        }).catch(() => {});
-        audit({ user: session ? nameOf(data, session.userId) : "Demo", action: "Uploaded document", module: "Documents", record: doc.name, outcome: "Success" });
+      addDocument: async (doc) => {
+        const isApprover = session?.role === "super_admin" || session?.role === "hr_admin";
+        const targetOwnerId = isApprover ? doc.ownerId : session?.employeeId || session?.userId || doc.ownerId;
+        if (!targetOwnerId) {
+          return { ok: false, error: "Document must be attached to an employee." };
+        }
+        try {
+          const res = await fetch("/api/documents", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: doc.name,
+              category: doc.category,
+              employeeId: targetOwnerId,
+              fileUrl: doc.fileUrl,
+              fileSize: doc.size,
+              fileType: doc.fileType,
+              docNumber: doc.docNumber,
+              confidentiality: doc.confidentiality,
+              issueDate: doc.issueDate,
+              expiryDate: doc.expiresAt,
+              notes: doc.notes,
+            }),
+          });
+          const resData = await res.json().catch(() => null);
+          if (!res.ok || !resData?.success) {
+            return { ok: false, error: resData?.error || "Failed to upload document." };
+          }
+
+          const mapped = mapApiDocument(resData.document);
+          if (mapped && (isApprover || mapped.status === "Verified")) {
+            setData((d) => ({ ...d, documents: [mapped, ...d.documents.filter((x) => x.id !== mapped.id)] }));
+          } else {
+            // Employee upload stays Pending until HR / Super Admin approves it
+            setPendingDocumentsCount((c) => c + 1);
+          }
+
+          audit({
+            user: session ? nameOf(data, session.userId) : "Demo",
+            action: isApprover ? "Uploaded employee document" : "Submitted document for HR approval",
+            module: "Documents",
+            record: `${doc.name} (${nameOf(data, targetOwnerId)})`,
+            outcome: "Success",
+          });
+          return { ok: true, status: mapped?.status || (isApprover ? "Verified" : "Pending Verification") };
+        } catch {
+          return { ok: false, error: "Network error while uploading document." };
+        }
       },
-      decideDocument: (id, status) => {
-        setData((d) => ({ ...d, documents: d.documents.map((x) => (x.id === id ? { ...x, status } : x)) }));
-        fetch("/api/documents", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            docId: id,
-            action: status === "Verified" ? "approve" : "reject",
-          }),
-        }).catch(() => {});
+      decideDocument: async (id, status) => {
+        if (session?.role !== "super_admin" && session?.role !== "hr_admin") return;
+        const reviewer = session ? nameOf(data, session.userId) : "HR Admin";
+        setData((d) => ({
+          ...d,
+          documents: d.documents.map((x) => (x.id === id ? { ...x, status, verifiedBy: reviewer } : x)),
+        }));
+        try {
+          await fetch("/api/documents", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              docId: id,
+              action: status === "Verified" ? "approve" : "reject",
+            }),
+          });
+          await syncDocumentsAsync();
+        } catch {}
         const doc = data.documents.find((x) => x.id === id);
-        audit({ user: session ? nameOf(data, session.userId) : "Demo", action: `Document ${status === "Verified" ? "verified" : "rejected"}`, module: "Documents", record: doc?.name ?? id, outcome: "Success" });
+        audit({
+          user: reviewer,
+          action: `Document ${status === "Verified" ? "verified" : "rejected"}`,
+          module: "Documents",
+          record: doc?.name ?? id,
+          outcome: "Success",
+        });
       },
       addMail: (m) => {
         const n = data.mail.length + 1;
@@ -1330,7 +1413,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
     };
     return s;
-  }, [data, session, prefs, hydrated]);
+  }, [data, session, prefs, hydrated, pendingDocumentsCount, syncDocumentsAsync]);
 
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>;
 }
