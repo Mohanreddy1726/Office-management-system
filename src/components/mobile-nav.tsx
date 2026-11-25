@@ -45,7 +45,7 @@ export function MobileNavBar() {
     },
     {
       id: "attendance",
-      label: "Clock",
+      label: "Attendance",
       href: "/attendance",
       icon: Fingerprint,
       active: pathname.startsWith("/attendance"),
@@ -95,18 +95,18 @@ export function MobileNavBar() {
                     : "text-muted-foreground hover:text-foreground active:scale-95"
                 )}
               >
-                <div className="relative">
+                <div className={cn(
+                  "relative flex h-8 w-12 items-center justify-center rounded-full transition-colors",
+                  tab.active && "bg-primary/12"
+                )}>
                   <Icon className={cn("h-5 w-5 transition-transform", tab.active && "stroke-[2.3]")} />
                   {tab.badge && (
-                    <span className="absolute -top-1.5 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white shadow">
+                    <span className="absolute -top-0.5 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white shadow">
                       {tab.badge > 9 ? "9+" : tab.badge}
                     </span>
                   )}
-                  {tab.active && (
-                    <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-primary" />
-                  )}
                 </div>
-                <span className="mt-1 text-[10px] tracking-tight">{tab.label}</span>
+                <span className="mt-0.5 text-[10px] tracking-tight">{tab.label}</span>
               </div>
             );
 
@@ -254,10 +254,14 @@ export function MobileNavBar() {
             {/* Sign Out Button */}
             <div className="pt-2">
               <button
-                onClick={() => {
+                onClick={async () => {
                   setMoreOpen(false);
                   signOut();
+                  try {
+                    await fetch("/api/auth/logout", { method: "POST" });
+                  } catch {}
                   router.push("/login");
+                  router.refresh();
                 }}
                 className="w-full flex items-center justify-center gap-2 rounded-xl border border-rose-500/20 bg-rose-500/5 py-2.5 text-xs font-semibold text-rose-600 hover:bg-rose-500/10 active:scale-95 transition-transform"
               >

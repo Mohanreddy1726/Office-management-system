@@ -543,6 +543,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const crumbs = BREADCRUMBS[pathname] ?? (pathname.startsWith("/employees/") ? ["People", "Employees", "Profile"] : ["RenDesk", "Workspace"]);
 
   const originalRole = (session?.originalRole || session?.role) as Role;
+  const isEmployee = session?.role === "employee";
   const isSuperAdminImpersonating = originalRole === "super_admin" && session?.role !== "super_admin";
   const isHrInEmployeeMode = originalRole === "hr_admin" && session?.role === "employee";
   const isManagerInEmployeeMode = originalRole === "manager" && session?.role === "employee";
@@ -588,6 +589,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Button variant="ghost" size="icon" className="h-8 w-8 lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open navigation">
               <Menu className="h-4 w-4" />
             </Button>
+            <div className="flex items-center gap-2 lg:hidden">
+              <RenDeskLogo size={24} />
+              <span className="text-sm font-bold tracking-tight text-foreground">
+                {crumbs[crumbs.length - 1] === "Dashboard" ? "RenDesk" : crumbs[crumbs.length - 1]}
+              </span>
+            </div>
             <Button
               variant="ghost"
               size="icon"
@@ -615,10 +622,10 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <span className="text-[11px]">Install App</span>
                 </button>
               )}
-              <GlobalSearch />
-              <BranchSelector />
+              {!isEmployee && <GlobalSearch />}
+              {!isEmployee && <BranchSelector />}
               <NotificationsBell />
-              <QuickCreate />
+              {!isEmployee && <QuickCreate />}
               <UserMenu />
             </div>
           </header>

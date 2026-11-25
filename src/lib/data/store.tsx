@@ -3,7 +3,7 @@
 // RenDesk demo store: single source of truth for mock data, demo session,
 // UI prefs and simulated workflows. Persisted to localStorage (frontend only).
 import { createContext, useContext, useEffect, useMemo, useState, useCallback, type ReactNode } from "react";
-import { seedState, DEMO_EMPLOYEES, TODAY } from "./seed";
+import { seedState, DEMO_EMPLOYEES } from "./seed";
 import type {
   AppState, Session, Prefs, Role, Employee, AttendanceRecord, AttendanceCorrection, LeaveRequest, NotificationItem,
   DocumentRecord, MailEntry, Announcement, Asset, Goal, UserAccount, AuditEntry, PayrollRun, Reimbursement,
@@ -41,7 +41,6 @@ export interface Store {
   bulkConfirmAttendance: (recordIds: string[]) => void;
   lockAttendance: (recordIds: string[]) => void;
   setAttendanceRecords: (records: AttendanceRecord[]) => void;
-  punchAttendance: (employeeId: string, punchType: "checkIn" | "checkOut", timeStr: string) => void;
   addImport: (b: Omit<ImportBatch, "id">) => void;
   addDevice: (d: Omit<BiometricDevice, "id" | "lastSync" | "status">) => void;
   addMapping: (m: Omit<BiometricMapping, "id" | "status">) => "ok" | "duplicate";
@@ -750,42 +749,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             map.set(key, { ...(map.get(key) || {}), ...r });
           }
           return { ...d, attendance: Array.from(map.values()) };
-        });
-      },
-      punchAttendance: (employeeId, punchType, timeStr) => {
-        setData((d) => {
-          const existing = d.attendance.find((a) => a.employeeId === employeeId && a.date === TODAY);
-          if (punchType === "checkIn") {
-            const [h, m] = timeStr.split(":").map(Number);
-            const isLate = h > 10 || (h === 10 && m > 15);
-            const status = isLate ? "Late" : "Present";
-            if (existing) {
-              return {
-                ...d,
-                attendance: d.attendance.map((a) => (a.id === existing.id ? { ...a, checkIn: timeStr, status } : a)),
-              };
-            } else {
-              const newRec: AttendanceRecord = {
-                id: `ATT-MOB-${Date.now()}`,
-                employeeId,
-                date: TODAY,
-                shiftId: "SH-GEN",
-                checkIn: timeStr,
-                status: status as any,
-                lateMinutes: status === "Late" ? 30 : 0,
-                source: "Biometric",
-                confirmation: "Confirmed",
-                deviceUsed: "Mobile App PWA Check-In",
-              };
-              return { ...d, attendance: [newRec, ...d.attendance] };
-            }
-          } else {
-            if (!existing) return d;
-            return {
-              ...d,
-              attendance: d.attendance.map((a) => (a.id === existing.id ? { ...a, checkOut: timeStr } : a)),
-            };
-          }
         });
       },
       addImport: (b) => {

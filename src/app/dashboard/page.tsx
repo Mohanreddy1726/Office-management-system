@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import {
   Users, UserCheck, CalendarCheck2, Plane, ClipboardList, HandCoins, UserPlus, Activity,
   Cake, FileClock, Building2, Plus, Upload, FileText, BadgeCheck, Wallet, CalendarClock,
-  Briefcase, Package, Megaphone, Bell, Send, LogOut, CalendarDays,
+  Briefcase, Package, Megaphone, Bell, Send, LogOut, CalendarDays, Fingerprint, Clock,
+  Eye, EyeOff, ChevronRight, CheckCircle2, ShieldCheck,
 } from "lucide-react";
 import { useStore } from "@/lib/data/store";
 import { TODAY, CURRENT_PERIOD } from "@/lib/data/seed";
@@ -22,7 +23,6 @@ import {
 } from "recharts";
 import { ROLE_LABELS, DEPARTMENT_LIST } from "@/lib/data/departments";
 import { AppShell } from "@/components/shell";
-import { MobilePunchCard } from "@/components/mobile-punch-card";
 
 const COLORS = ["#356AE6", "#16845B", "#D98E04", "#5B61D6", "#D64545", "#0E7490"];
 
@@ -703,19 +703,71 @@ function ManagerDashboard() {
 /* ---------- Employee dashboard ---------- */
 
 function EmployeeDashboard({ me }: { me: any }) {
-  const { data, session, switchRole } = useStore();
+  const { data, session } = useStore();
   const router = useRouter();
-  const mine = data.attendance.filter((a) => a.employeeId === me.id);
-  const todayRec = mine.find((a) => a.date === TODAY);
-  const month = mine.filter((a) => a.date.startsWith("2026-10"));
+  const [showPay, setShowPay] = useState(true);
+
+  const realTodayIso = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }, []);
+
+  const greeting = useMemo(() => {
+    const h = new Date().getHours();
+    if (h < 12) return "Good morning";
+    if (h < 17) return "Good afternoon";
+    return "Good evening";
+  }, []);
+
+  const mine = useMemo(
+    () => data.attendance.filter((a) => a.employeeId === me.id),
+    [data.attendance, me.id]
+  );
+
+  const todayRec = useMemo(
+    () => mine.find((a) => a.date === realTodayIso) || mine.find((a) => a.date === TODAY),
+    [mine, realTodayIso]
+  );
+
+  const activePeriod = useMemo(() => {
+    const currentPrefix = realTodayIso.slice(0, 7);
+    if (mine.some((a) => a.date.startsWith(currentPrefix))) return currentPrefix;
+    if (mine.some((a) => a.date.startsWith(CURRENT_PERIOD))) return CURRENT_PERIOD;
+    const latest = mine.map((a) => a.date.slice(0, 7)).sort().reverse()[0];
+    return latest || CURRENT_PERIOD;
+  }, [mine, realTodayIso]);
+
+  const activeMonthLabel = useMemo(() => {
+    try {
+      return new Date(activePeriod + "-01T00:00:00Z").toLocaleDateString("en-IN", {
+        month: "long",
+        year: "numeric",
+        timeZone: "UTC",
+      });
+    } catch {
+      return activePeriod;
+    }
+  }, [activePeriod]);
+
+  const month = useMemo(
+    () => mine.filter((a) => a.date.startsWith(activePeriod)),
+    [mine, activePeriod]
+  );
+
   const counts = {
     present: month.filter((a) => ["Present", "Late"].includes(a.status)).length,
     absent: month.filter((a) => a.status === "Absent").length,
     leave: month.filter((a) => a.status === "Leave").length,
     late: month.filter((a) => a.status === "Late").length,
   };
+  const workingDays = month.filter((a) => !["Week Off", "Holiday"].includes(a.status)).length;
+  const attendanceRate = workingDays > 0 ? Math.round((counts.present / workingDays) * 100) : 0;
+
   const balances = data.leaveBalances[me.id] ?? {};
-  const myLeaves = data.leaves.filter((l) => l.employeeId === me.id).slice(0, 5);
+  const leaveBalanceEntries = Object.entries(balances).filter(([, v]) => (v as number) > 0);
+  const totalLeaveDays = leaveBalanceEntries.reduce((sum, [, v]) => sum + (Number(v) || 0), 0);
+
+  const myLeaves = data.leaves.filter((l) => l.employeeId === me.id).slice(0, 4);
   const confirmPending = mine.filter((a) => a.confirmation === "Awaiting Employee");
   const latestRun = data.payrollRuns
     .filter((r) => r.status === "Payment Recorded")
@@ -723,6 +775,19 @@ function EmployeeDashboard({ me }: { me: any }) {
   const slip = latestRun ? payslipFor(me, data.salaryStructures) : null;
   const myAssets = data.assets.filter((a) => a.assignedTo === me.id);
   const myDocs = data.documents.filter((d) => d.ownerId === me.id && d.status !== "Verified");
+  const unreadNotifs = data.notifications.filter((n) => !n.read);
+
+  const userShift =
+    data.shifts.find((s) => s.id === todayRec?.shiftId) ||
+    data.shifts.find((s) => s.id === "SH-GEN") ||
+    data.shifts[0];
+
+  const workedLabel = useMemo(() => {
+    if (!todayRec?.workedMinutes) return null;
+    const hrs = Math.floor(todayRec.workedMinutes / 60);
+    const mins = todayRec.workedMinutes % 60;
+    return `${hrs}h ${mins}m`;
+  }, [todayRec?.workedMinutes]);
 
   const visibleAnnouncements = useMemo(() => {
     const myBranch = me?.branch || session?.branch;
@@ -744,172 +809,319 @@ function EmployeeDashboard({ me }: { me: any }) {
     });
   }, [data.announcements, me, session]);
 
+  const upcomingHolidays = useMemo(() => {
+    const myBranch = (me?.branch || session?.branch || "").toLowerCase();
+    return data.holidays
+      .filter((h) => {
+        if (!Array.isArray(h.branches) || h.branches.length === 0) return true;
+        return h.branches.some(
+          (b: string) => b.toLowerCase().includes("all") || b.toLowerCase() === myBranch
+        );
+      })
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(0, 3);
+  }, [data.holidays, me?.branch, session?.branch]);
+
+  const quickActions = [
+    {
+      label: "Apply Leave",
+      sub: "Request time off",
+      icon: Plane,
+      tone: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+      onClick: () => router.push("/leave?open=apply"),
+    },
+    {
+      label: "Attendance",
+      sub: "Biometric logs",
+      icon: Fingerprint,
+      tone: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+      onClick: () => router.push("/attendance"),
+    },
+    {
+      label: "My Payslip",
+      sub: "Salary & slips",
+      icon: Wallet,
+      tone: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400",
+      onClick: () => router.push("/payroll?tab=payslips"),
+    },
+    {
+      label: "Documents",
+      sub: myDocs.length > 0 ? `${myDocs.length} pending` : "All verified",
+      icon: FileText,
+      tone: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+      onClick: () => router.push("/documents"),
+    },
+  ];
+
   return (
-    <div>
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-[26px] font-semibold tracking-tight text-foreground">
-            Hi {me.name.split(" ")[0]} 👋
-          </h1>
-          <p className="mt-1 text-[13px] text-muted-foreground">
-            {me.designation} · {me.department} · {me.branch} · {fmtDate(TODAY)}
-          </p>
+    <div className="space-y-4 sm:space-y-5">
+      {/* Native Mobile-First Hero Welcome Card */}
+      <div className="relative overflow-hidden rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/10 via-card to-indigo-500/5 p-4 shadow-sm sm:p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3.5">
+            <EmployeeAvatar id={me.id} name={me.name} size={52} />
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-primary">
+                {fmtDate(todayRec?.date || realTodayIso)}
+              </p>
+              <h1 className="truncate text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+                {greeting}, {me.name.split(" ")[0]}
+              </h1>
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                {me.designation} · {me.department}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <Badge variant="outline" className="bg-background/70 text-[10px] font-medium">
+                  {me.id}
+                </Badge>
+                <Badge variant="outline" className="bg-background/70 text-[10px] font-medium">
+                  {me.branch}
+                </Badge>
+                {userShift && (
+                  <Badge variant="outline" className="bg-background/70 text-[10px] font-medium">
+                    {userShift.start} – {userShift.end}
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-start sm:self-center">
+            {unreadNotifs.length > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5 rounded-xl bg-background/80 text-xs font-medium"
+                onClick={() => router.push("/notifications")}
+              >
+                <Bell className="h-3.5 w-3.5 text-primary" />
+                {unreadNotifs.length} alert{unreadNotifs.length > 1 ? "s" : ""}
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1 rounded-xl bg-background/80 text-xs font-medium"
+              onClick={() => router.push(`/employees/${me.id}`)}
+            >
+              My Profile <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* Mobile-Native Live Punch Clock Widget */}
-      <div className="mb-4 lg:hidden">
-        <MobilePunchCard employeeId={me.id} />
+      {/* Tactile Self-Service Quick Actions */}
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3">
+        {quickActions.map((act) => {
+          const Icon = act.icon;
+          return (
+            <button
+              key={act.label}
+              onClick={act.onClick}
+              className="group flex items-center gap-3 rounded-2xl border border-border bg-card p-3 text-left shadow-xs transition-all hover:border-primary/30 hover:shadow-sm active:scale-[0.98]"
+            >
+              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${act.tone}`}>
+                <Icon className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-xs font-semibold text-foreground sm:text-[13px]">{act.label}</p>
+                <p className="truncate text-[11px] text-muted-foreground">{act.sub}</p>
+              </div>
+            </button>
+          );
+        })}
       </div>
 
-      {/* Mobile-Native Quick Action Buttons */}
-      <div className="mb-4 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none lg:hidden">
-        <button
-          onClick={() => router.push("/leave?open=apply")}
-          className="flex shrink-0 items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-3.5 py-1.5 text-xs font-semibold text-primary active:scale-95 transition-transform shadow-xs"
-        >
-          <Plane className="h-3.5 w-3.5" /> Apply Leave
-        </button>
-        <button
-          onClick={() => router.push("/payroll")}
-          className="flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs font-semibold text-foreground active:scale-95 transition-transform shadow-xs"
-        >
-          <Wallet className="h-3.5 w-3.5 text-emerald-600" /> My Payslip
-        </button>
-        <button
-          onClick={() => router.push("/attendance?tab=confirmation")}
-          className="flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs font-semibold text-foreground active:scale-95 transition-transform shadow-xs"
-        >
-          <CalendarCheck2 className="h-3.5 w-3.5 text-amber-600" /> Attendance Log
-        </button>
-        <button
-          onClick={() => router.push("/documents")}
-          className="flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs font-semibold text-foreground active:scale-95 transition-transform shadow-xs"
-        >
-          <FileText className="h-3.5 w-3.5 text-purple-600" /> Documents
-        </button>
-      </div>
-
+      {/* Primary Row: Biometric Attendance Today + Monthly Summary */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="border-border shadow-sm lg:col-span-1">
-          <CardHeader className="border-b border-border px-4 py-3">
+        <Card className="overflow-hidden rounded-2xl border-border shadow-sm lg:col-span-1">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-border/70 bg-muted/20 px-4 py-3">
             <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-              <CalendarCheck2 className="h-4 w-4 text-primary" /> Today&apos;s attendance
+              <Fingerprint className="h-4 w-4 text-primary" /> Today&apos;s Attendance
             </CardTitle>
+            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">
+              <ShieldCheck className="h-3 w-3" /> Biometric
+            </span>
           </CardHeader>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
+          <CardContent className="p-4 space-y-3.5">
+            <div className="flex items-start justify-between gap-2">
               <div>
-                <p className="text-xs text-muted-foreground">Status</p>
-                <p className="mt-0.5 text-lg font-semibold text-foreground">{todayRec?.status ?? "Not marked"}</p>
+                <p className="text-[11px] font-medium text-muted-foreground">Status</p>
+                <p className="mt-0.5 text-xl font-bold tracking-tight text-foreground">
+                  {todayRec?.status ?? "Awaiting Punch"}
+                </p>
+                {todayRec?.lateMinutes ? (
+                  <p className="mt-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                    Late by {todayRec.lateMinutes} mins
+                  </p>
+                ) : todayRec?.checkIn ? (
+                  <p className="mt-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                    Synced from biometric scanner
+                  </p>
+                ) : (
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    Auto-synced from office biometric device
+                  </p>
+                )}
               </div>
-              <StatusBadge status={todayRec?.confirmation ?? "Awaiting Employee"} />
+              {todayRec && <StatusBadge status={todayRec.confirmation} />}
             </div>
 
-            {/* Assigned Shift with dynamic timings */}
-            {(() => {
-              const userShift =
-                data.shifts.find((s) => s.id === todayRec?.shiftId) ||
-                data.shifts.find((s) => s.id === "SH-GEN") ||
-                data.shifts[0];
-              return userShift ? (
-                <div className="mt-3 flex items-center justify-between rounded-lg bg-primary/5 px-3 py-2 text-xs border border-primary/10">
-                  <span className="font-medium text-foreground">{userShift.name}</span>
-                  <span className="font-semibold text-primary">{userShift.start} - {userShift.end}</span>
-                </div>
-              ) : null;
-            })()}
-
-            <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-md bg-muted/60 px-3 py-2">
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Check-in</p>
-                <p className="font-semibold">{todayRec?.checkIn ?? "—"}</p>
+            {userShift && (
+              <div className="flex items-center justify-between rounded-xl border border-primary/15 bg-primary/5 px-3 py-2 text-xs">
+                <span className="flex items-center gap-1.5 font-medium text-foreground">
+                  <Clock className="h-3.5 w-3.5 text-primary" /> {userShift.name}
+                </span>
+                <span className="font-semibold text-primary">
+                  {userShift.start} – {userShift.end}
+                </span>
               </div>
-              <div className="rounded-md bg-muted/60 px-3 py-2">
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Check-out</p>
-                <p className="font-semibold">{todayRec?.checkOut ?? "—"}</p>
+            )}
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="rounded-xl border border-border/70 bg-muted/40 px-3 py-2.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Biometric In</p>
+                <p className="mt-0.5 text-base font-bold tabular-nums text-foreground">
+                  {todayRec?.checkIn ?? "—"}
+                </p>
+              </div>
+              <div className="rounded-xl border border-border/70 bg-muted/40 px-3 py-2.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Biometric Out</p>
+                <p className="mt-0.5 text-base font-bold tabular-nums text-foreground">
+                  {todayRec?.checkOut ?? "—"}
+                </p>
               </div>
             </div>
+
+            <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-0.5">
+              <span>{todayRec?.deviceUsed || "Office Biometric Terminal"}</span>
+              {workedLabel && <span className="font-semibold text-foreground">Worked: {workedLabel}</span>}
+            </div>
+
             {confirmPending.length > 0 && (
               <Button
                 size="sm"
-                className="mt-3 w-full text-xs"
+                className="w-full rounded-xl text-xs font-semibold"
                 onClick={() => router.push("/attendance?tab=confirmation")}
               >
-                Confirm attendance ({confirmPending.length} pending)
+                Confirm Biometric Attendance ({confirmPending.length} pending)
               </Button>
             )}
           </CardContent>
         </Card>
 
-        <Card className="border-border shadow-sm lg:col-span-2">
-          <CardHeader className="border-b border-border px-4 py-3">
-            <CardTitle className="text-sm font-semibold">October summary</CardTitle>
+        <Card className="overflow-hidden rounded-2xl border-border shadow-sm lg:col-span-2">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-border/70 bg-muted/20 px-4 py-3">
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+              <CalendarCheck2 className="h-4 w-4 text-primary" /> {activeMonthLabel} Summary
+            </CardTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs text-primary hover:text-primary"
+              onClick={() => router.push("/attendance")}
+            >
+              View Log <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
           </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-4">
-            {[
-              { label: "Present", value: counts.present, tone: "text-success" },
-              { label: "Late arrivals", value: counts.late, tone: "text-warning" },
-              { label: "On leave", value: counts.leave, tone: "text-info" },
-              { label: "Absent", value: counts.absent, tone: "text-danger" },
-            ].map((s) => (
-              <div key={s.label} className="rounded-lg border border-border bg-background/60 px-3 py-3 text-center">
-                <p className={`text-2xl font-semibold ${s.tone}`}>{s.value}</p>
-                <p className="text-[11px] text-muted-foreground">{s.label}</p>
+          <CardContent className="p-4 space-y-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {[
+                { label: "Present", value: counts.present, tone: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/8 border-emerald-500/20" },
+                { label: "Late Arrivals", value: counts.late, tone: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/8 border-amber-500/20" },
+                { label: "On Leave", value: counts.leave, tone: "text-sky-600 dark:text-sky-400", bg: "bg-sky-500/8 border-sky-500/20" },
+                { label: "Absent", value: counts.absent, tone: "text-rose-600 dark:text-rose-400", bg: "bg-rose-500/8 border-rose-500/20" },
+              ].map((s) => (
+                <div key={s.label} className={`rounded-xl border px-3 py-3.5 text-center ${s.bg}`}>
+                  <p className={`text-2xl font-bold tabular-nums ${s.tone}`}>{s.value}</p>
+                  <p className="mt-0.5 text-[11px] font-medium text-muted-foreground">{s.label}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-xl border border-border/70 bg-muted/25 p-3">
+              <div className="mb-1.5 flex items-center justify-between text-xs">
+                <span className="font-medium text-muted-foreground">Monthly Attendance Rate</span>
+                <span className="font-bold text-foreground">
+                  {attendanceRate}% ({counts.present}/{workingDays || 0} working days)
+                </span>
               </div>
-            ))}
+              <Progress value={attendanceRate} className="h-2" />
+            </div>
           </CardContent>
         </Card>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <Card className="border-border shadow-sm">
-          <CardHeader className="border-b border-border px-4 py-3">
+      {/* Second Row: Leave Balances, Latest Payslip & Announcements */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Card className="overflow-hidden rounded-2xl border-border shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-border/70 bg-muted/20 px-4 py-3">
             <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-              <Plane className="h-4 w-4 text-primary" /> Leave balances
+              <Plane className="h-4 w-4 text-primary" /> Leave Balances
             </CardTitle>
+            <Badge variant="outline" className="text-[10px] font-semibold">
+              {totalLeaveDays} days left
+            </Badge>
           </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-2 p-3">
-            {Object.entries(balances)
-              .filter(([, v]) => (v as number) > 0)
-              .map(([type, v]) => (
-                <div key={type} className="rounded-md border border-border px-3 py-2">
-                  <p className="text-lg font-semibold text-foreground">{v as number}</p>
-                  <p className="text-[10px] text-muted-foreground">{type.replace(" Leave", "")}</p>
-                </div>
-              ))}
+          <CardContent className="p-4">
+            {leaveBalanceEntries.length === 0 ? (
+              <p className="py-4 text-center text-xs text-muted-foreground">No leave balance available.</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-2.5">
+                {leaveBalanceEntries.map(([type, v]) => (
+                  <div key={type} className="rounded-xl border border-border/80 bg-background/70 px-3 py-2.5">
+                    <p className="text-xl font-bold tabular-nums text-foreground">{v as number}</p>
+                    <p className="truncate text-[11px] text-muted-foreground">{type.replace(" Leave", "")}</p>
+                  </div>
+                ))}
+              </div>
+            )}
             <Button
               size="sm"
-              variant="outline"
-              className="col-span-2 mt-1 text-xs"
+              className="mt-3.5 w-full rounded-xl text-xs font-semibold"
               onClick={() => router.push("/leave?open=apply")}
             >
-              Apply for leave
+              Apply for Leave
             </Button>
           </CardContent>
         </Card>
 
-        <Card className="border-border shadow-sm">
-          <CardHeader className="border-b border-border px-4 py-3">
+        <Card className="overflow-hidden rounded-2xl border-border shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-border/70 bg-muted/20 px-4 py-3">
             <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-              <Wallet className="h-4 w-4 text-primary" /> Latest payslip
+              <Wallet className="h-4 w-4 text-primary" /> Latest Payslip
             </CardTitle>
+            {slip && (
+              <button
+                onClick={() => setShowPay((p) => !p)}
+                className="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label={showPay ? "Hide salary amount" : "Show salary amount"}
+                title={showPay ? "Hide amount" : "Show amount"}
+              >
+                {showPay ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              </button>
+            )}
           </CardHeader>
           <CardContent className="p-4">
             {slip && latestRun ? (
               <>
-                <p className="text-xs text-muted-foreground">
-                  {latestRun.period} · {latestRun.status}
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-muted-foreground">{latestRun.period}</span>
+                  <StatusBadge status={latestRun.status} />
+                </div>
+                <p className="mt-2 text-2xl font-bold tracking-tight text-foreground tabular-nums">
+                  {showPay ? inr(slip.net) : "₹ ••••••"}
                 </p>
-                <p className="mt-1 text-2xl font-semibold text-foreground">{inr(slip.net)}</p>
-                <p className="text-[11px] text-muted-foreground">Net pay · gross {inr(slip.gross)}</p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  Net Pay · Gross {showPay ? inr(slip.gross) : "₹ ••••••"}
+                </p>
                 <Button
                   size="sm"
                   variant="outline"
-                  className="mt-3 w-full text-xs"
+                  className="mt-4 w-full rounded-xl text-xs font-semibold"
                   onClick={() => router.push("/payroll?tab=payslips")}
                 >
-                  View payslip
+                  View &amp; Download Payslip
                 </Button>
               </>
             ) : (
@@ -918,20 +1130,35 @@ function EmployeeDashboard({ me }: { me: any }) {
           </CardContent>
         </Card>
 
-        <Card className="border-border shadow-sm">
-          <CardHeader className="border-b border-border px-4 py-3">
+        <Card className="overflow-hidden rounded-2xl border-border shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-border/70 bg-muted/20 px-4 py-3">
             <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-              <Package className="h-4 w-4 text-primary" /> My assets
+              <Megaphone className="h-4 w-4 text-primary" /> Announcements
             </CardTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs text-primary hover:text-primary"
+              onClick={() => router.push("/notifications")}
+            >
+              All <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
           </CardHeader>
-          <CardContent className="p-2">
-            {myAssets.length === 0 ? (
-              <p className="px-2 py-4 text-xs text-muted-foreground">No assets assigned.</p>
+          <CardContent className="max-h-[210px] space-y-2 overflow-y-auto p-3 scrollbar-thin">
+            {visibleAnnouncements.length === 0 ? (
+              <p className="py-6 text-center text-xs text-muted-foreground">No announcements published.</p>
             ) : (
-              myAssets.map((a) => (
-                <div key={a.id} className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5">
-                  <span className="min-w-0 truncate text-xs font-medium">{a.name}</span>
-                  <span className="shrink-0 text-[10px] text-muted-foreground">{a.id}</span>
+              visibleAnnouncements.slice(0, 4).map((a) => (
+                <div key={a.id} className="rounded-xl border border-border/80 bg-background/70 p-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="truncate text-xs font-semibold text-foreground">{a.title}</p>
+                    {a.priority === "High" && (
+                      <span className="shrink-0 rounded-full bg-rose-500/10 px-2 py-0.5 text-[9px] font-bold text-rose-600 dark:text-rose-400">
+                        Urgent
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">{a.message}</p>
                 </div>
               ))
             )}
@@ -939,31 +1166,45 @@ function EmployeeDashboard({ me }: { me: any }) {
         </Card>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <Card className="border-border shadow-sm xl:col-span-2">
-          <CardHeader className="border-b border-border px-4 py-3">
-            <CardTitle className="text-sm font-semibold">My leave requests</CardTitle>
+      {/* Third Row: My Leave Requests & Recent Alerts */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <Card className="overflow-hidden rounded-2xl border-border shadow-sm xl:col-span-2">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-border/70 bg-muted/20 px-4 py-3">
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+              <CalendarClock className="h-4 w-4 text-primary" /> My Leave Requests
+            </CardTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs text-primary hover:text-primary"
+              onClick={() => router.push("/leave")}
+            >
+              View All <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
           </CardHeader>
-          <CardContent className="p-2">
+          <CardContent className="p-3 space-y-2">
             {myLeaves.length === 0 ? (
-              <p className="px-2 py-4 text-xs text-muted-foreground">No leave requests yet.</p>
+              <p className="py-5 text-center text-xs text-muted-foreground">No leave requests submitted yet.</p>
             ) : (
               myLeaves.map((l) => {
                 const rejReason =
                   l.decisionNote ||
                   l.timeline?.slice().reverse().find((t: any) => t.stage === "Rejected" && t.note)?.note;
                 return (
-                  <div key={l.id} className="rounded-md border border-border/50 p-2 space-y-1">
+                  <div key={l.id} className="rounded-xl border border-border/70 bg-background/60 p-3 space-y-1.5">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="min-w-0 text-xs font-medium text-foreground">
-                        {l.type} · {fmtDate(l.startDate)} ({l.days}d)
-                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-semibold text-foreground">{l.type}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {fmtDate(l.startDate)} · {l.days} day{l.days > 1 ? "s" : ""}
+                        </p>
+                      </div>
                       <StatusBadge status={l.status} />
                     </div>
                     {l.status === "Rejected" && rejReason && (
-                      <div className="mt-1 rounded-md bg-rose-50 p-2 text-[11px] text-rose-800 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/80 dark:border-rose-900">
-                        <span className="font-semibold">Rejection Comment: </span>
-                        <span className="italic">"{rejReason}"</span>
+                      <div className="rounded-lg border border-rose-200/80 bg-rose-50 px-2.5 py-1.5 text-[11px] text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">
+                        <span className="font-semibold">Note: </span>
+                        <span className="italic">&ldquo;{rejReason}&rdquo;</span>
                       </div>
                     )}
                   </div>
@@ -972,100 +1213,136 @@ function EmployeeDashboard({ me }: { me: any }) {
             )}
           </CardContent>
         </Card>
-        <Card className="border-border shadow-sm">
-          <CardHeader className="border-b border-border px-4 py-3">
+
+        <Card className="overflow-hidden rounded-2xl border-border shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-border/70 bg-muted/20 px-4 py-3">
             <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-              <Megaphone className="h-4 w-4 text-primary" /> Announcements
+              <Bell className="h-4 w-4 text-primary" /> Alerts
             </CardTitle>
+            {unreadNotifs.length > 0 && (
+              <Badge variant="outline" className="text-[10px] font-semibold">
+                {unreadNotifs.length} unread
+              </Badge>
+            )}
           </CardHeader>
-          <CardContent className="max-h-[220px] space-y-2 overflow-y-auto p-3 scrollbar-thin">
-            {visibleAnnouncements.length === 0 ? (
-              <p className="px-2 py-6 text-xs text-muted-foreground text-center">No announcements published.</p>
+          <CardContent className="p-3 space-y-1.5">
+            {unreadNotifs.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-5 text-center">
+                <CheckCircle2 className="h-6 w-6 text-emerald-500 mb-1" />
+                <p className="text-xs font-medium text-foreground">You&apos;re all caught up</p>
+                <p className="text-[11px] text-muted-foreground">No unread alerts</p>
+              </div>
             ) : (
-              visibleAnnouncements.slice(0, 5).map((a) => (
-                <div key={a.id} className="rounded-md border border-border p-2.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-semibold text-foreground truncate">{a.title}</p>
-                    {a.priority === "High" && (
-                      <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[9px] font-bold text-rose-700 shrink-0">Urgent</span>
-                    )}
-                  </div>
-                  <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{a.message}</p>
-                </div>
+              unreadNotifs.slice(0, 4).map((n) => (
+                <button
+                  key={n.id}
+                  onClick={() => router.push("/notifications")}
+                  className="block w-full rounded-xl border border-border/60 bg-background/60 px-3 py-2 text-left transition-colors hover:bg-muted/50"
+                >
+                  <p className="truncate text-xs font-semibold text-foreground">{n.title}</p>
+                  <p className="truncate text-[10px] text-muted-foreground">{n.timestamp}</p>
+                </button>
               ))
             )}
           </CardContent>
         </Card>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <Card className="border-border shadow-sm">
-          <CardHeader className="border-b border-border px-4 py-3">
+      {/* Fourth Row: Documents, Assigned Assets & Upcoming Holidays */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <Card className="overflow-hidden rounded-2xl border-border shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-border/70 bg-muted/20 px-4 py-3">
             <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-              <FileText className="h-4 w-4 text-primary" /> Documents to submit
+              <FileText className="h-4 w-4 text-primary" /> Documents
             </CardTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs text-primary hover:text-primary"
+              onClick={() => router.push("/documents")}
+            >
+              Manage <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
           </CardHeader>
-          <CardContent className="p-2">
+          <CardContent className="p-3">
             {myDocs.length === 0 ? (
-              <p className="px-2 py-4 text-xs text-muted-foreground">All documents submitted.</p>
+              <div className="flex items-center gap-2 rounded-xl bg-emerald-500/8 px-3 py-3 text-xs text-emerald-700 dark:text-emerald-300">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span>All required documents are verified.</span>
+              </div>
             ) : (
-              myDocs.map((d) => (
-                <div key={d.id} className="flex items-center justify-between gap-2 px-2 py-1.5">
-                  <span className="min-w-0 truncate text-xs font-medium">{d.name}</span>
-                  <StatusBadge status={d.status} />
-                </div>
-              ))
+              <div className="space-y-1.5">
+                {myDocs.slice(0, 4).map((d) => (
+                  <div key={d.id} className="flex items-center justify-between gap-2 rounded-xl border border-border/60 px-2.5 py-2">
+                    <span className="min-w-0 truncate text-xs font-medium">{d.name}</span>
+                    <StatusBadge status={d.status} />
+                  </div>
+                ))}
+              </div>
             )}
           </CardContent>
         </Card>
-        <Card className="border-border shadow-sm">
-          <CardHeader className="border-b border-border px-4 py-3">
+
+        <Card className="overflow-hidden rounded-2xl border-border shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-border/70 bg-muted/20 px-4 py-3">
             <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-              <Bell className="h-4 w-4 text-primary" /> Notifications
+              <Package className="h-4 w-4 text-primary" /> My Assets
             </CardTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs text-primary hover:text-primary"
+              onClick={() => router.push("/assets")}
+            >
+              View <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
           </CardHeader>
-          <CardContent className="p-2">
-            {data.notifications
-              .filter((n) => !n.read)
-              .slice(0, 4)
-              .map((n) => (
-                <button
-                  key={n.id}
-                  onClick={() => router.push("/notifications")}
-                  className="block w-full rounded-md px-2 py-1.5 text-left hover:bg-blue-soft/50"
-                >
-                  <p className="truncate text-xs font-medium text-foreground">{n.title}</p>
-                  <p className="truncate text-[11px] text-muted-foreground">{n.timestamp}</p>
-                </button>
-              ))}
+          <CardContent className="p-3">
+            {myAssets.length === 0 ? (
+              <p className="py-4 text-center text-xs text-muted-foreground">No company assets assigned.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {myAssets.slice(0, 4).map((a) => (
+                  <div key={a.id} className="flex items-center justify-between gap-2 rounded-xl border border-border/60 px-2.5 py-2">
+                    <span className="min-w-0 truncate text-xs font-medium text-foreground">{a.name}</span>
+                    <Badge variant="outline" className="shrink-0 text-[10px]">{a.id}</Badge>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
-        <Card className="border-border shadow-sm">
-          <CardHeader className="border-b border-border px-4 py-3">
+
+        <Card className="overflow-hidden rounded-2xl border-border shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-border/70 bg-muted/20 px-4 py-3">
             <CardTitle className="flex items-center gap-2 text-sm font-semibold">
               <CalendarDays className="h-4 w-4 text-primary" /> Upcoming Holidays
             </CardTitle>
-          </CardHeader>
-          <CardContent className="p-2 space-y-1">
-            {data.holidays.slice(0, 3).map((h) => (
-              <div key={h.id} className="flex items-center justify-between gap-2 px-2 py-1.5">
-                <div>
-                  <span className="min-w-0 truncate text-xs font-medium block text-foreground">{h.name}</span>
-                  <span className="text-[10px] text-muted-foreground">{fmtDate(h.date)}</span>
-                </div>
-                <Badge variant="outline" className="text-[10px]">
-                  {Array.isArray(h.branches) ? h.branches.join(", ") : h.branches}
-                </Badge>
-              </div>
-            ))}
             <Button
+              variant="ghost"
               size="sm"
-              variant="outline"
-              className="mt-2 w-full text-xs"
+              className="h-7 gap-1 px-2 text-xs text-primary hover:text-primary"
               onClick={() => router.push("/leave")}
             >
-              View leave calendar
+              Calendar <ChevronRight className="h-3.5 w-3.5" />
             </Button>
+          </CardHeader>
+          <CardContent className="p-3 space-y-1.5">
+            {upcomingHolidays.length === 0 ? (
+              <p className="py-4 text-center text-xs text-muted-foreground">No upcoming holidays listed.</p>
+            ) : (
+              upcomingHolidays.map((h) => (
+                <div key={h.id} className="flex items-center justify-between gap-2 rounded-xl border border-border/60 px-2.5 py-2">
+                  <div className="min-w-0">
+                    <span className="block truncate text-xs font-semibold text-foreground">{h.name}</span>
+                    <span className="text-[10px] text-muted-foreground">{fmtDate(h.date)}</span>
+                  </div>
+                  <Badge variant="outline" className="shrink-0 text-[10px]">
+                    {Array.isArray(h.branches) ? h.branches.join(", ") : h.branches}
+                  </Badge>
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
       </div>

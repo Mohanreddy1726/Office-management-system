@@ -17,7 +17,6 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { AppShell } from "@/components/shell";
-import { MobilePunchCard } from "@/components/mobile-punch-card";
 import {
   CalendarCheck2, Clock, Download, Lock, Plus, UserX, Plane,
   LayoutGrid, List, Search, Building2, Shield, ArrowUpRight,
@@ -367,16 +366,18 @@ export default function AttendancePage() {
           }
           actions={
             <>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={syncingBiometric}
-                className="gap-1.5 text-xs shadow-sm text-primary hover:text-primary border-primary/20 bg-primary/5 hover:bg-primary/10"
-                onClick={handleSyncBiometric}
-              >
-                <Fingerprint className={cn("h-3.5 w-3.5", syncingBiometric && "animate-spin text-primary")} />
-                {syncingBiometric ? "Syncing Biometric..." : "Sync Biometric"}
-              </Button>
+              {!isEmployee && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={syncingBiometric}
+                  className="gap-1.5 text-xs shadow-sm text-primary hover:text-primary border-primary/20 bg-primary/5 hover:bg-primary/10"
+                  onClick={handleSyncBiometric}
+                >
+                  <Fingerprint className={cn("h-3.5 w-3.5", syncingBiometric && "animate-spin text-primary")} />
+                  {syncingBiometric ? "Syncing Biometric..." : "Sync Biometric"}
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"
@@ -423,13 +424,6 @@ export default function AttendancePage() {
             </>
           }
         />
-
-        {/* Mobile Real-time Punch Card for Employees */}
-        {isEmployee && (
-          <div className="mb-4 lg:hidden">
-            <MobilePunchCard employeeId={uid} />
-          </div>
-        )}
 
         {/* Top KPI Cards Row */}
         <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-4">
