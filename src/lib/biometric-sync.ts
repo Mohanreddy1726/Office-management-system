@@ -80,8 +80,8 @@ export async function reconcileEmployeePunches(
     // Machine unreachable from current host (e.g. cloud deployment), fallback to DB
   }
 
-  // 2. Also retrieve all stored punches from MongoDB Atlas
-  const dbPunches = await UnmappedPunch.find({ biometricId: cleanBioId });
+  // 2. Also retrieve unresolved stored punches from MongoDB Atlas
+  const dbPunches = await UnmappedPunch.find({ biometricId: cleanBioId }).select("punchTime").lean();
   for (const p of dbPunches) {
     if (p.punchTime) {
       const d = new Date(p.punchTime);
@@ -167,18 +167,21 @@ export async function reconcileEmployeePunches(
  * any unresolved punches in MongoDB Atlas into official Attendance records.
  */
 export async function reconcileAllActiveMappings(): Promise<{ processedPunches: number; updatedRecords: number }> {
-  const activeMappings = await BiometricMapping.find({ status: "Active" });
+  const activeMappings = await BiometricMapping.find({ status: "Active" }).lean();
   if (activeMappings.length === 0) return { processedPunches: 0, updatedRecords: 0 };
 
   const activePins = activeMappings.map((m) => String(m.biometricId).trim());
   const pendingPunches = await UnmappedPunch.find({
     biometricId: { $in: activePins },
-  });
+    resolved: false,
+  })
+    .select("biometricId punchTime")
+    .lean();
 
   if (pendingPunches.length === 0) return { processedPunches: 0, updatedRecords: 0 };
 
   const pinToMapping = new Map(activeMappings.map((m) => [String(m.biometricId).trim(), m]));
-  const employees = await Employee.find({});
+  const employees = await Employee.find({}, "employeeId name department branch").lean();
   const empMap = new Map(employees.map((e) => [e.employeeId, e]));
 
   const dayGroups = new Map<string, { employeeId: string; date: string; punches: Date[] }>();

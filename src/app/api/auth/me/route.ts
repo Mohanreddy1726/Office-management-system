@@ -17,22 +17,25 @@ export async function GET() {
     const conn = await connectToDatabase();
     if (conn) {
       if (session.employeeId) {
-        employee = await Employee.findOne({ employeeId: session.employeeId });
+        employee = await Employee.findOne({ employeeId: session.employeeId }).lean();
       }
       if (!employee && session.email) {
         const emailPattern = new RegExp(`^${session.email.trim()}$`, "i");
         employee = await Employee.findOne({
           $or: [{ workEmail: emailPattern }, { email: emailPattern }, { personalEmail: emailPattern }],
-        });
+        }).lean();
       }
 
       if (session.role !== "super_admin") {
-        const u = await User.findOne({
-          $or: [
-            ...(session.employeeId ? [{ employeeId: session.employeeId }] : []),
-            { email: session.email.toLowerCase().trim() },
-          ],
-        });
+        const u = await User.findOne(
+          {
+            $or: [
+              ...(session.employeeId ? [{ employeeId: session.employeeId }] : []),
+              { email: session.email.toLowerCase().trim() },
+            ],
+          },
+          "isActive"
+        ).lean();
         if (u && !u.isActive) {
           isInactive = true;
         }

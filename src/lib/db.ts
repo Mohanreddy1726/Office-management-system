@@ -2,10 +2,12 @@ import mongoose from "mongoose";
 import dns from "node:dns";
 
 // Support MongoDB Atlas SRV lookups on Windows environments with restrictive local ISP DNS
-try {
-  dns.setServers(["8.8.8.8", "1.1.1.1"]);
-} catch {
-  // Ignore if queries are already in progress; Resolver fallback handles it below
+if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
+  try {
+    dns.setServers(["8.8.8.8", "1.1.1.1"]);
+  } catch {
+    // Ignore if queries are already in progress; Resolver fallback handles it below
+  }
 }
 
 async function resolveSrvUriWithPublicDns(srvUri: string): Promise<string | null> {
@@ -80,13 +82,19 @@ export async function connectToDatabase(): Promise<typeof mongoose | null> {
   if (!cached.promise) {
     const opts: mongoose.ConnectOptions = {
       bufferCommands: false,
-      serverSelectionTimeoutMS: 8000, // 8-second timeout for cloud Atlas DNS & SSL handshake
+      maxPoolSize: 5,
+      minPoolSize: 0,
+      serverSelectionTimeoutMS: 8000,
+      socketTimeoutMS: 10000,
+      connectTimeoutMS: 8000,
     };
 
     cached.promise = (async () => {
-      try {
-        dns.setServers(["8.8.8.8", "1.1.1.1"]);
-      } catch {}
+      if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
+        try {
+          dns.setServers(["8.8.8.8", "1.1.1.1"]);
+        } catch {}
+      }
 
       try {
         const uriToUse = cached.directUri || MONGODB_URI;

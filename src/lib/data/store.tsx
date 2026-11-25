@@ -187,16 +187,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           const origName = u.originalName || u.name;
           const currentUserId = u.employeeId || u.userId;
 
-          setSession({
-            userId: currentUserId,
-            role: u.role as Role,
-            name: u.name,
-            email: u.email,
-            employeeId: u.employeeId,
-            branch: u.branch,
-            originalRole: origRole,
-            originalUserId: origUserId,
-            originalName: origName,
+          setSession((prev) => {
+            if (
+              prev &&
+              prev.userId === currentUserId &&
+              prev.role === (u.role as Role) &&
+              prev.name === u.name &&
+              prev.email === u.email &&
+              prev.branch === u.branch &&
+              prev.originalRole === origRole
+            ) {
+              return prev;
+            }
+            return {
+              userId: currentUserId,
+              role: u.role as Role,
+              name: u.name,
+              email: u.email,
+              employeeId: u.employeeId,
+              branch: u.branch,
+              originalRole: origRole,
+              originalUserId: origUserId,
+              originalName: origName,
+            };
           });
         }
       })
@@ -568,11 +581,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!hydrated) return;
-    try {
-      window.localStorage.setItem(KEY, JSON.stringify({ data, session, prefs }));
-    } catch {
-      // storage full — demo continues in memory
-    }
+    const timer = setTimeout(() => {
+      try {
+        window.localStorage.setItem(KEY, JSON.stringify({ data, session, prefs }));
+      } catch {
+        // storage full — demo continues in memory
+      }
+    }, 800);
+    return () => clearTimeout(timer);
   }, [data, session, prefs, hydrated]);
 
   const store = useMemo<Store>(() => {
