@@ -22,32 +22,30 @@ export async function GET() {
         if (!empId) {
           return NextResponse.json({ success: true, documents: [], pendingCount: 0 });
         }
-        // Employees ONLY see their own approved (Verified) documents; unapproved uploads stay hidden until HR/Super Admin approves
-        const [docs, pendingCount] = await Promise.all([
-          DocumentRecord.find({
-            employeeId: empId,
-            category: { $ne: "Company Policy" },
-            status: "Verified",
-          })
-            .sort({ createdAt: -1 })
-            .lean(),
-          DocumentRecord.countDocuments({
-            employeeId: empId,
-            category: { $ne: "Company Policy" },
-            status: { $in: ["Pending", "Pending Verification"] },
-          }),
-        ]);
+        // Employees see their own Approved (Verified) docs plus their own Pending/Rejected submissions for tracking
+        const docs = await DocumentRecord.find({
+          employeeId: empId,
+          category: { $ne: "Company Policy" },
+        })
+          .sort({ createdAt: -1 })
+          .lean();
+        const pendingCount = docs.filter(
+          (d: any) => d.status === "Pending" || d.status === "Pending Verification"
+        ).length;
         return NextResponse.json({ success: true, documents: docs, pendingCount });
       }
 
-      // HR / Admin / Super Admin / Manager: only employee-attached documents (no Company Policy docs)
+      // HR / Admin / Super Admin / Manager: all employee-attached documents (no Company Policy docs)
       const docs = await DocumentRecord.find({
         employeeId: { $exists: true, $nin: [null, ""] },
         category: { $ne: "Company Policy" },
       })
         .sort({ createdAt: -1 })
         .lean();
-      return NextResponse.json({ success: true, documents: docs, pendingCount: 0 });
+      const pendingCount = docs.filter(
+        (d: any) => d.status === "Pending" || d.status === "Pending Verification"
+      ).length;
+      return NextResponse.json({ success: true, documents: docs, pendingCount });
     } else {
       return NextResponse.json({ success: true, documents: [], pendingCount: 0 });
     }

@@ -385,14 +385,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const syncDocumentsAsync = useCallback(async () => {
     if (!session) return;
     try {
-      const res = await fetch("/api/documents");
+      const res = await fetch("/api/documents", { cache: "no-store" });
       if (!res.ok) return;
       const resData = await res.json();
       if (resData?.success && Array.isArray(resData.documents)) {
         const dbDocs = resData.documents
           .map(mapApiDocument)
           .filter((x: DocumentRecord | null): x is DocumentRecord => x !== null);
-        setPendingDocumentsCount(typeof resData.pendingCount === "number" ? resData.pendingCount : 0);
+        const derivedPending = dbDocs.filter((x: DocumentRecord) => x.status === "Pending Verification").length;
+        setPendingDocumentsCount(typeof resData.pendingCount === "number" ? resData.pendingCount : derivedPending);
         setData((d) => ({ ...d, documents: dbDocs }));
       }
     } catch {}
@@ -1079,12 +1080,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
 
           const mapped = mapApiDocument(resData.document);
-          if (mapped && (isApprover || mapped.status === "Verified")) {
+          if (mapped) {
             setData((d) => ({ ...d, documents: [mapped, ...d.documents.filter((x) => x.id !== mapped.id)] }));
-          } else {
-            // Employee upload stays Pending until HR / Super Admin approves it
-            setPendingDocumentsCount((c) => c + 1);
+            if (mapped.status === "Pending Verification") {
+              setPendingDocumentsCount((c) => c + 1);
+            }
           }
+          syncDocumentsAsync().catch(() => {});
 
           audit({
             user: session ? nameOf(data, session.userId) : "Demo",

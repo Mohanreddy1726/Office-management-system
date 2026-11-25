@@ -802,6 +802,8 @@ function EmployeeDashboard({ me }: { me: any }) {
   const slip = latestRun ? payslipFor(me, data.salaryStructures, policySummary.cappedLopDays) : null;
   const myAssets = data.assets.filter((a) => a.assignedTo === me.id);
   const myDocs = data.documents.filter((d) => d.ownerId === me.id && d.status === "Verified");
+  const myPendingDocs = data.documents.filter((d) => d.ownerId === me.id && d.status === "Pending Verification");
+  const myPendingDocCount = Math.max(pendingDocumentsCount, myPendingDocs.length);
   const unreadNotifs = data.notifications.filter((n) => !n.read);
 
   const userShift =
@@ -873,10 +875,10 @@ function EmployeeDashboard({ me }: { me: any }) {
     },
     {
       label: "Documents",
-      sub: pendingDocumentsCount > 0 ? `${pendingDocumentsCount} pending HR` : `${myDocs.length} verified`,
+      sub: myPendingDocCount > 0 ? `${myPendingDocCount} pending HR` : `${myDocs.length} verified`,
       icon: FileText,
       tone: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-      onClick: () => router.push("/documents"),
+      onClick: () => router.push(myPendingDocCount > 0 ? "/documents?tab=pending" : "/documents"),
     },
   ];
 
@@ -1350,13 +1352,20 @@ function EmployeeDashboard({ me }: { me: any }) {
             </Button>
           </CardHeader>
           <CardContent className="p-3 space-y-2">
-            {pendingDocumentsCount > 0 && (
-              <div className="flex items-center gap-2 rounded-xl bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
-                <Clock className="h-3.5 w-3.5 shrink-0" />
-                <span>
-                  {pendingDocumentsCount} uploaded document{pendingDocumentsCount > 1 ? "s" : ""} awaiting HR/Super Admin approval.
+            {myPendingDocCount > 0 && (
+              <button
+                type="button"
+                onClick={() => router.push("/documents?tab=pending")}
+                className="flex w-full items-center justify-between gap-2 rounded-xl bg-amber-500/10 px-3 py-2 text-left text-xs text-amber-800 transition-colors hover:bg-amber-500/15 dark:text-amber-300"
+              >
+                <span className="flex items-center gap-2">
+                  <Clock className="h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    {myPendingDocCount} pending document{myPendingDocCount > 1 ? "s" : ""} awaiting HR/Super Admin approval.
+                  </span>
                 </span>
-              </div>
+                <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+              </button>
             )}
             {myDocs.length === 0 ? (
               <div className="flex items-center gap-2 rounded-xl bg-muted/50 px-3 py-3 text-xs text-muted-foreground">

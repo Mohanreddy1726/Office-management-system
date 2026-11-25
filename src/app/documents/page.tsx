@@ -552,6 +552,7 @@ function DocumentsPageInner() {
   const todayIso = useMemo(() => getTodayIso(), []);
 
   const [tab, setTab] = useState(tabParam ?? "approved");
+  const userChangedTabRef = useRef(Boolean(tabParam));
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -573,17 +574,15 @@ function DocumentsPageInner() {
   }, [tabParam]);
 
   // Only employee-attached documents exist in the vault (never company policies / unattached docs).
-  // Non-admins only ever see Verified documents; pending/rejected remain hidden until HR/Super Admin approves.
+  // HR / Super Admin see all employees' docs across branches; employees see their own Verified + Pending/Rejected docs in separate sections.
   const employeeDocuments = useMemo(() => {
     return data.documents.filter((d) => {
       if (!d.ownerId || d.category === "Company Policy" || d.category === "Policies") return false;
+      if (isAdmin) return true;
       if (isEmployee) {
-        return d.ownerId === uid && d.status === "Verified";
+        return d.ownerId === uid;
       }
-      if (!isAdmin) {
-        return inScope(d.ownerId) && d.status === "Verified";
-      }
-      return inScope(d.ownerId);
+      return inScope(d.ownerId) && d.status === "Verified";
     });
   }, [data.documents, isAdmin, isEmployee, uid, inScope]);
 
@@ -607,6 +606,18 @@ function DocumentsPageInner() {
       }),
     [approvedDocs, todayIso]
   );
+
+  // Default HR / Super Admin view directly to Pending Approval when employee submissions are waiting
+  useEffect(() => {
+    if (isAdmin && !tabParam && !userChangedTabRef.current && pendingDocs.length > 0 && tab === "approved") {
+      setTab("pending");
+    }
+  }, [isAdmin, tabParam, pendingDocs.length, tab]);
+
+  const handleTabChange = (nextTab: string) => {
+    userChangedTabRef.current = true;
+    setTab(nextTab);
+  };
 
   const selectedDoc = useMemo(
     () => employeeDocuments.find((d) => d.id === selectedDocId) ?? null,
@@ -818,6 +829,7 @@ function DocumentsPageInner() {
     [approvedDocs]
   );
 
+  const visiblePendingCount = pendingDocs.length;
   const hasActiveFilters = catFilter !== "all" || statusFilter !== "all" || search.trim() !== "";
 
   return (
@@ -875,7 +887,7 @@ function DocumentsPageInner() {
         <div className="grid grid-cols-2 gap-2.5 sm:hidden">
           <button
             type="button"
-            onClick={() => setTab("approved")}
+            onClick={() => handleTabChange("approved")}
             className={cn(
               "flex items-center gap-2.5 rounded-2xl border bg-card p-3 text-left shadow-xs transition-all active:scale-[0.98]",
               tab === "approved" ? "border-primary/40 ring-1 ring-primary/20" : "border-border/80"
@@ -894,7 +906,7 @@ function DocumentsPageInner() {
 
           <button
             type="button"
-            onClick={() => isAdmin && setTab("pending")}
+            onClick={() => handleTabChange("pending")}
             className={cn(
               "flex items-center gap-2.5 rounded-2xl border bg-card p-3 text-left shadow-xs transition-all active:scale-[0.98]",
               tab === "pending" ? "border-primary/40 ring-1 ring-primary/20" : "border-border/80"
@@ -905,17 +917,17 @@ function DocumentsPageInner() {
             </div>
             <div className="min-w-0">
               <p className="truncate text-[11px] font-medium text-muted-foreground">
-                {isAdmin ? "Needs Review" : "Pending HR"}
+                {isAdmin ? "Needs Review" : "Pending"}
               </p>
               <p className="font-mono-num text-lg font-bold leading-tight text-foreground">
-                {isAdmin ? pendingDocs.length : pendingDocumentsCount}
+                {visiblePendingCount}
               </p>
             </div>
           </button>
 
           <button
             type="button"
-            onClick={() => setTab("expiring")}
+            onClick={() => handleTabChange("expiring")}
             className={cn(
               "flex items-center gap-2.5 rounded-2xl border bg-card p-3 text-left shadow-xs transition-all active:scale-[0.98]",
               tab === "expiring" ? "border-primary/40 ring-1 ring-primary/20" : "border-border/80"
@@ -1008,22 +1020,39 @@ function DocumentsPageInner() {
           />
         </div>
 
-        {/* Employee pending approval banner (keeps unapproved uploads hidden until HR/Super Admin approves) */}
-        {isEmployee && pendingDocumentsCount > 0 && (
+        {/* Pending approval banner */}
+        {visiblePendingCount > 0 && tab !== "pending" && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-900 dark:text-amber-200 sm:mb-5 sm:rounded-xl">
             <div className="flex items-center gap-2.5">
               <Clock className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
               <span>
-                You have{" "}
-                <strong>
-                  {pendingDocumentsCount} uploaded document{pendingDocumentsCount > 1 ? "s" : ""}
-                </strong>{" "}
-                awaiting HR / Super Admin approval. They will appear in your vault once approved.
+                {isAdmin ? (
+                  <>
+                    <strong>
+                      {visiblePendingCount} employee document{visiblePendingCount > 1 ? "s" : ""}
+                    </strong>{" "}
+                    awaiting your approval.
+                  </>
+                ) : (
+                  <>
+                    You have{" "}
+                    <strong>
+                      {visiblePendingCount} pending document{visiblePendingCount > 1 ? "s" : ""}
+                    </strong>{" "}
+                    awaiting HR / Super Admin approval.
+                  </>
+                )}
               </span>
             </div>
-            <Badge variant="outline" className="border-amber-500/40 text-amber-800 dark:text-amber-300">
-              Pending Approval
-            </Badge>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => handleTabChange("pending")}
+              className="h-7 border-amber-500/40 bg-background/70 text-xs font-medium text-amber-900 hover:bg-amber-500/15 dark:text-amber-200"
+            >
+              {isAdmin ? "Review Pending" : "View Pending Documents"}
+            </Button>
           </div>
         )}
 
@@ -1034,30 +1063,27 @@ function DocumentsPageInner() {
             value={String(approvedDocs.length)}
             hint="Verified employee files"
             icon={<CheckCircle2 className="h-4 w-4 text-emerald-600" />}
-            onClick={() => setTab("approved")}
+            onClick={() => handleTabChange("approved")}
           />
-          {isAdmin ? (
-            <KpiCard
-              label="Pending HR Approval"
-              value={String(pendingDocs.length)}
-              hint={pendingDocs.length > 0 ? "Awaiting your review" : "All caught up"}
-              icon={<Clock className="h-4 w-4 text-amber-500" />}
-              onClick={() => setTab("pending")}
-            />
-          ) : (
-            <KpiCard
-              label="Awaiting HR Approval"
-              value={String(pendingDocumentsCount)}
-              hint="Hidden until HR approves"
-              icon={<Clock className="h-4 w-4 text-amber-500" />}
-            />
-          )}
+          <KpiCard
+            label={isAdmin ? "Pending HR Approval" : "Pending Documents"}
+            value={String(visiblePendingCount)}
+            hint={
+              isAdmin
+                ? visiblePendingCount > 0
+                  ? "Click to review & approve"
+                  : "All caught up"
+                : "Awaiting HR / Super Admin approval"
+            }
+            icon={<Clock className="h-4 w-4 text-amber-500" />}
+            onClick={() => handleTabChange("pending")}
+          />
           <KpiCard
             label="Expiring in 60 Days"
             value={String(expiringDocs.length)}
             hint="IDs & certs needing renewal"
             icon={<AlertTriangle className="h-4 w-4 text-rose-500" />}
-            onClick={() => setTab("expiring")}
+            onClick={() => handleTabChange("expiring")}
           />
           <KpiCard
             label={isAdmin ? "Employees Covered" : "Categories Covered"}
@@ -1116,12 +1142,12 @@ function DocumentsPageInner() {
         {/* Tabs Shell */}
         <TabsShell
           active={tab}
-          onChange={setTab}
+          onChange={handleTabChange}
           tabs={[
-            { key: "pending", label: `Pending Approval (${pendingDocs.length})`, hidden: !isAdmin },
+            { key: "pending", label: `Pending Documents (${pendingDocs.length})` },
             { key: "approved", label: `Approved Docs (${approvedDocs.length})` },
             { key: "expiring", label: `Expiring Soon (${expiringDocs.length})` },
-            { key: "rejected", label: `Rejected (${rejectedDocs.length})`, hidden: !isAdmin },
+            { key: "rejected", label: `Rejected (${rejectedDocs.length})`, hidden: !isAdmin && rejectedDocs.length === 0 },
             { key: "all", label: `All Employee Docs (${employeeDocuments.length})`, hidden: !isAdmin },
           ]}
         >
@@ -1316,6 +1342,50 @@ function DocumentsPageInner() {
                   )}
                 </div>
               </>
+            )}
+
+            {/* Dedicated Pending Documents Section visible on Employee Portal even when viewing Approved Docs */}
+            {isEmployee && tab === "approved" && pendingDocs.length > 0 && (
+              <div className="mt-6 space-y-3 rounded-2xl border border-amber-500/25 bg-amber-500/5 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                      <Clock className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground">
+                        Pending Documents ({pendingDocs.length})
+                      </h3>
+                      <p className="text-[11px] text-muted-foreground">
+                        Submitted by you · awaiting HR or Super Admin approval before moving to Approved Docs
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleTabChange("pending")}
+                    className="h-7 rounded-lg text-xs"
+                  >
+                    Open Pending Tab
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {pendingDocs.map((doc) => (
+                    <DocumentCard
+                      key={doc.id}
+                      doc={doc}
+                      todayIso={todayIso}
+                      isAdmin={false}
+                      onSelect={() => setSelectedDocId(doc.id)}
+                      onVerify={() => {}}
+                      onReject={() => {}}
+                    />
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         </TabsShell>
