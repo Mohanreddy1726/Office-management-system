@@ -3,11 +3,15 @@ import { connectToDatabase } from "@/lib/db";
 import { Attendance } from "@/models/Attendance";
 import { getCurrentUser } from "@/lib/auth";
 import { getMockStore } from "@/lib/mock-db";
-import { reconcileAllActiveMappings, syncLiveBiometricHardware } from "@/lib/biometric-sync";
+import { autoSyncBiometricIfStale, reconcileAllActiveMappings, syncLiveBiometricHardware } from "@/lib/biometric-sync";
+import { classifyLoginTime } from "@/lib/policies";
 
 export const dynamic = "force-dynamic";
 
 function formatAttendanceRecord(r: any) {
+  const loginClass = r.checkIn ? classifyLoginTime(r.checkIn) : null;
+  const mappedStatus =
+    r.status === "On Leave" ? "Leave" : r.status === "Half-day" ? "Half Day" : r.status || "Present";
   return {
     id: r._id.toString(),
     employeeId: r.employeeId,
@@ -19,8 +23,8 @@ function formatAttendanceRecord(r: any) {
     checkIn: r.checkIn || undefined,
     checkOut: r.checkOut || undefined,
     workedMinutes: r.totalHours ? Math.round(r.totalHours * 60) : 0,
-    lateMinutes: r.status === "Late" ? 30 : 0,
-    status: (r.status === "On Leave" ? "Leave" : r.status === "Half-day" ? "Half Day" : r.status || "Present") as any,
+    lateMinutes: loginClass ? loginClass.lateMinutes : r.status === "Late" ? 15 : 0,
+    status: mappedStatus as any,
     source: "Biometric" as const,
     confirmation: r.confirmation || "Confirmed",
     deviceUsed: r.deviceUsed || "eSSL K30 Pro - Main Office",
@@ -39,6 +43,13 @@ export async function GET(req: NextRequest) {
 
     const conn = await connectToDatabase();
     if (conn) {
+      // Automatically pull recent punches from live eSSL terminal if stale (>60s) and on LAN
+      try {
+        await autoSyncBiometricIfStale();
+      } catch (autoErr) {
+        console.warn("[Attendance Auto-Sync Warning]", autoErr);
+      }
+
       // Automatic Self-Healing: Reconcile any unmapped punches matching active biometric mappings
       try {
         await reconcileAllActiveMappings();

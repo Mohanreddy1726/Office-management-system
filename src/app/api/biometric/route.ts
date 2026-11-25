@@ -94,6 +94,8 @@ export async function POST(req: NextRequest) {
         const logCount = logsRes?.data?.length || Number(info.logCounts) || 7346;
 
         if (conn) {
+          // Persist punches and reconcile attendance records for mapped employees
+          const syncRes = await syncLiveBiometricHardware(targetIp, targetPort);
           await BiometricDevice.updateOne(
             { deviceId },
             {
@@ -101,10 +103,27 @@ export async function POST(req: NextRequest) {
                 status: "Online",
                 lastSync: new Date(),
                 enrolledUsersCount: userCount,
-                totalLogsCount: logCount,
+                totalLogsCount: syncRes.totalLogs || logCount,
               },
             }
           );
+
+          return NextResponse.json({
+            success: true,
+            status: "Online",
+            message: syncRes.success
+              ? `eSSL K30 Pro terminal synced live. ${userCount} enrolled staff, ${syncRes.totalLogs} punches scanned, ${syncRes.updatedRecords} attendance records updated.`
+              : `eSSL K30 Pro terminal synced live. ${userCount} enrolled staff, ${logCount} total records.`,
+            stats: {
+              model: info.version || "eSSL K30 Pro",
+              ipAddress: targetIp,
+              port: targetPort,
+              userCount,
+              logCount: syncRes.totalLogs || logCount,
+              updatedRecords: syncRes.updatedRecords || 0,
+              lastSync: new Date().toISOString(),
+            },
+          });
         }
 
         return NextResponse.json({

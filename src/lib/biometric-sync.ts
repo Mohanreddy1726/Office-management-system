@@ -2,6 +2,7 @@ import { Attendance } from "@/models/Attendance";
 import { BiometricMapping, BiometricDevice, UnmappedPunch } from "@/models/Biometric";
 import { Employee } from "@/models/Employee";
 import ZKLib from "node-zklib";
+import net from "net";
 import { classifyLoginTime } from "@/lib/policies";
 
 export function getISTDateComponents(date: Date) {
@@ -12,9 +13,33 @@ export function getISTDateComponents(date: Date) {
     minute: "2-digit",
     hour12: true,
   });
-  const hour24 = Number(date.toLocaleTimeString("en-US", { timeZone: "Asia/Kolkata", hour: "numeric", hour12: false }));
+  const hour24Raw = Number(
+    date.toLocaleTimeString("en-US", {
+      timeZone: "Asia/Kolkata",
+      hour: "numeric",
+      hourCycle: "h23",
+    })
+  );
+  const hour24 = hour24Raw === 24 ? 0 : hour24Raw;
   const minute = Number(date.toLocaleTimeString("en-US", { timeZone: "Asia/Kolkata", minute: "numeric" }));
   return { dateStr, timeStr, hour24, minute };
+}
+
+function checkTcpPort(host: string, port: number, timeoutMs = 1500): Promise<boolean> {
+  return new Promise((resolve) => {
+    const sock = net.createConnection({ host, port, timeout: timeoutMs }, () => {
+      sock.destroy();
+      resolve(true);
+    });
+    sock.on("error", () => {
+      sock.destroy();
+      resolve(false);
+    });
+    sock.on("timeout", () => {
+      sock.destroy();
+      resolve(false);
+    });
+  });
 }
 
 /**
@@ -239,26 +264,47 @@ export async function reconcileAllActiveMappings(): Promise<{ processedPunches: 
  */
 export async function syncLiveBiometricHardware(
   overrideIp?: string,
-  overridePort?: number
-): Promise<{ success: boolean; totalLogs: number; updatedRecords: number; error?: string }> {
+  overridePort?: number,
+  options?: { recentOnlyDays?: number; connectTimeoutMs?: number }
+): Promise<{ success: boolean; totalLogs: number; updatedRecords: number; userCount?: number; error?: string }> {
   let targetIp = overrideIp || "192.168.29.201";
   let targetPort = overridePort || 4370;
+  let commKey = 0;
 
-  const dev = await BiometricDevice.findOne({ deviceId: "DEV-01" });
+  const dev =
+    (await BiometricDevice.findOne({ deviceId: "DEV-01" })) ||
+    (await BiometricDevice.findOne({ connection: "TCP/IP" }));
   if (dev?.ipAddress && !overrideIp) targetIp = dev.ipAddress;
   if (dev?.port && !overridePort) targetPort = dev.port;
+  if (dev?.commKey) commKey = Number(dev.commKey) || 0;
+
+  const reachable = await checkTcpPort(targetIp, targetPort, options?.connectTimeoutMs ?? 2000);
+  if (!reachable) {
+    return {
+      success: false,
+      totalLogs: 0,
+      updatedRecords: 0,
+      error: `Biometric terminal at ${targetIp}:${targetPort} is not reachable from this host.`,
+    };
+  }
 
   try {
-    const zk = new ZKLib(targetIp, targetPort, 15000, 4000, 0, "tcp");
+    const zk = new ZKLib(targetIp, targetPort, 15000, 4000, commKey, "tcp");
     await zk.createSocket();
+    const usersRes = await zk.getUsers().catch(() => null);
     const logsRes = await zk.getAttendances();
     await zk.disconnect();
 
     const punches = logsRes?.data || [];
+    const enrolledUsersCount = usersRes?.data?.length || dev?.enrolledUsersCount || 25;
     const mappings = await BiometricMapping.find({ status: "Active" });
     const pinToMapping = new Map(mappings.map((m) => [String(m.biometricId).trim(), m]));
     const employees = await Employee.find({});
     const empMap = new Map(employees.map((e) => [e.employeeId, e]));
+
+    const cutoffIso = options?.recentOnlyDays
+      ? getISTDateComponents(new Date(Date.now() - options.recentOnlyDays * 86400000)).dateStr
+      : null;
 
     const groups = new Map<string, { employeeId: string; date: string; punches: Date[] }>();
     const unmappedGroups = new Map<string, { biometricId: string; date: string; punches: Date[] }>();
@@ -272,6 +318,8 @@ export async function syncLiveBiometricHardware(
       if (isNaN(d.getTime()) || d.getFullYear() < 2020) continue;
 
       const { dateStr } = getISTDateComponents(d);
+      if (cutoffIso && dateStr < cutoffIso) continue;
+
       const mapping = pinToMapping.get(pin);
 
       if (mapping) {
@@ -329,7 +377,7 @@ export async function syncLiveBiometricHardware(
               totalHours,
               status,
               confirmation: "Confirmed",
-              deviceUsed: "eSSL K30 Pro - Main Office",
+              deviceUsed: dev?.name || "eSSL K30 Pro - Main Office",
               updatedAt: new Date(),
             },
             $setOnInsert: { createdAt: new Date() },
@@ -352,10 +400,10 @@ export async function syncLiveBiometricHardware(
 
       unmappedBulk.push({
         updateOne: {
-          filter: { deviceId: "DEV-01", biometricId: item.biometricId, punchTime: first },
+          filter: { deviceId: dev?.deviceId || "DEV-01", biometricId: item.biometricId, punchTime: first },
           update: {
             $set: {
-              deviceId: "DEV-01",
+              deviceId: dev?.deviceId || "DEV-01",
               biometricId: item.biometricId,
               punchTime: first,
               punchType: item.punches.length > 1 ? "CheckIn" : "Unknown",
@@ -371,10 +419,10 @@ export async function syncLiveBiometricHardware(
       if (item.punches.length > 1) {
         unmappedBulk.push({
           updateOne: {
-            filter: { deviceId: "DEV-01", biometricId: item.biometricId, punchTime: last },
+            filter: { deviceId: dev?.deviceId || "DEV-01", biometricId: item.biometricId, punchTime: last },
             update: {
               $set: {
-                deviceId: "DEV-01",
+                deviceId: dev?.deviceId || "DEV-01",
                 biometricId: item.biometricId,
                 punchTime: last,
                 punchType: "CheckOut",
@@ -398,25 +446,85 @@ export async function syncLiveBiometricHardware(
 
     // Mark all resolved
     const mappedPins = Array.from(pinToMapping.keys());
-    await UnmappedPunch.updateMany(
-      { biometricId: { $in: mappedPins } },
-      { $set: { resolved: true, updatedAt: new Date() } }
-    );
+    if (mappedPins.length > 0) {
+      await UnmappedPunch.updateMany(
+        { biometricId: { $in: mappedPins } },
+        { $set: { resolved: true, updatedAt: new Date() } }
+      );
+    }
 
     await BiometricDevice.updateOne(
-      { deviceId: "DEV-01" },
+      { deviceId: dev?.deviceId || "DEV-01" },
       {
         $set: {
           status: "Online",
           lastSync: new Date(),
           totalLogsCount: punches.length,
-          enrolledUsersCount: 25,
+          enrolledUsersCount,
         },
       }
     );
 
-    return { success: true, totalLogs: punches.length, updatedRecords: bulkOps.length };
+    return {
+      success: true,
+      totalLogs: punches.length,
+      updatedRecords: bulkOps.length,
+      userCount: enrolledUsersCount,
+    };
   } catch (err: any) {
     return { success: false, totalLogs: 0, updatedRecords: 0, error: err.message };
   }
+}
+
+const gAuto = globalThis as unknown as {
+  __bioAutoSyncLastAt?: number;
+  __bioAutoSyncBackoffUntil?: number;
+  __bioAutoSyncInFlight?: Promise<void> | null;
+};
+
+/**
+ * Automatically syncs recent punches (last 30 days) from the live biometric terminal
+ * at most once every 60s when reachable on LAN, failing fast (1.5s) with a 3-min
+ * backoff if running in cloud/off-LAN.
+ */
+export async function autoSyncBiometricIfStale(): Promise<void> {
+  const now = Date.now();
+  if (gAuto.__bioAutoSyncInFlight) {
+    return gAuto.__bioAutoSyncInFlight;
+  }
+  if (gAuto.__bioAutoSyncBackoffUntil && now < gAuto.__bioAutoSyncBackoffUntil) {
+    return;
+  }
+  if (gAuto.__bioAutoSyncLastAt && now - gAuto.__bioAutoSyncLastAt < 60_000) {
+    return;
+  }
+
+  gAuto.__bioAutoSyncInFlight = (async () => {
+    try {
+      const dev =
+        (await BiometricDevice.findOne({ deviceId: "DEV-01" })) ||
+        (await BiometricDevice.findOne({ connection: "TCP/IP" }));
+      const dbLastSync = dev?.lastSync ? new Date(dev.lastSync).getTime() : 0;
+      if (now - dbLastSync < 60_000) {
+        gAuto.__bioAutoSyncLastAt = now;
+        return;
+      }
+
+      const res = await syncLiveBiometricHardware(undefined, undefined, {
+        recentOnlyDays: 30,
+        connectTimeoutMs: 1500,
+      });
+      if (res.success) {
+        gAuto.__bioAutoSyncLastAt = Date.now();
+      } else {
+        gAuto.__bioAutoSyncBackoffUntil = Date.now() + 180_000;
+      }
+    } catch {
+      gAuto.__bioAutoSyncBackoffUntil = Date.now() + 180_000;
+    } finally {
+      gAuto.__bioAutoSyncInFlight = null;
+    }
+  })();
+
+  return gAuto.__bioAutoSyncInFlight;
 }
