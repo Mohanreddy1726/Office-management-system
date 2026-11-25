@@ -708,8 +708,12 @@ function EmployeeDashboard({ me }: { me: any }) {
   const [showPay, setShowPay] = useState(true);
 
   const realTodayIso = useMemo(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    try {
+      return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    } catch {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    }
   }, []);
 
   const greeting = useMemo(() => {
@@ -725,17 +729,19 @@ function EmployeeDashboard({ me }: { me: any }) {
   );
 
   const todayRec = useMemo(
-    () => mine.find((a) => a.date === realTodayIso) || mine.find((a) => a.date === TODAY),
+    () => mine.find((a) => a.date === realTodayIso),
     [mine, realTodayIso]
   );
 
-  const activePeriod = useMemo(() => {
-    const currentPrefix = realTodayIso.slice(0, 7);
-    if (mine.some((a) => a.date.startsWith(currentPrefix))) return currentPrefix;
-    if (mine.some((a) => a.date.startsWith(CURRENT_PERIOD))) return CURRENT_PERIOD;
-    const latest = mine.map((a) => a.date.slice(0, 7)).sort().reverse()[0];
-    return latest || CURRENT_PERIOD;
-  }, [mine, realTodayIso]);
+  const lastRec = useMemo(
+    () =>
+      [...mine]
+        .filter((a) => a.date < realTodayIso && (a.checkIn || a.checkOut))
+        .sort((a, b) => b.date.localeCompare(a.date))[0],
+    [mine, realTodayIso]
+  );
+
+  const activePeriod = realTodayIso.slice(0, 7);
 
   const activeMonthLabel = useMemo(() => {
     try {
@@ -862,7 +868,7 @@ function EmployeeDashboard({ me }: { me: any }) {
             <EmployeeAvatar id={me.id} name={me.name} size={52} />
             <div className="min-w-0">
               <p className="text-[11px] font-medium uppercase tracking-wider text-primary">
-                {fmtDate(todayRec?.date || realTodayIso)}
+                {fmtDate(realTodayIso)}
               </p>
               <h1 className="truncate text-xl font-bold tracking-tight text-foreground sm:text-2xl">
                 {greeting}, {me.name.split(" ")[0]}
@@ -995,7 +1001,13 @@ function EmployeeDashboard({ me }: { me: any }) {
 
             <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-0.5">
               <span>{todayRec?.deviceUsed || "Office Biometric Terminal"}</span>
-              {workedLabel && <span className="font-semibold text-foreground">Worked: {workedLabel}</span>}
+              {workedLabel ? (
+                <span className="font-semibold text-foreground">Worked: {workedLabel}</span>
+              ) : !todayRec && lastRec ? (
+                <span>
+                  Last log: {fmtDate(lastRec.date)}
+                </span>
+              ) : null}
             </div>
 
             {confirmPending.length > 0 && (

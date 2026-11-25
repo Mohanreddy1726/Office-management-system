@@ -3,7 +3,6 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/data/store";
-import { TODAY } from "@/lib/data/seed";
 import { PageHeader, KpiCard, StatusBadge, TabsShell, Field, ConfirmDialog, EmployeeAvatar } from "@/components/shared";
 import { DataTable, exportCsv, type Column } from "@/components/data-table";
 import { Sel, Person, useScope, useNames } from "@/components/form-bits";
@@ -26,8 +25,12 @@ import {
 import { cn } from "@/lib/utils";
 
 const getTodayIso = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  try {
+    return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  } catch {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
 };
 
 const parseTimeToMinutes = (str?: string): number | null => {
@@ -1153,7 +1156,8 @@ function MonthCalendarSection({
   currentDate?: string;
   onSelectDate: (d: string) => void;
 }) {
-  const activeMonth = (currentDate || new Date().toISOString().slice(0, 10)).slice(0, 7);
+  const todayIso = getTodayIso();
+  const activeMonth = (currentDate || todayIso).slice(0, 7);
   const [yStr, mStr] = activeMonth.split("-");
   const year = Number(yStr);
   const monthNum = Number(mStr) || 1;
@@ -1247,7 +1251,7 @@ function MonthCalendarSection({
           {days.map((d, index) => {
             const dayNum = index + 1;
             const recs = records.filter((r) => r.date === d);
-            const isToday = d === TODAY;
+            const isToday = d === todayIso;
 
             if (isEmployee) {
               const r = recs[0];
@@ -1271,7 +1275,7 @@ function MonthCalendarSection({
                   </div>
                   <div className="w-full text-center">
                     <p className="truncate text-[11px] font-medium">
-                      {r?.status ?? (d > TODAY ? "Upcoming" : "—")}
+                      {r?.status ?? (d > todayIso ? "Upcoming" : "—")}
                     </p>
                     {r?.checkIn && (
                       <p className="text-[10px] opacity-75 truncate">
@@ -1322,7 +1326,7 @@ function MonthCalendarSection({
                       )}
                     </div>
                   ) : (
-                    <span className="text-[10px] text-muted-foreground">{d > TODAY ? "" : "No logs"}</span>
+                    <span className="text-[10px] text-muted-foreground">{d > todayIso ? "" : "No logs"}</span>
                   )}
                 </div>
               </button>
@@ -1662,7 +1666,7 @@ function ShiftsAndHolidaysView({
 
         <div className="space-y-3">
           {holidays.map((h) => {
-            const isPast = h.date < TODAY;
+            const isPast = h.date < getTodayIso();
             return (
               <div
                 key={h.id}
@@ -1728,8 +1732,9 @@ function CorrectionDialog({
   const defaultIn = genShift?.start || "10:00";
   const defaultOut = genShift?.end || "18:30";
 
+  const todayIso = getTodayIso();
   const [emp, setEmp] = useState(prefill?.empId || uid);
-  const [date, setDate] = useState(prefill?.date || TODAY);
+  const [date, setDate] = useState(prefill?.date || todayIso);
   const [inT, setIn] = useState(prefill?.checkIn || defaultIn);
   const [outT, setOut] = useState(prefill?.checkOut || defaultOut);
   const [workMode, setWorkMode] = useState<"Office" | "WFH" | "Client Site" | "Tour">("Office");
@@ -1792,7 +1797,7 @@ function CorrectionDialog({
                   : "No existing punch on this day"
               }
             >
-              <Input type="date" value={date} max={TODAY} onChange={(e) => setDate(e.target.value)} className="h-9" />
+              <Input type="date" value={date} max={todayIso} onChange={(e) => setDate(e.target.value)} className="h-9" />
             </Field>
           </div>
 
