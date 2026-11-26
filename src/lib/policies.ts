@@ -180,41 +180,24 @@ export function classifyLoginTime(
   const graceEnd = shiftStart + GVK_POLICY.graceMinutes; // 10:10 AM (610)
   const noonCutoff = GVK_POLICY.lateNoonCutoffMinutes; // 12:00 PM (720)
 
-  if (mins <= shiftStart) {
-    return { tier: "on_time", status: "Present", lateMinutes: 0, label: "On time" };
-  }
-
+  // Every employee is NOT late up to 10:10 AM; late minutes start counting from 10:11 AM
   if (mins <= graceEnd) {
-    const lateMinutes = mins - shiftStart;
-    if (priorGraceCountInMonth < GVK_POLICY.graceMonthlyLimit) {
-      return {
-        tier: "grace",
-        status: "Present",
-        lateMinutes,
-        label: `Grace (${priorGraceCountInMonth + 1}/${GVK_POLICY.graceMonthlyLimit} used)`,
-      };
-    }
-    return {
-      tier: "late",
-      status: "Late",
-      lateMinutes,
-      label: "Late login (monthly grace limit exceeded)",
-    };
+    return { tier: "on_time", status: "Present", lateMinutes: 0, label: "On time" };
   }
 
   if (mins <= noonCutoff) {
     return {
       tier: "late",
       status: "Late",
-      lateMinutes: mins - shiftStart,
-      label: "Late login (10:11 AM – 12:00 noon)",
+      lateMinutes: mins - graceEnd,
+      label: "Late login (from 10:11 AM)",
     };
   }
 
   return {
     tier: "half_day",
     status: "Half Day",
-    lateMinutes: mins - shiftStart,
+    lateMinutes: mins - graceEnd,
     label: "After 12:00 noon (Half-day salary cut)",
   };
 }
@@ -318,10 +301,9 @@ export function evaluateMonthlyAttendancePolicy(
         lateLogins += 1;
       } else if (cls.tier === "half_day") {
         halfDayAfterNoonCount += 1;
-      } else if (rec.status === "Half Day") {
-        halfDayAfterNoonCount += 1;
-      } else if (rec.status === "Late") {
-        lateLogins += 1;
+      } else if (cls.tier === "unknown") {
+        if (rec.status === "Half Day") halfDayAfterNoonCount += 1;
+        else if (rec.status === "Late") lateLogins += 1;
       }
     } else if (rec.status === "Late") {
       lateLogins += 1;

@@ -854,8 +854,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 const checkInMins = parseTimeToMinutes(rec.checkIn);
                 if (checkInMins === null) return rec;
                 const isHalfDay = checkInMins > 12 * 60;
-                const isLate = !isHalfDay && checkInMins > shiftStartMins + grace;
-                const lateMinutes = checkInMins > shiftStartMins ? checkInMins - shiftStartMins : 0;
+                const lateCutoff = shiftStartMins + grace;
+                const isLate = !isHalfDay && checkInMins > lateCutoff;
+                const lateMinutes = checkInMins > lateCutoff ? checkInMins - lateCutoff : 0;
                 const status = isHalfDay ? "Half Day" : isLate ? "Late" : "Present";
 
                 return {

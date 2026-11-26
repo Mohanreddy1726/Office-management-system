@@ -993,7 +993,7 @@ function EmployeeDashboard({ me }: { me: any }) {
                   </p>
                 ) : (
                   <p className="mt-0.5 text-[11px] text-muted-foreground">
-                    10:00 AM – 6:30 PM · 10 min grace ({policySummary.graceUsed}/{GVK_POLICY.graceMonthlyLimit} used)
+                    10:00 AM – 6:30 PM · Not late until 10:10 AM
                   </p>
                 )}
               </div>
@@ -1090,9 +1090,9 @@ function EmployeeDashboard({ me }: { me: any }) {
 
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 text-[11px]">
               <div className="rounded-xl border border-border/60 bg-background/60 px-2.5 py-2">
-                <span className="text-muted-foreground block">10m Grace Used</span>
+                <span className="text-muted-foreground block">On-Time Cutoff</span>
                 <span className="font-bold text-foreground">
-                  {policySummary.graceUsed}/{GVK_POLICY.graceMonthlyLimit} this mo
+                  10:10 AM
                 </span>
               </div>
               <div className="rounded-xl border border-border/60 bg-background/60 px-2.5 py-2">

@@ -301,7 +301,8 @@ export default function AttendancePage() {
           const startMins = parseTimeToMinutes(s.start);
           if (inMins !== null && startMins !== null) {
             const grace = s.graceMinutes ?? 10;
-            lateM = inMins > startMins + grace ? inMins - startMins : 0;
+            const lateCutoff = startMins + grace;
+            lateM = inMins > lateCutoff ? inMins - lateCutoff : 0;
           }
         }
         return lateM ? (
@@ -932,8 +933,9 @@ function AttendanceRecordCard({
     const startMins = parseTimeToMinutes(shift.start);
     if (inMins !== null && startMins !== null) {
       const grace = shift.graceMinutes ?? 10;
-      if (inMins > startMins + grace) {
-        effectiveLateMinutes = inMins - startMins;
+      const lateCutoff = startMins + grace;
+      if (inMins > lateCutoff) {
+        effectiveLateMinutes = inMins - lateCutoff;
         effectiveStatus = "Late";
       } else {
         effectiveLateMinutes = 0;
@@ -1376,7 +1378,8 @@ function ConfirmationCard({
     const startMins = parseTimeToMinutes(shift.start);
     if (inMins !== null && startMins !== null) {
       const grace = shift.graceMinutes ?? 10;
-      effectiveLateMinutes = inMins > startMins + grace ? inMins - startMins : 0;
+      const lateCutoff = startMins + grace;
+      effectiveLateMinutes = inMins > lateCutoff ? inMins - lateCutoff : 0;
     }
   }
 
@@ -1644,7 +1647,7 @@ function ShiftsAndHolidaysView({
               <div className="mt-3 grid grid-cols-3 gap-2 border-t border-slate-100 pt-3 text-xs dark:border-slate-800">
                 <div>
                   <span className="text-muted-foreground text-[10px] uppercase">Grace Period</span>
-                  <p className="font-semibold text-foreground">{shift.graceMinutes} mins (3/mo)</p>
+                  <p className="font-semibold text-foreground">{shift.graceMinutes} mins (till 10:10 AM)</p>
                 </div>
                 <div>
                   <span className="text-muted-foreground text-[10px] uppercase">Meal Break</span>
@@ -1664,8 +1667,8 @@ function ShiftsAndHolidaysView({
               Official Login, Late &amp; LOP Policy ({GVK_POLICY.shiftLabel})
             </h4>
             <ul className="space-y-1 text-xs text-muted-foreground list-disc pl-4">
-              <li><strong className="text-foreground">10-Minute Grace:</strong> Up to 10:10 AM accepted for {GVK_POLICY.graceMonthlyLimit} logins per month.</li>
-              <li><strong className="text-foreground">Up to 12:00 Noon:</strong> Considered a Late Login (3 late logins in a month = Loss of Pay).</li>
+              <li><strong className="text-foreground">Grace Window (Until 10:10 AM):</strong> Logins up to 10:10 AM are considered On Time (not late) for every employee; late time counts from 10:11 AM.</li>
+              <li><strong className="text-foreground">10:11 AM – 12:00 Noon:</strong> Considered a Late Login (3 late logins in a month = Loss of Pay).</li>
               <li><strong className="text-foreground">After 12:00 Noon:</strong> Half-day salary cut (0.5 day LOP).</li>
               <li><strong className="text-foreground">Holiday Work:</strong> Prior-approved work on Sunday/Holiday earns Comp-Off or 1-day Gross Salary encashment.</li>
               <li><strong className="text-foreground">5-Day Rule &amp; LOP Cap:</strong> 5 consecutive absent days without permission = abandonment; LOP max {GVK_POLICY.maxMonthlyLopDays} days/month (except maternity/medical emergency).</li>
