@@ -586,7 +586,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           <SidebarContent collapsed={prefs.sidebarCollapsed} />
         </aside>
-        <div className={cn("flex min-h-screen w-full flex-col transition-all duration-200", prefs.sidebarCollapsed ? "lg:pl-[72px]" : "lg:pl-[250px]")}>
+        <div className={cn("flex min-h-screen w-full min-w-0 flex-col transition-all duration-200", prefs.sidebarCollapsed ? "lg:pl-[72px]" : "lg:pl-[250px]")}>
           <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/95 px-4 backdrop-blur">
             {!isEmployee && (
               <Button variant="ghost" size="icon" className="h-8 w-8 lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open navigation">
@@ -697,7 +697,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           )}
 
-          <main className="flex-1 p-3 sm:p-4 md:p-6 pb-28 md:pb-6"><RoleGate pathname={pathname}>{children}</RoleGate></main>
+          <main className="min-w-0 flex-1 overflow-x-hidden p-3 pb-28 sm:p-4 md:p-6 md:pb-6"><RoleGate pathname={pathname}>{children}</RoleGate></main>
           <footer className="hidden md:block px-6 pb-4 text-center text-[10px] text-muted-foreground">
             RenDesk Workplace Operations OS · Unified workforce lifecycle platform.
           </footer>

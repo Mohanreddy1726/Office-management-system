@@ -84,51 +84,115 @@ export default function NotificationsPage() {
 
   return (
     <AppShell>
-      <div>
-        <PageHeader
-          breadcrumb={["Operations", "Notifications & Announcements"]}
-          title="Notifications & Company Announcements"
-          description="System notices, workflow approvals, biometric alerts, payroll publications, and official company broadcasts."
-          actions={
-            <>
+      <div className="min-w-0 space-y-4 sm:space-y-0">
+        {/* Mobile-First Header (< sm) */}
+        <div className="relative overflow-hidden rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/10 via-card to-sky-500/5 p-4 shadow-sm sm:hidden">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
+                <Bell className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-primary">
+                  Inbox &amp; Broadcasts
+                </span>
+                <h1 className="truncate text-lg font-bold tracking-tight text-foreground">
+                  Notifications
+                </h1>
+              </div>
+            </div>
+            {unreadCount > 0 && (
+              <Badge className="shrink-0 bg-primary text-[11px] font-bold text-primary-foreground">
+                {unreadCount} unread
+              </Badge>
+            )}
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+            System notices, workflow approvals, and official company announcements.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={unreadCount === 0}
+              className="h-9 flex-1 gap-1.5 rounded-xl bg-background/80 text-xs shadow-xs"
+              onClick={() => {
+                markAllRead();
+                toast.success("All notifications marked as read");
+              }}
+            >
+              <CheckCheck className="h-3.5 w-3.5" /> Mark All Read
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 gap-1.5 rounded-xl border-rose-200 bg-background/80 text-xs text-rose-600 shadow-xs hover:bg-rose-50 dark:border-rose-900"
+              onClick={() => {
+                clearNotifications();
+                toast.info("Cleared all notifications");
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5" /> Clear
+            </Button>
+            {isAdmin && (
               <Button
-                variant="outline"
                 size="sm"
-                disabled={unreadCount === 0}
-                className="gap-1.5 text-xs shadow-sm"
-                onClick={() => {
-                  markAllRead();
-                  toast.success("All notifications marked as read");
-                }}
+                className="h-9 w-full gap-1.5 rounded-xl bg-primary text-xs font-semibold text-primary-foreground shadow-sm"
+                onClick={() => setAnnouncementOpen(true)}
               >
-                <CheckCheck className="h-3.5 w-3.5" /> Mark All Read
+                <Plus className="h-3.5 w-3.5" /> Publish Announcement
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5 text-xs shadow-sm text-rose-600 border-rose-200 hover:bg-rose-50 dark:border-rose-900"
-                onClick={() => {
-                  clearNotifications();
-                  toast.info("Cleared all notifications");
-                }}
-              >
-                <Trash2 className="h-3.5 w-3.5" /> Clear Feed
-              </Button>
-              {isAdmin && (
+            )}
+          </div>
+        </div>
+
+        {/* Desktop Header */}
+        <div className="hidden sm:block">
+          <PageHeader
+            breadcrumb={["Operations", "Notifications & Announcements"]}
+            title="Notifications & Company Announcements"
+            description="System notices, workflow approvals, biometric alerts, payroll publications, and official company broadcasts."
+            actions={
+              <>
                 <Button
+                  variant="outline"
                   size="sm"
-                  className="gap-1.5 text-xs shadow-sm bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
-                  onClick={() => setAnnouncementOpen(true)}
+                  disabled={unreadCount === 0}
+                  className="gap-1.5 text-xs shadow-sm"
+                  onClick={() => {
+                    markAllRead();
+                    toast.success("All notifications marked as read");
+                  }}
                 >
-                  <Plus className="h-3.5 w-3.5" /> Publish Announcement
+                  <CheckCheck className="h-3.5 w-3.5" /> Mark All Read
                 </Button>
-              )}
-            </>
-          }
-        />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 border-rose-200 text-xs text-rose-600 shadow-sm hover:bg-rose-50 dark:border-rose-900"
+                  onClick={() => {
+                    clearNotifications();
+                    toast.info("Cleared all notifications");
+                  }}
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Clear Feed
+                </Button>
+                {isAdmin && (
+                  <Button
+                    size="sm"
+                    className="gap-1.5 bg-primary text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90"
+                    onClick={() => setAnnouncementOpen(true)}
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Publish Announcement
+                  </Button>
+                )}
+              </>
+            }
+          />
+        </div>
 
         {/* Top Metric KPI Cards */}
-        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2.5 sm:mb-6 sm:gap-3 xl:grid-cols-4">
           <KpiCard
             label="Unread Alerts"
             value={String(unreadCount)}
@@ -297,30 +361,30 @@ function NotificationCard({
   return (
     <div
       className={cn(
-        "group relative flex flex-col justify-between rounded-2xl border p-4 transition-all duration-200",
+        "group relative flex min-w-0 flex-col justify-between overflow-hidden rounded-2xl border p-4 transition-all duration-200",
         !item.read
           ? "border-primary/60 bg-primary/[0.07] ring-1 ring-primary/20 shadow-sm hover:shadow-md dark:bg-primary/15"
           : "border-border/70 bg-muted/25 opacity-80 shadow-none hover:opacity-100 dark:bg-card/50"
       )}
     >
-      <div>
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className={cn("flex h-11 w-11 items-center justify-center rounded-xl border font-bold shadow-sm", style.color)}>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-start justify-between gap-2 sm:flex-nowrap sm:gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border font-bold shadow-sm sm:h-11 sm:w-11", style.color)}>
               {style.icon}
             </div>
 
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 {!item.read && <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary ring-2 ring-primary/25" title="Unread" />}
-                <h4 className={cn("truncate text-[14px]", !item.read ? "font-bold text-foreground" : "font-medium text-muted-foreground")}>
+                <h4 className={cn("truncate text-[13px] sm:text-[14px]", !item.read ? "font-bold text-foreground" : "font-medium text-muted-foreground")}>
                   {item.title}
                 </h4>
               </div>
-              <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground sm:text-xs">
                 <span>{item.category}</span>
                 <span>•</span>
-                <span>{item.timestamp}</span>
+                <span className="truncate">{item.timestamp}</span>
               </div>
             </div>
           </div>
@@ -340,7 +404,7 @@ function NotificationCard({
         </div>
 
         {/* Description body */}
-        <p className={cn("mt-3 pl-1 text-xs leading-relaxed", !item.read ? "text-foreground/90" : "text-muted-foreground")}>
+        <p className={cn("mt-3 break-words pl-1 text-xs leading-relaxed", !item.read ? "text-foreground/90" : "text-muted-foreground")}>
           {item.description}
         </p>
       </div>
@@ -391,15 +455,15 @@ function AnnouncementCard({
   const isHigh = announcement.priority === "High";
 
   return (
-    <div className="group relative rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm dark:bg-card dark:border-border hover:shadow-md transition-shadow">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-amber-600 font-bold border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900 shrink-0">
+    <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm transition-shadow hover:shadow-md dark:border-border dark:bg-card sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-2 sm:flex-nowrap sm:gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 font-bold text-amber-600 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300 sm:h-11 sm:w-11">
             <Megaphone className="h-5 w-5" />
           </div>
-          <div>
-            <h4 className="font-bold text-foreground text-sm">{announcement.title}</h4>
-            <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="min-w-0 flex-1">
+            <h4 className="truncate text-sm font-bold text-foreground">{announcement.title}</h4>
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground sm:text-xs">
               <span>Audience: <strong>{announcement.audience}</strong></span>
               {announcement.scope && (
                 <>
@@ -413,9 +477,9 @@ function AnnouncementCard({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex shrink-0 items-center gap-2">
           {isHigh && (
-            <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300">
+            <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
               Urgent Notice
             </span>
           )}
@@ -423,7 +487,7 @@ function AnnouncementCard({
             <button
               type="button"
               onClick={onDelete}
-              className="rounded-lg p-1 text-muted-foreground hover:bg-rose-50 hover:text-rose-600 transition-colors"
+              className="rounded-lg p-1 text-muted-foreground transition-colors hover:bg-rose-50 hover:text-rose-600"
               title="Delete Announcement"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -434,7 +498,7 @@ function AnnouncementCard({
 
       <div className="my-3 border-t border-slate-100 dark:border-slate-800" />
 
-      <p className="text-xs text-foreground/90 leading-relaxed bg-slate-50 dark:bg-muted/30 p-3 rounded-xl whitespace-pre-line">
+      <p className="break-words whitespace-pre-line rounded-xl bg-slate-50 p-3 text-xs leading-relaxed text-foreground/90 dark:bg-muted/30">
         {announcement.message}
       </p>
 
@@ -488,7 +552,7 @@ function AnnouncementDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg rounded-2xl p-6">
+      <DialogContent className="w-[calc(100vw-1.5rem)] max-h-[90dvh] overflow-y-auto overscroll-contain rounded-2xl p-4 sm:w-full sm:max-w-lg sm:p-6">
         <DialogHeader>
           <div className="flex items-center gap-2.5">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -513,7 +577,7 @@ function AnnouncementDialog({
             />
           </Field>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Audience Scope">
               <Sel
                 value={audience}
