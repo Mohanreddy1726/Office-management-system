@@ -113,9 +113,11 @@ export default function AttendancePage() {
       if (res.ok && json.success) {
         if (Array.isArray(json.records) && json.records.length > 0) {
           setAttendanceRecords(json.records);
-          const hasCurrentDate = json.records.some((r: any) => r.date === date);
           const hasToday = json.records.some((r: any) => r.date === todayIso);
-          if (!hasCurrentDate && hasToday) {
+          const hasCurrentDate = json.records.some((r: any) => r.date === date);
+          if (hasToday && json.terminalReachable !== false) {
+            setDate(todayIso);
+          } else if (!hasCurrentDate && hasToday) {
             setDate(todayIso);
           } else if (!hasCurrentDate && json.records.length > 0) {
             setDate(json.records[0].date);
@@ -123,11 +125,18 @@ export default function AttendancePage() {
         } else {
           await loadAttendance();
         }
-        toast.success(
-          json.message ||
-            `Biometric Sync Complete: ${json.summary?.processed || 0} punches scanned, ${json.summary?.updatedRecords || 0} attendance records updated!`,
-          { id: "bio-sync" }
-        );
+        if (json.terminalReachable === false) {
+          toast.warning(
+            json.message || "Office Biometric Bridge is offline. Showing stored MongoDB records.",
+            { id: "bio-sync", duration: 6000 }
+          );
+        } else {
+          toast.success(
+            json.message ||
+              `Biometric Sync Complete: ${json.summary?.processed || 0} punches scanned, ${json.summary?.updatedRecords || 0} attendance records updated!`,
+            { id: "bio-sync" }
+          );
+        }
       } else {
         toast.error(json.error || "Biometric sync failed", { id: "bio-sync" });
       }

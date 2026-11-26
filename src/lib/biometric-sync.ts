@@ -1,6 +1,7 @@
 import { Attendance } from "@/models/Attendance";
 import { BiometricMapping, BiometricDevice, UnmappedPunch } from "@/models/Biometric";
 import { Employee } from "@/models/Employee";
+import { SyncJob } from "@/models/SyncJob";
 import ZKLib from "node-zklib";
 import net from "net";
 import { classifyLoginTime } from "@/lib/policies";
@@ -549,5 +550,70 @@ export async function syncLiveBiometricHardware(
     };
   } catch (err: any) {
     return { success: false, totalLogs: 0, updatedRecords: 0, error: err.message };
+  }
+}
+
+/**
+ * When the Next.js server runs on a cloud host (e.g. Vercel) that cannot directly
+ * reach the office LAN IP (192.168.29.201), dispatch a manual on-demand SyncJob to
+ * the Office Biometric Bridge (listening via MongoDB Change Streams) and await up
+ * to `timeoutMs` for completion. Zero background auto-sync or idle CPU.
+ */
+export async function dispatchBiometricSyncThroughBridge(options?: {
+  action?: "sync_biometric" | "sync_device" | "test_connection";
+  deviceId?: string;
+  ipAddress?: string;
+  port?: number;
+  requestedBy?: string;
+  timeoutMs?: number;
+}): Promise<{
+  reached: boolean;
+  summary?: {
+    totalLogs?: number;
+    recentLogsChecked?: number;
+    skippedOldLogs?: number;
+    updatedRecords?: number;
+    userCount?: number;
+  };
+  error?: string;
+}> {
+  const timeoutMs = options?.timeoutMs ?? 12000;
+  const jobId = `SYNC-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+  try {
+    const job = await SyncJob.create({
+      jobId,
+      action: options?.action || "sync_biometric",
+      deviceId: options?.deviceId || "DEV-01",
+      ipAddress: options?.ipAddress,
+      port: options?.port,
+      requestedBy: options?.requestedBy || "Admin",
+      status: "pending",
+    });
+
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 450));
+      const latest = await SyncJob.findById(job._id).lean();
+      if (!latest) break;
+      if (latest.status === "completed") {
+        return { reached: true, summary: latest.summary };
+      }
+      if (latest.status === "failed") {
+        return { reached: false, error: latest.error || "Biometric terminal connection failed via office bridge." };
+      }
+    }
+
+    await SyncJob.updateOne(
+      { _id: job._id, status: { $in: ["pending", "running"] } },
+      { $set: { status: "failed", error: "Office Biometric Bridge did not respond in time.", completedAt: new Date() } }
+    ).catch(() => {});
+
+    return {
+      reached: false,
+      error: "Office Biometric Bridge is offline or office PC is asleep. Ensure RenDesk Biometric Bridge is running on an office LAN PC.",
+    };
+  } catch (err: any) {
+    return { reached: false, error: err?.message || "Failed to dispatch biometric bridge sync" };
   }
 }

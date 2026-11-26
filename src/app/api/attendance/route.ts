@@ -3,7 +3,7 @@ import { connectToDatabase } from "@/lib/db";
 import { Attendance } from "@/models/Attendance";
 import { getCurrentUser } from "@/lib/auth";
 import { getMockStore } from "@/lib/mock-db";
-import { reconcileAllActiveMappings, syncLiveBiometricHardware } from "@/lib/biometric-sync";
+import { reconcileAllActiveMappings, syncLiveBiometricHardware, dispatchBiometricSyncThroughBridge } from "@/lib/biometric-sync";
 import { classifyLoginTime } from "@/lib/policies";
 
 export const dynamic = "force-dynamic";
@@ -105,7 +105,35 @@ export async function POST(req: NextRequest) {
           });
         }
 
-        // If hardware is unreachable (e.g. running on Vercel cloud), reconcile all stored unmapped punches
+        // If hardware is not directly reachable on LAN (e.g. running on Vercel cloud), trigger Office Biometric Bridge
+        const bridgeResult = await dispatchBiometricSyncThroughBridge({
+          action: "sync_biometric",
+          requestedBy: session?.name || "Admin",
+          timeoutMs: 12000,
+        });
+
+        if (bridgeResult.reached && bridgeResult.summary) {
+          const s = bridgeResult.summary;
+          const rawRecords = await Attendance.find({}).sort({ date: -1, checkIn: 1 });
+          const records = rawRecords.map(formatAttendanceRecord);
+          return NextResponse.json({
+            success: true,
+            records,
+            syncedFrom: "office_bridge",
+            terminalReachable: true,
+            message:
+              (s.updatedRecords ?? 0) > 0
+                ? `Synced ${s.recentLogsChecked ?? s.totalLogs ?? 0} recent punches via Office Bridge (${s.updatedRecords} updated, ${s.skippedOldLogs ?? 0} old skipped).`
+                : `Already up to date via Office Bridge (${s.recentLogsChecked ?? 0} recent punches checked, ${s.skippedOldLogs ?? 0} old skipped).`,
+            summary: {
+              processed: s.recentLogsChecked ?? s.totalLogs ?? 0,
+              skippedOld: s.skippedOldLogs ?? 0,
+              updatedRecords: s.updatedRecords ?? 0,
+            },
+          });
+        }
+
+        // Fallback: reconcile stored unresolved punches from MongoDB Atlas and inform user honestly
         const cloudResult = await reconcileAllActiveMappings();
         const rawRecords = await Attendance.find({}).sort({ date: -1, checkIn: 1 });
         const records = rawRecords.map(formatAttendanceRecord);
@@ -116,8 +144,8 @@ export async function POST(req: NextRequest) {
           syncedFrom: "cloud_database",
           terminalReachable: false,
           message: cloudResult.updatedRecords > 0
-            ? `Reconciled ${cloudResult.updatedRecords} attendance records for mapped employees (${totalCount} total in database).`
-            : `Refreshed ${records.length} attendance records from MongoDB. (${liveResult.error || "Physical terminal is on office LAN 192.168.29.201"})`,
+            ? `Reconciled ${cloudResult.updatedRecords} attendance records from MongoDB (${totalCount} total). ${bridgeResult.error || ""}`
+            : `Loaded ${records.length} stored records from MongoDB. Live machine not synced: ${bridgeResult.error || liveResult.error}`,
           summary: { processed: cloudResult.processedPunches, updatedRecords: cloudResult.updatedRecords },
         });
       }

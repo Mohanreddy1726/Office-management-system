@@ -9,6 +9,7 @@
     "lint": "next lint",
     "seed": "node scripts/seed.mjs",
     "sync:biometric": "node scripts/sync_live_to_atlas.mjs",
+    "sync:bridge": "node scripts/biometric_bridge.mjs",
     "sync:daemon": "node scripts/daemon_sync_biometric.mjs"
   },
   "dependencies": {

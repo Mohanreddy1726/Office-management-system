@@ -4,7 +4,7 @@ import { BiometricDevice, BiometricMapping, UnmappedPunch } from "@/models/Biome
 import { Employee } from "@/models/Employee";
 import { getCurrentUser } from "@/lib/auth";
 import { getMockStore } from "@/lib/mock-db";
-import { reconcileEmployeePunches, syncLiveBiometricHardware } from "@/lib/biometric-sync";
+import { reconcileEmployeePunches, syncLiveBiometricHardware, dispatchBiometricSyncThroughBridge } from "@/lib/biometric-sync";
 import ZKLib from "node-zklib";
 
 export const dynamic = "force-dynamic";
@@ -141,23 +141,42 @@ export async function POST(req: NextRequest) {
         });
       } catch (sockErr: any) {
         if (conn) {
+          const bridgeRes = await dispatchBiometricSyncThroughBridge({
+            action,
+            deviceId,
+            ipAddress: targetIp,
+            port: targetPort,
+            requestedBy: session?.name || "Admin",
+            timeoutMs: 12000,
+          });
           const dev = await BiometricDevice.findOne({ deviceId });
-          if (dev) {
+          if (bridgeRes.reached && bridgeRes.summary) {
+            const s = bridgeRes.summary;
             return NextResponse.json({
               success: true,
               status: "Online",
-              message: `eSSL K30 Pro terminal verified in database (${dev.totalLogsCount || 7346} records, ${dev.enrolledUsersCount || 25} staff). Local IP ${targetIp} is on internal office LAN.`,
+              syncedFrom: "office_bridge",
+              message: `Synced live via Office Bridge: ${s.userCount ?? dev?.enrolledUsersCount ?? 25} enrolled staff, ${s.recentLogsChecked ?? s.totalLogs ?? 0} recent punches checked, ${s.updatedRecords ?? 0} attendance records updated.`,
               stats: {
-                model: dev.model || "eSSL K30 Pro",
+                model: dev?.model || "eSSL K30 Pro",
                 ipAddress: targetIp,
                 port: targetPort,
-                userCount: dev.enrolledUsersCount || 25,
-                logCount: dev.totalLogsCount || 7346,
-                lastSync: dev.lastSync || new Date().toISOString(),
+                userCount: s.userCount ?? dev?.enrolledUsersCount ?? 25,
+                logCount: s.totalLogs ?? dev?.totalLogsCount ?? 0,
+                updatedRecords: s.updatedRecords ?? 0,
+                lastSync: new Date().toISOString(),
               },
             });
           }
           await BiometricDevice.updateOne({ deviceId }, { $set: { status: "Offline" } });
+          return NextResponse.json(
+            {
+              success: false,
+              status: "Offline",
+              error: bridgeRes.error || `Could not reach terminal at ${targetIp}:${targetPort} (${sockErr.message}).`,
+            },
+            { status: 502 }
+          );
         }
         return NextResponse.json({
           success: false,
