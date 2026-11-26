@@ -168,7 +168,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             breakMinutes: 60,
             graceMinutes: 10,
             weeklyOffs: ["Sunday"],
-            minFullDayHours: 7.5,
+            minFullDayHours: 8.5,
             minHalfDayHours: 4,
             overtimeEligible: false,
             branches: ["Hyderabad", "Warangal", "Vijayawada", "Visakhapatnam"],

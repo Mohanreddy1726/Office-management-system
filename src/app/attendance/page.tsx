@@ -921,7 +921,7 @@ function AttendanceRecordCard({
     data.shifts[0];
 
   const workedHours = record.workedMinutes ? (record.workedMinutes / 60).toFixed(1) : "0.0";
-  const targetHours = shift?.minFullDayHours || 8.0;
+  const targetHours = shift?.minFullDayHours || 8.5;
   const quotaPercent = Math.min(100, Math.round((Number(workedHours) / targetHours) * 100));
 
   // Dynamically evaluate effective late minutes and status against assigned shift

@@ -77,7 +77,7 @@ export const DEMO_EMPLOYEES = {
 
 function buildShifts(): Shift[] {
   return [
-    { id: "SH-GEN", name: "General Shift", start: "10:00", end: "18:30", breakMinutes: 60, graceMinutes: 10, weeklyOffs: ["Sunday"], minFullDayHours: 7.5, minHalfDayHours: 4, overtimeEligible: false, branches: ["Hyderabad", "Warangal", "Vijayawada", "Visakhapatnam"], overnight: false },
+    { id: "SH-GEN", name: "General Shift", start: "10:00", end: "18:30", breakMinutes: 60, graceMinutes: 10, weeklyOffs: ["Sunday"], minFullDayHours: 8.5, minHalfDayHours: 4, overtimeEligible: false, branches: ["Hyderabad", "Warangal", "Vijayawada", "Visakhapatnam"], overnight: false },
   ];
 }
 
