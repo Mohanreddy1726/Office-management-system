@@ -155,7 +155,9 @@ export interface Holiday {
   id: string;
   name: string;
   date: string;
+  type?: string;
   branches: Branch[] | "All";
+  description?: string;
 }
 
 export interface BiometricDevice {

@@ -842,6 +842,7 @@ function EmployeeDashboard({ me }: { me: any }) {
     const myBranch = (me?.branch || session?.branch || "").toLowerCase();
     return data.holidays
       .filter((h) => {
+        if (h.date < realTodayIso) return false;
         if (!Array.isArray(h.branches) || h.branches.length === 0) return true;
         return h.branches.some(
           (b: string) => b.toLowerCase().includes("all") || b.toLowerCase() === myBranch
@@ -849,7 +850,7 @@ function EmployeeDashboard({ me }: { me: any }) {
       })
       .sort((a, b) => a.date.localeCompare(b.date))
       .slice(0, 3);
-  }, [data.holidays, me?.branch, session?.branch]);
+  }, [data.holidays, me?.branch, session?.branch, realTodayIso]);
 
   const quickActions = [
     {
@@ -1435,7 +1436,7 @@ function EmployeeDashboard({ me }: { me: any }) {
               variant="ghost"
               size="sm"
               className="h-7 gap-1 px-2 text-xs text-primary hover:text-primary"
-              onClick={() => router.push("/leave")}
+              onClick={() => router.push("/holidays")}
             >
               Calendar <ChevronRight className="h-3.5 w-3.5" />
             </Button>

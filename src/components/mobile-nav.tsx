@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Fingerprint,
   CalendarDays,
+  CalendarHeart,
   Wallet,
   Menu,
   FileText,
@@ -67,7 +68,7 @@ export function MobileNavBar() {
       label: "More",
       href: "#",
       icon: Menu,
-      active: moreOpen || ["/documents", "/assets", "/notifications"].some((p) => pathname.startsWith(p)),
+      active: moreOpen || ["/documents", "/assets", "/notifications", "/holidays"].some((p) => pathname.startsWith(p)),
       badge: unreadNotifs > 0 ? unreadNotifs : null,
       onClick: () => setMoreOpen(true),
     },
@@ -220,6 +221,20 @@ export function MobileNavBar() {
                 <div className="min-w-0">
                   <p className="font-semibold truncate">My Assets</p>
                   <p className="text-[10px] text-muted-foreground truncate">Laptop, SIM, Hardware</p>
+                </div>
+              </Link>
+
+              <Link
+                href="/holidays"
+                onClick={() => setMoreOpen(false)}
+                className="flex items-center gap-2.5 rounded-xl border border-border bg-card p-3 font-medium text-foreground hover:bg-muted/50 active:scale-95 transition-transform"
+              >
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-500/10 text-rose-600">
+                  <CalendarHeart className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-semibold truncate">Holidays</p>
+                  <p className="text-[10px] text-muted-foreground truncate">Official Calendar</p>
                 </div>
               </Link>
 

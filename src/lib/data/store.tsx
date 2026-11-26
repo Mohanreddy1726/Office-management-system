@@ -48,7 +48,9 @@ export interface Store {
   addShift: (s: Omit<Shift, "id">) => void;
   updateShift: (id: string, patch: Partial<Omit<Shift, "id">>) => void;
   deleteShift: (id: string) => void;
-  addHoliday: (h: Omit<Holiday, "id">) => void;
+  refreshHolidays: () => Promise<void>;
+  addHoliday: (h: Omit<Holiday, "id">) => Promise<{ ok: boolean; error?: string }>;
+  deleteHoliday: (id: string) => Promise<{ ok: boolean; error?: string }>;
   // leave
   applyLeave: (l: Omit<LeaveRequest, "id" | "timeline" | "status">) => void;
   decideLeave: (id: string, decision: "Approved" | "Rejected" | "Clarification", note: string) => void;
@@ -478,6 +480,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, [session]);
 
+  const syncHolidaysAsync = useCallback(async () => {
+    if (!session) return;
+    try {
+      const res = await fetch("/api/holidays", { cache: "no-store" });
+      if (!res.ok) return;
+      const resData = await res.json();
+      if (resData?.success && Array.isArray(resData.holidays)) {
+        const dbHolidays: Holiday[] = resData.holidays.map((h: any) => ({
+          id: h.holidayId || h.id || h._id || `HOL-${Date.now()}`,
+          name: h.name,
+          date: h.date,
+          type: h.type || "Public",
+          branches: h.branches || "All",
+          description: h.description || undefined,
+        }));
+        setData((d) => ({ ...d, holidays: dbHolidays }));
+      }
+    } catch {}
+  }, [session]);
+
   useEffect(() => {
     const syncEmployees = () => {
       fetch("/api/employees")
@@ -635,6 +657,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       syncNotifications();
       syncAssetsAsync();
       syncDocumentsAsync();
+      syncHolidaysAsync();
       if (isAdminOrHr) syncMail();
       if (isSuperAdmin) syncAuditLogs();
     };
@@ -652,7 +675,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [session, fetchLeavesAsync, syncNotificationsAsync, syncDocumentsAsync, syncAssetsAsync]);
+  }, [session, fetchLeavesAsync, syncNotificationsAsync, syncDocumentsAsync, syncAssetsAsync, syncHolidaysAsync]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -682,6 +705,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       data, session, prefs, hydrated, pendingDocumentsCount,
       refreshDocuments: syncDocumentsAsync,
       refreshAssets: syncAssetsAsync,
+      refreshHolidays: syncHolidaysAsync,
       signIn: (role, details) => {
         const origRole = (details?.originalRole || role) as Role;
         const origUserId = details?.originalUserId || details?.userId || details?.employeeId || DEMO_EMPLOYEES[role];
@@ -946,9 +970,46 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           outcome: "Success",
         });
       },
-      addHoliday: (h) => {
-        setData((d) => ({ ...d, holidays: [...d.holidays, { ...h, id: `HOL-${d.holidays.length + 1}` }] }));
-        audit({ user: session ? nameOf(data, session.userId) : "Demo", action: "Added company holiday", module: "Attendance", record: h.name, outcome: "Success" });
+      addHoliday: async (h) => {
+        if (session?.role !== "super_admin" && session?.role !== "hr_admin") {
+          return { ok: false, error: "Only Super Admin or HR Admin can add holidays." };
+        }
+        try {
+          const res = await fetch("/api/holidays", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(h),
+          });
+          const resData = await res.json().catch(() => null);
+          if (!res.ok || !resData?.success) {
+            return { ok: false, error: resData?.error || "Failed to add holiday." };
+          }
+          await syncHolidaysAsync();
+          syncNotificationsAsync().catch(() => {});
+          audit({ user: session ? nameOf(data, session.userId) : "Admin", action: "Added company holiday", module: "Holidays", record: h.name, outcome: "Success" });
+          return { ok: true };
+        } catch {
+          return { ok: false, error: "Network error while saving holiday." };
+        }
+      },
+      deleteHoliday: async (id) => {
+        if (session?.role !== "super_admin" && session?.role !== "hr_admin") {
+          return { ok: false, error: "Only Super Admin or HR Admin can remove holidays." };
+        }
+        try {
+          const res = await fetch(`/api/holidays?id=${encodeURIComponent(id)}`, {
+            method: "DELETE",
+          });
+          const resData = await res.json().catch(() => null);
+          if (!res.ok || !resData?.success) {
+            return { ok: false, error: resData?.error || "Failed to delete holiday." };
+          }
+          await syncHolidaysAsync();
+          audit({ user: session ? nameOf(data, session.userId) : "Admin", action: "Removed company holiday", module: "Holidays", record: id, outcome: "Success" });
+          return { ok: true };
+        } catch {
+          return { ok: false, error: "Network error while deleting holiday." };
+        }
       },
       applyLeave: (l) => {
         const tempId = `LV-${Date.now()}`;
@@ -1571,7 +1632,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
     };
     return s;
-  }, [data, session, prefs, hydrated, pendingDocumentsCount, syncDocumentsAsync, syncAssetsAsync]);
+  }, [data, session, prefs, hydrated, pendingDocumentsCount, syncDocumentsAsync, syncAssetsAsync, syncHolidaysAsync]);
 
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>;
 }

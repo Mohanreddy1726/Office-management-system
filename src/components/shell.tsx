@@ -5,7 +5,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import {
-  LayoutDashboard, Users, UserPlus, Building2, CalendarCheck, Fingerprint, CalendarDays, Wallet,
+  LayoutDashboard, Users, UserPlus, Building2, CalendarCheck, Fingerprint, CalendarDays, CalendarHeart, Wallet,
   FileText, Mails, Boxes, Bell, BarChart3, Settings, ScrollText, PanelLeftClose,
   PanelLeftOpen, Menu, Search, Plus, ChevronDown, LogOut, RefreshCcw, UserCog, MapPin,
   ShieldCheck, UserCheck, Eye, Undo2, Briefcase, Download,
@@ -47,6 +47,7 @@ export const NAV: NavGroup[] = [
       { to: "/attendance", label: "Attendance", icon: CalendarCheck, roles: ALL },
       { to: "/biometric", label: "Biometric Mapping", icon: Fingerprint, roles: A_H },
       { to: "/leave", label: "Leave Management", icon: CalendarDays, roles: ALL },
+      { to: "/holidays", label: "Holidays", icon: CalendarHeart, roles: ALL },
     ],
   },
   { group: "Finance", items: [{ to: "/payroll", label: "Payroll", icon: Wallet, roles: ALL }] },
@@ -77,6 +78,7 @@ export const BREADCRUMBS: Record<string, string[]> = {
   "/attendance": ["Time & Attendance", "Attendance"],
   "/biometric": ["Time & Attendance", "Biometric Mapping"],
   "/leave": ["Time & Attendance", "Leave Management"],
+  "/holidays": ["Time & Attendance", "Holidays"],
   "/payroll": ["Finance", "Payroll"],
   "/documents": ["Operations", "Documents"],
   "/mail": ["Operations", "Mail Log"],

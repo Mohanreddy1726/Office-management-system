@@ -203,7 +203,7 @@ function buildLeaveBalances(): Record<string, Record<string, number>> {
   return out;
 }
 
-const HOLIDAYS: Holiday[] = [
+export const HOLIDAYS: Holiday[] = [
   { id: "H-1", name: "Sankranti / Pongal", date: "2026-01-14", branches: "All" },
   { id: "H-2", name: "Republic Day", date: "2026-01-26", branches: "All" },
   { id: "H-3", name: "Maha Shivaratri", date: "2026-02-15", branches: "All" },
