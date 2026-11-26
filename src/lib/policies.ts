@@ -25,6 +25,52 @@ export const GVK_POLICY = {
   salaryDiscussionMonth: "December",
 } as const;
 
+export const GVK_ASSET_TERMS_VERSION = "GVK-ANNEXURE-A-V1";
+
+export interface AssetTermClause {
+  id: string;
+  section: string;
+  title: string;
+  text: string;
+}
+
+/**
+ * Official Company Asset Custody Terms & Conditions derived verbatim from
+ * GVK Edutech Pvt. Ltd. Appointment Letter (Annexure A).
+ */
+export const GVK_ASSET_TERMS: AssetTermClause[] = [
+  {
+    id: "safe_custody",
+    section: "Annexure A · Section VI (Company's Belongings)",
+    title: "Safe Maintenance & Damage Repair Liability",
+    text: "I am responsible for safely maintaining the Company's belongings issued for my duties (official phone, laptop, camera equipment, desktops, and office belongings). The cost of repairing any damage caused by me to such assets will be borne by me.",
+  },
+  {
+    id: "official_phone",
+    section: "Annexure A · Section IV (Usage of Personal Phone)",
+    title: "Official Device & Communication Compliance",
+    text: "I will not use my personal phone during official hours or use it to interact with the Company's clients or students at any stage, and will use the official phone/device issued by the Company to discharge my duties.",
+  },
+  {
+    id: "confidentiality",
+    section: "Annexure A · Section V (Confidentiality)",
+    title: "Company Data, Methods & Client Confidentiality",
+    text: "I will maintain complete confidentiality of the Company's methods, client list, database, training methods, pricing, and marketing strategies stored or accessed on Company assets, and will never disclose or use them for personal or external benefit.",
+  },
+  {
+    id: "relieving_return",
+    section: "Annexure A · Section II.b (Resignation & Relieving)",
+    title: "Mandatory Return Upon Resignation / Separation",
+    text: "All Company assets, accessories, and data issued to me must be returned in good working condition prior to separation. Resignation clearance and relieving letter are effective only upon full asset handover and management acceptance.",
+  },
+  {
+    id: "breach_jurisdiction",
+    section: "Annexure A · Sections VII & VIII (Breach & Jurisdiction)",
+    title: "Breach Recovery & Hyderabad Jurisdiction",
+    text: "Any wilful breach, misconduct, fraud, or dishonesty involving Company assets invites immediate termination without notice or payment in lieu and financial compensation recovery, governed by the laws of India under the Courts of Hyderabad.",
+  },
+];
+
 export const EXTENUATING_CATEGORIES = [
   "Accident / Medical Emergency",
   "Bereavement / Demise",

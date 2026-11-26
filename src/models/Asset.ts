@@ -13,11 +13,24 @@ export interface IAsset extends Document {
   purchaseDate?: string;
   warrantyExpiry?: string;
   warrantyExpiresAt?: string;
-  status: "Available" | "Assigned" | "Under Maintenance" | "Retired" | string;
+  status: "Available" | "Pending Acceptance" | "Assigned" | "Under Maintenance" | "Damaged" | "Retired" | string;
   branch?: string;
   condition?: string;
   assignedTo?: any;
   assignedEmployeeName?: string;
+  assignedAt?: string;
+  assignedBy?: string;
+  acceptanceStatus?: "Pending" | "Accepted" | "Declined" | string;
+  termsAccepted?: boolean;
+  termsAcceptedAt?: string;
+  termsVersion?: string;
+  employeeSignature?: string;
+  declineReason?: string;
+  vendor?: string;
+  invoiceNo?: string;
+  specs?: string;
+  notes?: string;
+  history?: Array<{ date: string; action: string; employeeId?: string; note?: string }>;
   returnHistory?: Array<{
     employeeId: string;
     returnedDate: Date;
@@ -50,6 +63,26 @@ const AssetSchema = new Schema<IAsset>(
     },
     assignedTo: { type: Schema.Types.Mixed },
     assignedEmployeeName: { type: String },
+    assignedAt: { type: String },
+    assignedBy: { type: String },
+    acceptanceStatus: { type: String },
+    termsAccepted: { type: Boolean, default: false },
+    termsAcceptedAt: { type: String },
+    termsVersion: { type: String },
+    employeeSignature: { type: String },
+    declineReason: { type: String },
+    vendor: { type: String },
+    invoiceNo: { type: String },
+    specs: { type: String },
+    notes: { type: String },
+    history: [
+      {
+        date: { type: String },
+        action: { type: String },
+        employeeId: { type: String },
+        note: { type: String },
+      },
+    ],
     returnHistory: [
       {
         employeeId: { type: String },

@@ -1405,10 +1405,21 @@ function EmployeeDashboard({ me }: { me: any }) {
             ) : (
               <div className="space-y-1.5">
                 {myAssets.slice(0, 4).map((a) => (
-                  <div key={a.id} className="flex items-center justify-between gap-2 rounded-xl border border-border/60 px-2.5 py-2">
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => router.push(a.status === "Pending Acceptance" ? "/assets?tab=pending" : "/assets")}
+                    className="flex w-full items-center justify-between gap-2 rounded-xl border border-border/60 px-2.5 py-2 text-left transition-colors hover:bg-muted/30"
+                  >
                     <span className="min-w-0 truncate text-xs font-medium text-foreground">{a.name}</span>
-                    <Badge variant="outline" className="shrink-0 text-[10px]">{a.id}</Badge>
-                  </div>
+                    {a.status === "Pending Acceptance" ? (
+                      <Badge className="shrink-0 bg-amber-500/15 text-[10px] text-amber-700 hover:bg-amber-500/20 dark:text-amber-300">
+                        Approve Terms
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="shrink-0 text-[10px]">{a.id}</Badge>
+                    )}
+                  </button>
                 ))}
               </div>
             )}

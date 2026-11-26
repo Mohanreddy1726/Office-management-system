@@ -79,9 +79,12 @@ export interface Store {
   addAnnouncement: (a: Omit<Announcement, "id">) => void;
   deleteAnnouncement: (id: string) => void;
   // assets
-  addAsset: (a: Omit<Asset, "id" | "history" | "status">) => void;
-  issueAsset: (id: string, employeeId: string, note?: string) => void;
-  returnAsset: (id: string, condition: Asset["condition"], note?: string) => void;
+  refreshAssets: () => Promise<void>;
+  addAsset: (a: Omit<Asset, "id" | "history" | "status">) => Promise<{ ok: boolean; error?: string }>;
+  issueAsset: (id: string, employeeId: string, note?: string) => Promise<{ ok: boolean; error?: string }>;
+  returnAsset: (id: string, condition: Asset["condition"], note?: string) => Promise<{ ok: boolean; error?: string }>;
+  acceptAsset: (id: string, signatureName?: string) => Promise<{ ok: boolean; error?: string }>;
+  declineAsset: (id: string, reason: string) => Promise<{ ok: boolean; error?: string }>;
   // performance
   addGoal: (g: Omit<Goal, "id">) => void;
   updateGoal: (id: string, patch: Partial<Goal>) => void;
@@ -138,6 +141,38 @@ function mapApiDocument(doc: any): DocumentRecord | null {
     docNumber: doc.docNumber || undefined,
     confidentiality: doc.confidentiality || undefined,
     issueDate: doc.issueDate || undefined,
+  };
+}
+
+function mapApiAsset(a: any): Asset {
+  const assignedToId = typeof a.assignedTo === "object" ? a.assignedTo?.employeeId : a.assignedTo;
+  return {
+    id: a.assetTag || a.assetId || a._id || `AST-${Date.now()}`,
+    name: a.name || "Company Equipment",
+    category: a.category || "Laptop",
+    brandModel: a.brandModel || a.name || "",
+    serial: a.serialNumber || a.serial || "",
+    assetTag: a.assetTag || a.assetId || undefined,
+    vendor: a.vendor || undefined,
+    invoiceNo: a.invoiceNo || undefined,
+    branch: (a.branch as Branch) || "Hyderabad",
+    assignedTo: assignedToId || null,
+    purchaseDate: a.purchaseDate || new Date().toISOString().slice(0, 10),
+    purchaseValue: a.purchaseValue || 0,
+    warrantyExpiry: a.warrantyExpiry || "",
+    condition: a.condition || (a.assignedTo?.conditionAtIssue as any) || "Good",
+    status: a.status || "Available",
+    acceptanceStatus: a.acceptanceStatus || undefined,
+    termsAccepted: Boolean(a.termsAccepted),
+    termsAcceptedAt: a.termsAcceptedAt || undefined,
+    termsVersion: a.termsVersion || undefined,
+    employeeSignature: a.employeeSignature || undefined,
+    declineReason: a.declineReason || undefined,
+    assignedAt: a.assignedAt || undefined,
+    assignedBy: a.assignedBy || undefined,
+    specs: a.specs || undefined,
+    notes: a.notes || undefined,
+    history: Array.isArray(a.history) ? a.history : [],
   };
 }
 
@@ -399,6 +434,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, [session]);
 
+  const syncAssetsAsync = useCallback(async () => {
+    if (!session) return;
+    try {
+      const res = await fetch("/api/assets", { cache: "no-store" });
+      if (!res.ok) return;
+      const resData = await res.json();
+      if (resData?.success && Array.isArray(resData.assets)) {
+        const dbAssets: Asset[] = resData.assets.map(mapApiAsset);
+        setData((d) => ({ ...d, assets: dbAssets }));
+      }
+    } catch {}
+  }, [session]);
+
   useEffect(() => {
     const syncEmployees = () => {
       fetch("/api/employees")
@@ -516,38 +564,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       syncNotificationsAsync();
     };
 
-    const syncAssets = () => {
-      fetch("/api/assets")
-        .then((res) => (res.ok ? res.json() : null))
-        .then((resData) => {
-          if (resData?.success && Array.isArray(resData.assets) && resData.assets.length > 0) {
-            setData((d) => {
-              const dbAssets: Asset[] = resData.assets.map((a: any) => {
-                const assignedToId = typeof a.assignedTo === "object" ? a.assignedTo?.employeeId : a.assignedTo;
-                return {
-                  id: a.assetTag || a._id || `AST-${Date.now()}`,
-                  name: a.name,
-                  category: a.category || "Laptop",
-                  brandModel: a.brandModel || "",
-                  serial: a.serialNumber || a.serial || "",
-                  branch: (a.branch as Branch) || "Hyderabad",
-                  assignedTo: assignedToId || null,
-                  purchaseDate: a.purchaseDate || new Date().toISOString().slice(0, 10),
-                  purchaseValue: a.purchaseValue || 0,
-                  warrantyExpiry: a.warrantyExpiry || "",
-                  condition: a.condition || (a.assignedTo?.conditionAtIssue as any) || "Good",
-                  status: a.status || "Available",
-                  notes: a.notes,
-                  history: Array.isArray(a.history) ? a.history : [],
-                };
-              });
-              return { ...d, assets: dbAssets };
-            });
-          }
-        })
-        .catch(() => {});
-    };
-
     const syncAuditLogs = () => {
       fetch("/api/audit-logs")
         .then((res) => (res.ok ? res.json() : null))
@@ -586,7 +602,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       syncAttendance();
       fetchLeavesAsync();
       syncNotifications();
-      syncAssets();
+      syncAssetsAsync();
       syncDocumentsAsync();
       if (isAdminOrHr) syncMail();
       if (isSuperAdmin) syncAuditLogs();
@@ -605,7 +621,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [session, fetchLeavesAsync, syncNotificationsAsync, syncDocumentsAsync]);
+  }, [session, fetchLeavesAsync, syncNotificationsAsync, syncDocumentsAsync, syncAssetsAsync]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -634,6 +650,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const s: Store = {
       data, session, prefs, hydrated, pendingDocumentsCount,
       refreshDocuments: syncDocumentsAsync,
+      refreshAssets: syncAssetsAsync,
       signIn: (role, details) => {
         const origRole = (details?.originalRole || role) as Role;
         const origUserId = details?.originalUserId || details?.userId || details?.employeeId || DEMO_EMPLOYEES[role];
@@ -1279,62 +1296,163 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
         audit({ user: session ? nameOf(data, session.userId) : "Admin", action: "Deleted announcement", module: "Notifications", record: id, outcome: "Success" });
       },
-      addAsset: (a) => {
-        const id = `AST-${String(data.assets.length + 1).padStart(3, "0")}`;
-        setData((d) => ({ ...d, assets: [{ ...a, id, status: "Available", history: [] }, ...d.assets] }));
-        fetch("/api/assets", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "create_asset",
-            name: a.name,
-            category: a.category,
-            brandModel: a.brandModel,
-            serialNumber: a.serial,
-            purchaseValue: a.purchaseValue,
-          }),
-        }).catch(() => {});
-        audit({ user: session ? nameOf(data, session.userId) : "Demo", action: "Added asset", module: "Assets", record: a.name, outcome: "Success" });
+      addAsset: async (a) => {
+        if (session?.role !== "super_admin" && session?.role !== "hr_admin") {
+          return { ok: false, error: "Only HR Admin or Super Admin can add or assign assets." };
+        }
+        try {
+          const res = await fetch("/api/assets", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "create_asset",
+              name: a.name,
+              category: a.category,
+              brandModel: a.brandModel,
+              serialNumber: a.serial,
+              assetTag: a.assetTag,
+              branch: a.branch,
+              vendor: a.vendor,
+              invoiceNo: a.invoiceNo,
+              purchaseDate: a.purchaseDate,
+              purchaseValue: a.purchaseValue,
+              warrantyExpiry: a.warrantyExpiry,
+              condition: a.condition,
+              specs: a.specs,
+              notes: a.notes,
+              employeeId: a.assignedTo || "none",
+            }),
+          });
+          const resData = await res.json().catch(() => null);
+          if (!res.ok || !resData?.success) {
+            return { ok: false, error: resData?.error || "Failed to register asset." };
+          }
+          if (resData.asset) {
+            const mapped = mapApiAsset(resData.asset);
+            setData((d) => ({ ...d, assets: [mapped, ...d.assets.filter((x) => x.id !== mapped.id)] }));
+          } else {
+            await syncAssetsAsync();
+          }
+          audit({ user: session ? nameOf(data, session.userId) : "Admin", action: "Added asset", module: "Assets", record: a.name, outcome: "Success" });
+          return { ok: true };
+        } catch {
+          return { ok: false, error: "Network error while saving asset." };
+        }
       },
-      issueAsset: (id, employeeId, note) => {
-        setData((d) => ({
-          ...d,
-          assets: d.assets.map((a) =>
-            a.id === id
-              ? { ...a, assignedTo: employeeId, status: "Assigned", history: [...a.history, { date: stamp().slice(0, 10), action: "Issued", employeeId, note }] }
-              : a,
-          ),
-        }));
-        fetch("/api/assets", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "issue_asset",
-            assetId: id,
-            employeeId,
-          }),
-        }).catch(() => {});
-        audit({ user: session ? nameOf(data, session.userId) : "Demo", action: "Issued asset", module: "Assets", record: `${id} → ${nameOf(data, employeeId)}`, outcome: "Success" });
+      issueAsset: async (id, employeeId, note) => {
+        if (session?.role !== "super_admin" && session?.role !== "hr_admin") {
+          return { ok: false, error: "Only HR Admin or Super Admin can assign assets." };
+        }
+        try {
+          const res = await fetch("/api/assets", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "issue_asset",
+              assetId: id,
+              employeeId,
+              note,
+            }),
+          });
+          const resData = await res.json().catch(() => null);
+          if (!res.ok || !resData?.success) {
+            return { ok: false, error: resData?.error || "Failed to assign asset." };
+          }
+          await syncAssetsAsync();
+          audit({
+            user: session ? nameOf(data, session.userId) : "Admin",
+            action: "Assigned asset (Pending employee approval)",
+            module: "Assets",
+            record: `${id} → ${nameOf(data, employeeId)}`,
+            outcome: "Success",
+          });
+          return { ok: true };
+        } catch {
+          return { ok: false, error: "Network error while assigning asset." };
+        }
       },
-      returnAsset: (id, condition, note) => {
-        setData((d) => ({
-          ...d,
-          assets: d.assets.map((a) =>
-            a.id === id
-              ? { ...a, assignedTo: null, status: "Available", condition, history: [...a.history, { date: stamp().slice(0, 10), action: "Returned", note }] }
-              : a,
-          ),
-        }));
-        fetch("/api/assets", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "return_asset",
-            assetId: id,
-            condition,
-          }),
-        }).catch(() => {});
-        audit({ user: session ? nameOf(data, session.userId) : "Demo", action: "Returned asset", module: "Assets", record: id, outcome: "Success" });
+      returnAsset: async (id, condition, note) => {
+        if (session?.role !== "super_admin" && session?.role !== "hr_admin") {
+          return { ok: false, error: "Only HR Admin or Super Admin can mark assets returned." };
+        }
+        try {
+          const res = await fetch("/api/assets", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "return_asset",
+              assetId: id,
+              condition,
+              note,
+            }),
+          });
+          const resData = await res.json().catch(() => null);
+          if (!res.ok || !resData?.success) {
+            return { ok: false, error: resData?.error || "Failed to return asset." };
+          }
+          await syncAssetsAsync();
+          audit({ user: session ? nameOf(data, session.userId) : "Admin", action: "Returned asset", module: "Assets", record: id, outcome: "Success" });
+          return { ok: true };
+        } catch {
+          return { ok: false, error: "Network error while returning asset." };
+        }
+      },
+      acceptAsset: async (id, signatureName) => {
+        try {
+          const res = await fetch("/api/assets", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "accept_asset",
+              assetId: id,
+              agreedToAllTerms: true,
+              signatureName,
+            }),
+          });
+          const resData = await res.json().catch(() => null);
+          if (!res.ok || !resData?.success) {
+            return { ok: false, error: resData?.error || "Failed to approve asset." };
+          }
+          await syncAssetsAsync();
+          audit({
+            user: session ? nameOf(data, session.userId) : "Employee",
+            action: "Approved asset & accepted GVK terms",
+            module: "Assets",
+            record: id,
+            outcome: "Success",
+          });
+          return { ok: true };
+        } catch {
+          return { ok: false, error: "Network error while approving asset." };
+        }
+      },
+      declineAsset: async (id, reason) => {
+        try {
+          const res = await fetch("/api/assets", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "decline_asset",
+              assetId: id,
+              reason,
+            }),
+          });
+          const resData = await res.json().catch(() => null);
+          if (!res.ok || !resData?.success) {
+            return { ok: false, error: resData?.error || "Failed to decline asset." };
+          }
+          await syncAssetsAsync();
+          audit({
+            user: session ? nameOf(data, session.userId) : "Employee",
+            action: "Declined asset assignment",
+            module: "Assets",
+            record: `${id} (${reason})`,
+            outcome: "Failure",
+          });
+          return { ok: true };
+        } catch {
+          return { ok: false, error: "Network error while declining asset." };
+        }
       },
       addGoal: (g) => {
         setData((d) => ({ ...d, goals: [{ ...g, id: `G-${d.goals.length + 1}` }, ...d.goals] }));
@@ -1416,7 +1534,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
     };
     return s;
-  }, [data, session, prefs, hydrated, pendingDocumentsCount, syncDocumentsAsync]);
+  }, [data, session, prefs, hydrated, pendingDocumentsCount, syncDocumentsAsync, syncAssetsAsync]);
 
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>;
 }

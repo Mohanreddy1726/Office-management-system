@@ -337,7 +337,15 @@ export interface Asset {
   purchaseValue: number;
   warrantyExpiry: string;
   condition: "Excellent" | "Good" | "Fair" | "Poor";
-  status: "Available" | "Assigned" | "Under Maintenance" | "Damaged" | "Retired";
+  status: "Available" | "Pending Acceptance" | "Assigned" | "Under Maintenance" | "Damaged" | "Retired";
+  acceptanceStatus?: "Pending" | "Accepted" | "Declined";
+  termsAccepted?: boolean;
+  termsAcceptedAt?: string;
+  termsVersion?: string;
+  employeeSignature?: string;
+  declineReason?: string;
+  assignedAt?: string;
+  assignedBy?: string;
   notes?: string;
   specs?: string;
   history: { date: string; action: string; employeeId?: string; note?: string }[];
