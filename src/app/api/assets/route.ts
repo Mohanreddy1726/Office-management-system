@@ -154,12 +154,16 @@ export async function POST(req: NextRequest) {
 
         if (initialAssignedTo) {
           await Notification.create({
-            recipientId: initialAssignedTo.employeeId,
+            id: `NT-AST-${Date.now()}`,
+            targetUserId: initialAssignedTo.employeeId,
             category: "Approvals",
             title: "Asset Assigned — Approval Required",
             description: `${session.name} assigned "${asset.name}" (${asset.assetTag}) to you. Review and accept the GVK Appointment Letter asset terms to approve.`,
             priority: "High",
             link: "/assets?tab=pending",
+            read: false,
+            readBy: [],
+            timestamp: new Date().toISOString().slice(0, 16).replace("T", " "),
           }).catch(() => {});
         }
 
@@ -226,12 +230,16 @@ export async function POST(req: NextRequest) {
         await asset.save();
 
         await Notification.create({
-          recipientId: employee.employeeId,
+          id: `NT-AST-${Date.now()}`,
+          targetUserId: employee.employeeId,
           category: "Approvals",
           title: "Asset Assigned — Terms Approval Required",
           description: `${session.name} assigned "${asset.name}" (${asset.assetTag || asset.serialNumber}) to you. Agree to the Appointment Letter asset terms to approve.`,
           priority: "High",
           link: "/assets?tab=pending",
+          read: false,
+          readBy: [],
+          timestamp: new Date().toISOString().slice(0, 16).replace("T", " "),
         }).catch(() => {});
 
         await AuditLog.create({

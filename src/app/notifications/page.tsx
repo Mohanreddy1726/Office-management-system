@@ -64,15 +64,22 @@ export default function NotificationsPage() {
     });
   }, [data.announcements, isAdmin, session, role, data.employees]);
 
-  // Filtered notifications
+  // Filtered notifications — always sorted with most recent on top
   const filteredNotifications = useMemo(() => {
-    return data.notifications.filter((n) => {
-      if (activeTab === "unread") return !n.read;
-      if (activeTab === "approvals") return n.category === "Approvals";
-      if (activeTab === "attendance") return n.category === "Attendance";
-      if (activeTab === "payroll") return n.category === "Payroll" || n.category === "Documents";
-      return true;
-    });
+    const parseTs = (ts?: string) => {
+      if (!ts) return 0;
+      const ms = new Date(ts.includes(" ") && !ts.includes("T") ? ts.replace(" ", "T") : ts).getTime();
+      return Number.isNaN(ms) ? 0 : ms;
+    };
+    return data.notifications
+      .filter((n) => {
+        if (activeTab === "unread") return !n.read;
+        if (activeTab === "approvals") return n.category === "Approvals";
+        if (activeTab === "attendance") return n.category === "Attendance";
+        if (activeTab === "payroll") return n.category === "Payroll" || n.category === "Documents";
+        return true;
+      })
+      .sort((a, b) => parseTs(b.timestamp) - parseTs(a.timestamp));
   }, [data.notifications, activeTab]);
 
   return (
@@ -87,6 +94,7 @@ export default function NotificationsPage() {
               <Button
                 variant="outline"
                 size="sm"
+                disabled={unreadCount === 0}
                 className="gap-1.5 text-xs shadow-sm"
                 onClick={() => {
                   markAllRead();
@@ -289,10 +297,10 @@ function NotificationCard({
   return (
     <div
       className={cn(
-        "group relative flex flex-col justify-between rounded-2xl border p-4 shadow-sm transition-all duration-200 hover:shadow-md",
+        "group relative flex flex-col justify-between rounded-2xl border p-4 transition-all duration-200",
         !item.read
-          ? "border-primary/40 bg-primary/5 dark:bg-primary/10"
-          : "border-slate-200/90 bg-white dark:bg-card dark:border-border"
+          ? "border-primary/60 bg-primary/[0.07] ring-1 ring-primary/20 shadow-sm hover:shadow-md dark:bg-primary/15"
+          : "border-border/70 bg-muted/25 opacity-80 shadow-none hover:opacity-100 dark:bg-card/50"
       )}
     >
       <div>
@@ -304,8 +312,8 @@ function NotificationCard({
 
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                {!item.read && <span className="h-2 w-2 rounded-full bg-primary shrink-0" title="Unread" />}
-                <h4 className={cn("text-[14px] truncate", !item.read ? "font-bold text-foreground" : "font-semibold text-foreground")}>
+                {!item.read && <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary ring-2 ring-primary/25" title="Unread" />}
+                <h4 className={cn("truncate text-[14px]", !item.read ? "font-bold text-foreground" : "font-medium text-muted-foreground")}>
                   {item.title}
                 </h4>
               </div>
@@ -317,9 +325,14 @@ function NotificationCard({
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex shrink-0 items-center gap-1.5">
+            {!item.read && (
+              <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold text-primary-foreground">
+                Unread
+              </span>
+            )}
             {isHigh && (
-              <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300">
+              <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
                 High Priority
               </span>
             )}
@@ -327,18 +340,18 @@ function NotificationCard({
         </div>
 
         {/* Description body */}
-        <p className="mt-3 text-xs text-muted-foreground leading-relaxed pl-1">
+        <p className={cn("mt-3 pl-1 text-xs leading-relaxed", !item.read ? "text-foreground/90" : "text-muted-foreground")}>
           {item.description}
         </p>
       </div>
 
       {/* Footer / Actions */}
-      <div className="mt-3.5 pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+      <div className="mt-3.5 flex items-center justify-between border-t border-slate-100 pt-2.5 text-xs dark:border-slate-800">
         {item.link ? (
           <Link
             href={item.link}
             onClick={onMarkRead}
-            className="font-semibold text-primary hover:underline flex items-center gap-1 text-[11px]"
+            className="flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
           >
             Take Action <ArrowUpRight className="h-3 w-3" />
           </Link>
@@ -346,13 +359,17 @@ function NotificationCard({
           <span className="text-[11px] text-muted-foreground">System Notice</span>
         )}
 
-        {!item.read && (
+        {!item.read ? (
           <button
             onClick={onMarkRead}
-            className="text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+            className="flex items-center gap-1 text-[11px] font-semibold text-primary transition-colors hover:text-primary/80"
           >
             <Check className="h-3 w-3" /> Mark as Read
           </button>
+        ) : (
+          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <CheckCheck className="h-3 w-3" /> Read
+          </span>
         )}
       </div>
     </div>

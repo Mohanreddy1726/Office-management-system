@@ -11,12 +11,33 @@ export const dynamic = "force-dynamic";
 
 let announcementsSeededChecked = false;
 
+function extractUserKeys(session: any, req: NextRequest): string[] {
+  return Array.from(
+    new Set(
+      [session?.userId, session?.employeeId, req.headers.get("x-user-id")]
+        .filter(Boolean)
+        .map((x) => String(x).trim())
+    )
+  );
+}
+
+function getNotifSortEpoch(n: any): number {
+  const candidates = [n.createdAt, n.timestamp, n.publishAt];
+  for (const c of candidates) {
+    if (!c) continue;
+    const ms = new Date(typeof c === "string" && c.includes(" ") && !c.includes("T") ? c.replace(" ", "T") : c).getTime();
+    if (!Number.isNaN(ms)) return ms;
+  }
+  return 0;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getCurrentUser();
     const roleHeader = req.headers.get("x-user-role");
     const role = session?.role || roleHeader || "employee";
     const userEmpId = session?.employeeId || session?.userId || req.headers.get("x-user-id") || "";
+    const userKeys = extractUserKeys(session, req);
     let userBranch = session?.branch || req.headers.get("x-user-branch") || "Headquarters";
     let userDept = req.headers.get("x-user-department") || "";
 
@@ -76,36 +97,47 @@ export async function GET(req: NextRequest) {
 
       const allNotifs = await Notification.find().sort({ createdAt: -1 }).lean();
 
-      const visible = allNotifs.filter((n: any) => {
-        if (isSuperOrHR) return true;
+      const visible = allNotifs
+        .filter((n: any) => {
+          if (isSuperOrHR) return true;
 
-        if (n.isAnnouncement) {
-          const aud = (n.audience || "All Employees").toLowerCase().trim();
-          if (aud === "all employees" || aud === "all" || !aud) return true;
-          if (aud === "managers only") return role === "manager" || isSuperOrHR;
-          if (aud.includes("branch")) {
-            const scope = (n.scope || n.targetBranch || "").toLowerCase().trim();
-            if (!scope) return true;
-            return userBranch.toLowerCase().includes(scope) || scope.includes(userBranch.toLowerCase());
+          if (n.isAnnouncement) {
+            const aud = (n.audience || "All Employees").toLowerCase().trim();
+            if (aud === "all employees" || aud === "all" || !aud) return true;
+            if (aud === "managers only") return role === "manager" || isSuperOrHR;
+            if (aud.includes("branch")) {
+              const scope = (n.scope || n.targetBranch || "").toLowerCase().trim();
+              if (!scope) return true;
+              return userBranch.toLowerCase().includes(scope) || scope.includes(userBranch.toLowerCase());
+            }
+            if (aud.includes("department") || aud.includes("dept")) {
+              const scope = (n.scope || n.targetDepartment || "").toLowerCase().trim();
+              if (!scope) return true;
+              return userDept.toLowerCase().includes(scope) || scope.includes(userDept.toLowerCase());
+            }
+            return true;
           }
-          if (aud.includes("department") || aud.includes("dept")) {
-            const scope = (n.scope || n.targetDepartment || "").toLowerCase().trim();
-            if (!scope) return true;
-            return userDept.toLowerCase().includes(scope) || scope.includes(userDept.toLowerCase());
-          }
-          return true;
-        }
 
-        // Standard notifications
-        if (n.targetUserId && (n.targetUserId === userEmpId || (session && n.targetUserId === session.userId))) {
-          return true;
-        }
-        if (n.targetRole && (n.targetRole === "all" || n.targetRole === role)) {
-          return true;
-        }
-        if (!n.targetUserId && !n.targetRole) return true;
-        return false;
-      });
+          // Standard notifications
+          if (n.targetUserId && (n.targetUserId === userEmpId || (session && n.targetUserId === session.userId))) {
+            return true;
+          }
+          if (n.targetRole && (n.targetRole === "all" || n.targetRole === role)) {
+            return true;
+          }
+          if (!n.targetUserId && !n.targetRole) return true;
+          return false;
+        })
+        .map((n: any) => {
+          const isReadForUser = Array.isArray(n.readBy)
+            ? userKeys.some((uk) => n.readBy.includes(uk))
+            : Boolean(n.read);
+          return {
+            ...n,
+            read: isReadForUser,
+          };
+        })
+        .sort((a: any, b: any) => getNotifSortEpoch(b) - getNotifSortEpoch(a));
 
       const announcementsList = visible.filter((n: any) => n.isAnnouncement);
       const notificationsList = visible.filter((n: any) => !n.isAnnouncement);
@@ -301,7 +333,8 @@ export async function DELETE(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const session = await getCurrentUser();
-    const userId = session?.userId || req.headers.get("x-user-id") || "anonymous";
+    const userKeys = extractUserKeys(session, req);
+    if (userKeys.length === 0) userKeys.push("anonymous");
 
     const body = await req.json();
     const { id, markAllRead } = body;
@@ -309,11 +342,18 @@ export async function PATCH(req: NextRequest) {
     const conn = await connectToDatabase();
     if (conn) {
       if (markAllRead) {
-        await Notification.updateMany({}, { $addToSet: { readBy: userId } });
+        await Notification.updateMany({}, { $addToSet: { readBy: { $each: userKeys } } });
       } else if (id) {
+        const rawId = String(id).replace(/^NT-ANN-/, "");
         await Notification.updateOne(
-          { $or: [{ id }, { _id: mongoose.Types.ObjectId.isValid(id) ? id : null }] },
-          { $addToSet: { readBy: userId }, $set: { read: true } }
+          {
+            $or: [
+              { id: String(id) },
+              { id: rawId },
+              ...(mongoose.Types.ObjectId.isValid(rawId) ? [{ _id: rawId }] : []),
+            ],
+          },
+          { $addToSet: { readBy: { $each: userKeys } } }
         );
       }
       return NextResponse.json({ success: true });

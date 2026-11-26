@@ -347,10 +347,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const syncNotificationsAsync = useCallback(async () => {
     try {
+      const userKey = session?.userId || session?.employeeId || "";
       const res = await fetch("/api/notifications", {
+        cache: "no-store",
         headers: {
           "x-user-role": session?.role || "employee",
-          "x-user-id": session?.userId || session?.employeeId || "",
+          "x-user-id": userKey,
           "x-user-branch": session?.branch || "",
         },
       });
@@ -360,6 +362,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           setData((d) => {
             const annsList = Array.isArray(resData.announcementsList) ? resData.announcementsList : [];
             const notifsList = Array.isArray(resData.notificationsList) ? resData.notificationsList : [];
+
+            const parseEpoch = (val?: string | Date) => {
+              if (!val) return 0;
+              const str = typeof val === "string" && val.includes(" ") && !val.includes("T") ? val.replace(" ", "T") : val;
+              const ms = new Date(str).getTime();
+              return Number.isNaN(ms) ? 0 : ms;
+            };
+
+            const isItemRead = (raw: any) => {
+              if (Array.isArray(raw.readBy) && userKey) {
+                return raw.readBy.includes(userKey) || (session?.employeeId ? raw.readBy.includes(session.employeeId) : false);
+              }
+              return Boolean(raw.read);
+            };
 
             const authoritativeAnnouncements: Announcement[] = annsList.map((ann: any) => ({
               id: ann.id || ann._id,
@@ -372,32 +388,47 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               expiresAt: ann.expiresAt || "",
             }));
 
-            const authoritativeNotifications: NotificationItem[] = notifsList.map((n: any) => ({
-              id: n.id || n._id,
-              category: n.category || "System",
-              title: n.title,
-              description: n.description || n.message || "",
-              timestamp: n.timestamp || (n.createdAt ? new Date(n.createdAt).toISOString().slice(0, 16).replace("T", " ") : "Just now"),
-              read: Array.isArray(n.readBy) && session?.userId ? n.readBy.includes(session.userId) : Boolean(n.read),
-              priority: (n.priority === "High" ? "High" : "Normal") as "Normal" | "High",
-              link: n.link || "/notifications",
-            }));
+            const mappedWithEpoch: Array<{ item: NotificationItem; epoch: number }> = notifsList.map((n: any) => {
+              const ts = n.timestamp || (n.createdAt ? new Date(n.createdAt).toISOString().slice(0, 16).replace("T", " ") : "Just now");
+              return {
+                epoch: parseEpoch(n.createdAt || n.timestamp),
+                item: {
+                  id: n.id || n._id,
+                  category: n.category || "System",
+                  title: n.title,
+                  description: n.description || n.message || "",
+                  timestamp: ts,
+                  read: isItemRead(n),
+                  priority: (n.priority === "High" ? "High" : "Normal") as "Normal" | "High",
+                  link: n.link || "/notifications",
+                },
+              };
+            });
 
-            for (const ann of authoritativeAnnouncements) {
-              const annNotifId = `NT-ANN-${ann.id}`;
-              if (!authoritativeNotifications.some((x) => x.id === annNotifId)) {
-                authoritativeNotifications.unshift({
-                  id: annNotifId,
-                  category: "Announcements",
-                  title: ann.title,
-                  description: ann.message,
-                  timestamp: ann.publishAt,
-                  read: false,
-                  priority: ann.priority,
-                  link: "/notifications",
+            for (const rawAnn of annsList) {
+              const annId = rawAnn.id || rawAnn._id;
+              const annNotifId = `NT-ANN-${annId}`;
+              if (!mappedWithEpoch.some((x) => x.item.id === annNotifId)) {
+                const ts = rawAnn.timestamp || rawAnn.publishAt || (rawAnn.createdAt ? new Date(rawAnn.createdAt).toISOString().slice(0, 16).replace("T", " ") : "");
+                mappedWithEpoch.push({
+                  epoch: parseEpoch(rawAnn.createdAt || rawAnn.timestamp || rawAnn.publishAt),
+                  item: {
+                    id: annNotifId,
+                    category: "Announcements",
+                    title: rawAnn.title,
+                    description: rawAnn.message || rawAnn.description || "",
+                    timestamp: ts,
+                    read: isItemRead(rawAnn),
+                    priority: (rawAnn.priority === "High" ? "High" : "Normal") as "Normal" | "High",
+                    link: rawAnn.link || "/notifications",
+                  },
                 });
               }
             }
+
+            // Always sort newest notifications first
+            mappedWithEpoch.sort((a, b) => b.epoch - a.epoch);
+            const authoritativeNotifications = mappedWithEpoch.map((x) => x.item);
 
             const combinedAnnouncements = [...authoritativeAnnouncements];
             for (const localAnn of d.announcements) {
@@ -409,7 +440,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             return {
               ...d,
               announcements: combinedAnnouncements,
-              notifications: authoritativeNotifications.length > 0 ? authoritativeNotifications : d.notifications,
+              notifications: authoritativeNotifications,
             };
           });
         }
@@ -1217,7 +1248,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setData((d) => ({ ...d, notifications: d.notifications.map((n) => (n.id === id ? { ...n, read: true } : n)) }));
         fetch("/api/notifications", {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-id": session?.userId || session?.employeeId || "",
+          },
           body: JSON.stringify({ id }),
         }).catch(() => {});
       },
@@ -1225,7 +1259,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setData((d) => ({ ...d, notifications: d.notifications.map((n) => ({ ...n, read: true })) }));
         fetch("/api/notifications", {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-id": session?.userId || session?.employeeId || "",
+          },
           body: JSON.stringify({ markAllRead: true }),
         }).catch(() => {});
       },
