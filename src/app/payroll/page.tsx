@@ -2028,7 +2028,7 @@ export default function PayrollPage() {
 }
 
 // ----------------------------------------------------------------------------
-// Corporate GVK-branded Payslip Dialog — html2canvas + jsPDF download
+// Payslip Dialog — original in-app UI + hidden A4 div for corporate PDF download
 // ----------------------------------------------------------------------------
 function PayslipDialog({
   slip,
@@ -2047,7 +2047,7 @@ function PayslipDialog({
   } | null;
 }) {
   const { data } = useStore();
-  const printRef = React.useRef<HTMLDivElement>(null);
+  const a4Ref = React.useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = React.useState(false);
 
   if (!slip) return null;
@@ -2066,14 +2066,14 @@ function PayslipDialog({
   const today = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" });
   const annualCTC = p.gross * 12;
 
-  const earningsRows = [
+  const earningsLines = [
     { label: "Basic Salary", val: p.basic },
     { label: "House Rent Allowance (HRA)", val: p.hra },
     { label: "Special Allowance", val: p.special },
     ...(p.incentives > 0 ? [{ label: "Performance Incentives & Bonuses", val: p.incentives }] : []),
   ];
 
-  const deductionRows = [
+  const deductionLines = [
     { label: "Provident Fund (EPF)", val: 0, tag: "Exempted" },
     { label: "Employee State Insurance (ESI)", val: 0, tag: "Exempted" },
     { label: "Professional Tax (PT)", val: p.pt },
@@ -2082,12 +2082,15 @@ function PayslipDialog({
   ];
 
   const handleDownloadPDF = async () => {
-    if (!printRef.current) return;
+    if (!a4Ref.current) return;
     setDownloading(true);
+    // Temporarily make it visible for capture
+    a4Ref.current.style.left = "0";
+    a4Ref.current.style.visibility = "visible";
     try {
       const html2canvas = (await import("html2canvas")).default;
       const jsPDF = (await import("jspdf")).default;
-      const canvas = await html2canvas(printRef.current, { scale: 2, useCORS: true, logging: false });
+      const canvas = await html2canvas(a4Ref.current, { scale: 2, useCORS: true, logging: false });
       const imgData = canvas.toDataURL("image/jpeg", 1.0);
       const pdf = new jsPDF({ orientation: "portrait", unit: "px", format: [794, 1123] });
       pdf.addImage(imgData, "JPEG", 0, 0, 794, 1123);
@@ -2096,256 +2099,269 @@ function PayslipDialog({
       console.error("PDF generation failed", e);
       window.print();
     } finally {
+      if (a4Ref.current) {
+        a4Ref.current.style.left = "-9999px";
+        a4Ref.current.style.visibility = "hidden";
+      }
       setDownloading(false);
     }
   };
 
   return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto p-0 gap-0">
-        {/* ── Preview wrapper (scrollable in dialog, captured by html2canvas) ── */}
-        <div className="p-4 bg-slate-100">
-          {/* A4-proportioned payslip page */}
-          <div
-            ref={printRef}
-            style={{
-              width: 794,
-              minHeight: 1123,
-              background: "white",
-              padding: "30px 38px 70px 38px",
-              position: "relative",
-              fontFamily: "'Poppins', 'Segoe UI', sans-serif",
-              color: "#1e293b",
-              margin: "0 auto",
-              boxSizing: "border-box",
-              overflow: "hidden",
-            }}
-          >
-            {/* ── Watermark ── */}
-            <img
-              src="https://ik.imagekit.io/abhobz66j/GVK%20Images/logo.jpg?updatedAt=1776492281519"
-              alt=""
-              crossOrigin="anonymous"
-              style={{
-                position: "absolute", top: "50%", left: "50%",
-                transform: "translate(-50%,-50%)", width: 380,
-                opacity: 0.05, zIndex: 0, pointerEvents: "none",
-              }}
-            />
+    <>
+      {/* ── Hidden A4 corporate payslip used only for PDF capture ── */}
+      <div
+        ref={a4Ref}
+        style={{
+          position: "fixed",
+          left: "-9999px",
+          top: 0,
+          visibility: "hidden",
+          width: 794,
+          height: 1123,
+          background: "white",
+          padding: "30px 38px 70px 38px",
+          fontFamily: "'Poppins', 'Segoe UI', sans-serif",
+          color: "#1e293b",
+          boxSizing: "border-box",
+          overflow: "hidden",
+          zIndex: -1,
+        }}
+      >
+        {/* Watermark */}
+        <img src="https://ik.imagekit.io/abhobz66j/GVK%20Images/logo.jpg?updatedAt=1776492281519" alt="" crossOrigin="anonymous"
+          style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: 380, opacity: 0.05, zIndex: 0 }} />
 
-            {/* ── Header ── */}
-            <div style={{
-              display: "flex", justifyContent: "space-between", alignItems: "center",
-              borderBottom: "3px solid #0f172a", paddingBottom: 12, position: "relative", zIndex: 2,
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                <img
-                  src="https://ik.imagekit.io/abhobz66j/GVK%20Images/logo.jpg?updatedAt=1776492281519"
-                  alt="GVK Logo"
-                  crossOrigin="anonymous"
-                  style={{ width: 60 }}
-                />
-                <img
-                  src="https://ik.imagekit.io/abhobz66j/GVK%20Images/GVK-LOGO.png?updatedAt=1776492281541"
-                  alt="GVK Edutech"
-                  crossOrigin="anonymous"
-                  style={{ width: 220 }}
-                />
-              </div>
-              <div style={{ textAlign: "right", fontSize: 12, lineHeight: "1.7", color: "#475569" }}>
-                GVK Edutech Pvt. Ltd.<br />
-                Hyderabad, Telangana, India<br />
-                www.gvkedutech.com<br />
-                info@gvkedutech.com
-              </div>
-            </div>
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "3px solid #0f172a", paddingBottom: 12, position: "relative", zIndex: 2 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <img src="https://ik.imagekit.io/abhobz66j/GVK%20Images/logo.jpg?updatedAt=1776492281519" alt="Logo" crossOrigin="anonymous" style={{ width: 56 }} />
+            <img src="https://ik.imagekit.io/abhobz66j/GVK%20Images/GVK-LOGO.png?updatedAt=1776492281541" alt="GVK Edutech" crossOrigin="anonymous" style={{ width: 210 }} />
+          </div>
+          <div style={{ textAlign: "right", fontSize: 11, lineHeight: "1.7", color: "#475569" }}>
+            GVK Edutech Pvt. Ltd.<br />Hyderabad, Telangana, India<br />www.gvkedutech.com<br />info@gvkedutech.com
+          </div>
+        </div>
 
-            {/* ── Title ── */}
-            <div style={{ textAlign: "center", margin: "24px 0 20px", position: "relative", zIndex: 2 }}>
-              <div style={{ fontSize: 26, fontWeight: 700, color: "#0f172a", letterSpacing: 1 }}>SALARY SLIP</div>
-              <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
-                Pay Period: <strong>{periodMonthYear}</strong> &nbsp;|&nbsp; Generated: {today}
-              </div>
-            </div>
+        {/* Title */}
+        <div style={{ textAlign: "center", margin: "20px 0 16px", position: "relative", zIndex: 2 }}>
+          <div style={{ fontSize: 24, fontWeight: 700, color: "#0f172a", letterSpacing: 1 }}>SALARY SLIP</div>
+          <div style={{ fontSize: 12, color: "#64748b", marginTop: 3 }}>Pay Period: <strong>{periodMonthYear}</strong>&nbsp;|&nbsp;Generated: {today}</div>
+        </div>
 
-            {/* ── Employee Details Section ── */}
-            <div style={{
-              background: "#020b2c", color: "white", padding: "10px 16px",
-              borderRadius: 10, fontSize: 15, fontWeight: 600,
-              position: "relative", zIndex: 2, marginBottom: 14,
-            }}>
-              Employee Details
-            </div>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, position: "relative", zIndex: 2, marginBottom: 20 }}>
-              <tbody>
-                <tr>
-                  <td style={{ padding: "8px 10px", border: "1px solid #cbd5e1", fontWeight: 600, background: "#f8fafc", width: "25%" }}>Employee Name</td>
-                  <td style={{ padding: "8px 10px", border: "1px solid #cbd5e1", width: "25%" }}>{emp.name}</td>
-                  <td style={{ padding: "8px 10px", border: "1px solid #cbd5e1", fontWeight: 600, background: "#f8fafc", width: "25%" }}>Employee ID</td>
-                  <td style={{ padding: "8px 10px", border: "1px solid #cbd5e1", width: "25%" }}>{emp.id}</td>
-                </tr>
-                <tr>
-                  <td style={{ padding: "8px 10px", border: "1px solid #cbd5e1", fontWeight: 600, background: "#f8fafc" }}>Designation</td>
-                  <td style={{ padding: "8px 10px", border: "1px solid #cbd5e1" }}>{emp.designation}</td>
-                  <td style={{ padding: "8px 10px", border: "1px solid #cbd5e1", fontWeight: 600, background: "#f8fafc" }}>Department</td>
-                  <td style={{ padding: "8px 10px", border: "1px solid #cbd5e1" }}>{emp.department}</td>
-                </tr>
-                <tr>
-                  <td style={{ padding: "8px 10px", border: "1px solid #cbd5e1", fontWeight: 600, background: "#f8fafc" }}>Bank Name</td>
-                  <td style={{ padding: "8px 10px", border: "1px solid #cbd5e1" }}>{bank.bankName || "—"}</td>
-                  <td style={{ padding: "8px 10px", border: "1px solid #cbd5e1", fontWeight: 600, background: "#f8fafc" }}>Account Number</td>
-                  <td style={{ padding: "8px 10px", border: "1px solid #cbd5e1", fontFamily: "monospace" }}>{bank.accNo || "—"}</td>
-                </tr>
-                <tr>
-                  <td style={{ padding: "8px 10px", border: "1px solid #cbd5e1", fontWeight: 600, background: "#f8fafc" }}>IFSC Code</td>
-                  <td style={{ padding: "8px 10px", border: "1px solid #cbd5e1", fontFamily: "monospace" }}>{bank.ifsc || "—"}</td>
-                  <td style={{ padding: "8px 10px", border: "1px solid #cbd5e1", fontWeight: 600, background: "#f8fafc" }}>Payable Days</td>
-                  <td style={{ padding: "8px 10px", border: "1px solid #cbd5e1" }}>{30 - (payrollItem?.unpaidDays ?? 0)} / 30</td>
-                </tr>
-              </tbody>
-            </table>
+        {/* Employee Details */}
+        <div style={{ background: "#020b2c", color: "white", padding: "8px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, zIndex: 2, position: "relative", marginBottom: 10 }}>Employee Details</div>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, position: "relative", zIndex: 2, marginBottom: 16 }}>
+          <tbody>
+            {[
+              ["Employee Name", emp.name, "Employee ID", emp.id],
+              ["Designation", emp.designation, "Department", emp.department],
+              ["Bank Name", bank.bankName || "—", "Account Number", bank.accNo || "—"],
+              ["IFSC Code", bank.ifsc || "—", "Payable Days", `${30 - (payrollItem?.unpaidDays ?? 0)} / 30`],
+            ].map((row, i) => (
+              <tr key={i}>
+                <td style={{ padding: "7px 9px", border: "1px solid #cbd5e1", fontWeight: 600, background: "#f8fafc", width: "22%" }}>{row[0]}</td>
+                <td style={{ padding: "7px 9px", border: "1px solid #cbd5e1", width: "28%" }}>{row[1]}</td>
+                <td style={{ padding: "7px 9px", border: "1px solid #cbd5e1", fontWeight: 600, background: "#f8fafc", width: "22%" }}>{row[2]}</td>
+                <td style={{ padding: "7px 9px", border: "1px solid #cbd5e1", width: "28%" }}>{row[3]}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
 
-            {/* ── Earnings & Deductions Side-by-Side ── */}
-            <div style={{ display: "flex", gap: 16, position: "relative", zIndex: 2, marginBottom: 20 }}>
-              {/* Earnings */}
-              <div style={{ flex: 1 }}>
-                <div style={{
-                  background: "#020b2c", color: "white", padding: "10px 16px",
-                  borderRadius: 10, fontSize: 14, fontWeight: 600, marginBottom: 10,
-                }}>
-                  Earnings
-                </div>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                  <thead>
-                    <tr>
-                      <th style={{ background: "#1e293b", color: "white", padding: "8px 10px", textAlign: "left" }}>Particulars</th>
-                      <th style={{ background: "#1e293b", color: "white", padding: "8px 10px", textAlign: "right" }}>Amount (₹)</th>
+        {/* Earnings & Deductions */}
+        <div style={{ display: "flex", gap: 14, position: "relative", zIndex: 2, marginBottom: 16 }}>
+          {[
+            { title: "Earnings", rows: [...earningsLines, { label: "Total Earnings", val: p.gross, bold: true, bg: "#f0fdf4" }] },
+            { title: "Deductions", rows: [...deductionLines.map(r => ({ label: r.label + (r.tag ? ` (${r.tag})` : ""), val: r.val })), { label: "Total Deductions", val: p.totalDeductions, bold: true, bg: "#fff1f2", red: true }] },
+          ].map((section) => (
+            <div key={section.title} style={{ flex: 1 }}>
+              <div style={{ background: "#020b2c", color: "white", padding: "7px 12px", borderRadius: 7, fontSize: 12, fontWeight: 600, marginBottom: 8 }}>{section.title}</div>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11.5 }}>
+                <thead>
+                  <tr>
+                    <th style={{ background: "#1e293b", color: "white", padding: "7px 9px", textAlign: "left" }}>Particulars</th>
+                    <th style={{ background: "#1e293b", color: "white", padding: "7px 9px", textAlign: "right" }}>Amount (₹)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {section.rows.map((r: any) => (
+                    <tr key={r.label}>
+                      <td style={{ padding: "6px 9px", border: "1px solid #e2e8f0", fontWeight: r.bold ? 700 : 400, background: r.bg }}>{r.label}</td>
+                      <td style={{ padding: "6px 9px", border: "1px solid #e2e8f0", textAlign: "right", fontWeight: r.bold ? 700 : 400, background: r.bg, color: r.red ? "#dc2626" : r.val === 0 ? "#94a3b8" : "#1e293b" }}>
+                        {r.val > 0 ? inr(r.val) : "—"}
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {earningsRows.map((r) => (
-                      <tr key={r.label}>
-                        <td style={{ padding: "7px 10px", border: "1px solid #e2e8f0" }}>{r.label}</td>
-                        <td style={{ padding: "7px 10px", border: "1px solid #e2e8f0", textAlign: "right" }}>
-                          {r.val > 0 ? inr(r.val) : <span style={{ color: "#94a3b8" }}>—</span>}
-                        </td>
-                      </tr>
-                    ))}
-                    <tr>
-                      <td style={{ padding: "8px 10px", border: "1px solid #e2e8f0", fontWeight: 700, background: "#f0fdf4" }}>Total Earnings</td>
-                      <td style={{ padding: "8px 10px", border: "1px solid #e2e8f0", fontWeight: 700, textAlign: "right", background: "#f0fdf4" }}>{inr(p.gross)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Deductions */}
-              <div style={{ flex: 1 }}>
-                <div style={{
-                  background: "#020b2c", color: "white", padding: "10px 16px",
-                  borderRadius: 10, fontSize: 14, fontWeight: 600, marginBottom: 10,
-                }}>
-                  Deductions
-                </div>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                  <thead>
-                    <tr>
-                      <th style={{ background: "#1e293b", color: "white", padding: "8px 10px", textAlign: "left" }}>Particulars</th>
-                      <th style={{ background: "#1e293b", color: "white", padding: "8px 10px", textAlign: "right" }}>Amount (₹)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {deductionRows.map((r) => (
-                      <tr key={r.label}>
-                        <td style={{ padding: "7px 10px", border: "1px solid #e2e8f0" }}>
-                          {r.label}
-                          {r.tag && (
-                            <span style={{
-                              marginLeft: 6, fontSize: 10, background: "#e2e8f0",
-                              color: "#64748b", padding: "1px 6px", borderRadius: 4,
-                            }}>
-                              {r.tag}
-                            </span>
-                          )}
-                        </td>
-                        <td style={{ padding: "7px 10px", border: "1px solid #e2e8f0", textAlign: "right", color: r.val > 0 ? "#dc2626" : "#94a3b8" }}>
-                          {r.val > 0 ? inr(r.val) : "—"}
-                        </td>
-                      </tr>
-                    ))}
-                    <tr>
-                      <td style={{ padding: "8px 10px", border: "1px solid #e2e8f0", fontWeight: 700, background: "#fff1f2" }}>Total Deductions</td>
-                      <td style={{ padding: "8px 10px", border: "1px solid #e2e8f0", fontWeight: 700, textAlign: "right", background: "#fff1f2", color: "#dc2626" }}>{inr(p.totalDeductions)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+                  ))}
+                </tbody>
+              </table>
             </div>
+          ))}
+        </div>
 
-            {/* ── Net Salary Banner ── */}
-            <div style={{
-              background: "#020b2c", borderRadius: 12, padding: "18px 24px",
-              display: "flex", justifyContent: "space-between", alignItems: "center",
-              position: "relative", zIndex: 2, marginBottom: 24,
-            }}>
+        {/* Net Salary Banner */}
+        <div style={{ background: "#020b2c", borderRadius: 10, padding: "14px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", position: "relative", zIndex: 2, marginBottom: 18 }}>
+          <div>
+            <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1, marginBottom: 3 }}>Net Salary (In-Hand)</div>
+            <div style={{ fontSize: 26, fontWeight: 700, color: "#34d399" }}>{inr(p.net)}</div>
+          </div>
+          <div style={{ textAlign: "right", fontSize: 11, color: "#94a3b8" }}>
+            <div>Annual CTC</div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: "white", marginTop: 2 }}>{inr(annualCTC)}</div>
+            <div style={{ marginTop: 5, fontSize: 10 }}>Payment via Corporate NEFT</div>
+          </div>
+        </div>
+
+        {/* Declaration */}
+        <div style={{ fontSize: 10.5, color: "#64748b", lineHeight: "1.7", position: "relative", zIndex: 2 }}>
+          This is a system-generated salary slip and does not require a signature. The salary details are confidential and shared only with the concerned employee.
+          For any discrepancy, please contact HR at <span style={{ color: "#020b2c", fontWeight: 600 }}>info@gvkedutech.com</span>.
+        </div>
+
+        {/* Footer */}
+        <div style={{ position: "absolute", bottom: 16, left: 38, right: 38, display: "flex", justifyContent: "space-between", borderTop: "1px solid #cbd5e1", paddingTop: 7, fontSize: 10, color: "#64748b", zIndex: 2, background: "white" }}>
+          <span>GVK Edutech Pvt. Ltd. — Confidential</span>
+          <span>Salary Slip — {periodMonthYear}</span>
+          <span>⚙ System Generated</span>
+        </div>
+      </div>
+
+      {/* ── Actual visible dialog (original design) ── */}
+      <Dialog open onOpenChange={(v) => !v && onClose()}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="border-b border-border pb-3">
+            <div className="flex items-center justify-between">
               <div>
-                <div style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>
-                  Net Salary (In-Hand)
-                </div>
-                <div style={{ fontSize: 28, fontWeight: 700, color: "#34d399" }}>
-                  {inr(p.net)}
-                </div>
+                <DialogTitle className="text-xl font-bold text-foreground">
+                  Salary Statement — {periodMonthYear}
+                </DialogTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  GVK Edutech Pvt. Ltd. • Hyderabad Corporate Office
+                </p>
               </div>
-              <div style={{ textAlign: "right", fontSize: 12, color: "#94a3b8" }}>
-                <div>Annual CTC</div>
-                <div style={{ fontSize: 16, fontWeight: 600, color: "white", marginTop: 2 }}>{inr(annualCTC)}</div>
-                <div style={{ marginTop: 6, fontSize: 11 }}>Payment via Corporate NEFT</div>
+              <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                No PF / No ESI Exempt
+              </span>
+            </div>
+          </DialogHeader>
+
+          {/* Employee Summary Card */}
+          <div className="mt-2 rounded-xl border border-border bg-muted/30 p-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+              <div>
+                <span className="text-muted-foreground text-[10px] uppercase font-semibold block">Employee Name</span>
+                <span className="font-semibold text-foreground text-sm">{emp.name}</span>
               </div>
-            </div>
-
-            {/* ── Declaration ── */}
-            <div style={{ fontSize: 11, color: "#64748b", lineHeight: "1.7", position: "relative", zIndex: 2, marginBottom: 32 }}>
-              This is a system-generated salary slip and does not require a signature. The salary details mentioned above are confidential
-              and are shared only with the concerned employee. For any discrepancy, please contact the HR department at{" "}
-              <span style={{ color: "#020b2c", fontWeight: 600 }}>info@gvkedutech.com</span>.
-            </div>
-
-            {/* ── Footer ── */}
-            <div style={{
-              position: "absolute", bottom: 18, left: 38, right: 38,
-              display: "flex", justifyContent: "space-between",
-              borderTop: "1px solid #cbd5e1", paddingTop: 8,
-              fontSize: 11, color: "#64748b", zIndex: 2, background: "white",
-            }}>
-              <span>GVK Edutech Pvt. Ltd. — Confidential</span>
-              <span>Salary Slip — {periodMonthYear}</span>
-              <span>⚙ System Generated</span>
+              <div>
+                <span className="text-muted-foreground text-[10px] uppercase font-semibold block">Employee ID</span>
+                <span className="font-medium text-foreground">{emp.id}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground text-[10px] uppercase font-semibold block">Designation</span>
+                <span className="font-medium text-foreground">{emp.designation}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground text-[10px] uppercase font-semibold block">Department</span>
+                <span className="font-medium text-foreground">{emp.department}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground text-[10px] uppercase font-semibold block">Bank Name</span>
+                <span className="font-medium text-foreground">{bank.bankName || "—"}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground text-[10px] uppercase font-semibold block">Bank Account</span>
+                <span className="font-mono text-foreground font-medium">{bank.accNo || "—"}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground text-[10px] uppercase font-semibold block">IFSC Code</span>
+                <span className="font-mono text-foreground font-medium">{bank.ifsc || "—"}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground text-[10px] uppercase font-semibold block">Payable Days</span>
+                <span className="font-medium text-foreground">{30 - (payrollItem?.unpaidDays ?? 0)} / 30 Days</span>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* ── Dialog action bar ── */}
-        <div className="flex items-center justify-between px-6 py-3 border-t border-border bg-card">
-          <span className="text-[11px] text-muted-foreground">
-            System generated • No signature required • Confidential
-          </span>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-xs"
-              disabled={downloading}
-              onClick={handleDownloadPDF}
-            >
-              <Printer className="h-3.5 w-3.5" />
-              {downloading ? "Generating PDF…" : "Download PDF"}
-            </Button>
-            <Button size="sm" className="text-xs" onClick={onClose}>
-              Close
-            </Button>
+          {/* Earnings & Deductions */}
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="rounded-xl border border-border bg-card p-4">
+              <h4 className="font-semibold text-xs uppercase tracking-wider text-muted-foreground border-b border-border pb-2 mb-3 flex items-center justify-between">
+                <span>Earnings</span><span>Amount (₹)</span>
+              </h4>
+              <div className="space-y-2 text-xs">
+                {earningsLines.map((row) => (
+                  <div key={row.label} className="flex justify-between py-0.5">
+                    <span className="text-foreground">{row.label}</span>
+                    <span className="font-medium text-foreground tabular-nums">{inr(row.val)}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 border-t border-border pt-2 flex justify-between font-bold text-xs">
+                <span>Total Earnings</span>
+                <span className="tabular-nums">{inr(p.gross)}</span>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border bg-card p-4">
+              <h4 className="font-semibold text-xs uppercase tracking-wider text-muted-foreground border-b border-border pb-2 mb-3 flex items-center justify-between">
+                <span>Deductions</span><span>Amount (₹)</span>
+              </h4>
+              <div className="space-y-2 text-xs">
+                {deductionLines.map((row) => (
+                  <div key={row.label} className="flex justify-between py-0.5">
+                    <span className="text-foreground flex items-center gap-1.5">
+                      {row.label}
+                      {row.tag && (
+                        <span className="text-[10px] text-muted-foreground bg-muted px-1.5 rounded font-normal">{row.tag}</span>
+                      )}
+                    </span>
+                    <span className={`font-medium tabular-nums ${row.val === 0 ? "text-muted-foreground" : "text-rose-600"}`}>
+                      {inr(row.val)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 border-t border-border pt-2 flex justify-between font-bold text-xs">
+                <span>Total Deductions</span>
+                <span className="tabular-nums text-rose-600">{inr(p.totalDeductions)}</span>
+              </div>
+            </div>
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+
+          {/* Net Take-Home Banner */}
+          <div className="mt-4 rounded-xl bg-gradient-to-r from-emerald-500/10 via-primary/10 to-emerald-500/10 border border-emerald-500/20 p-4 flex items-center justify-between">
+            <div>
+              <span className="text-xs uppercase font-semibold text-muted-foreground block tracking-wider">Net Bank Transfer Amount</span>
+              <span className="text-2xl font-black text-emerald-600 tracking-tight">{inr(p.net)}</span>
+            </div>
+            <div className="text-right text-xs text-muted-foreground">
+              <span>Direct Credit via Corporate NEFT</span>
+              <span className="block font-medium text-foreground">Status: Authorized for Payout</span>
+            </div>
+          </div>
+
+          {/* Footer Actions */}
+          <DialogFooter className="mt-4 flex sm:justify-between items-center gap-2">
+            <span className="text-[11px] text-muted-foreground">
+              System generated confidential payslip • No signature required.
+            </span>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-xs"
+                disabled={downloading}
+                onClick={handleDownloadPDF}
+              >
+                <Printer className="h-3.5 w-3.5" />
+                {downloading ? "Generating PDF…" : "Print / Save as PDF"}
+              </Button>
+              <Button size="sm" className="text-xs" onClick={onClose}>Close</Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
