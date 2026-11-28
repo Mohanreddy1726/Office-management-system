@@ -556,17 +556,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         .then((res) => (res.ok ? res.json() : null))
         .then((resData) => {
           if (resData?.success && Array.isArray(resData.records)) {
-            setData((d) => {
-              const map = new Map<string, AttendanceRecord>();
-              for (const r of d.attendance) {
-                map.set(`${r.employeeId}_${r.date}`, r);
-              }
-              for (const r of resData.records) {
-                const key = `${r.employeeId}_${r.date}`;
-                map.set(key, { ...(map.get(key) || {}), ...r });
-              }
-              return { ...d, attendance: Array.from(map.values()) };
-            });
+            setData((d) => ({ ...d, attendance: resData.records }));
           }
         })
         .catch(() => {});
@@ -621,7 +611,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       fetch("/api/audit-logs")
         .then((res) => (res.ok ? res.json() : null))
         .then((resData) => {
-          if (resData?.success && Array.isArray(resData.logs) && resData.logs.length > 0) {
+          if (resData?.success && Array.isArray(resData.logs)) {
             setData((d) => {
               const dbLogs: AuditEntry[] = resData.logs.map((l: any) => ({
                 id: l._id ? l._id.toString() : (l.id || `AU-${Date.now()}`),
