@@ -196,9 +196,9 @@ const EmployeeSchema = new Schema<IEmployee>(
       basic: { type: Number, default: 0 },
       hra: { type: Number, default: 0 },
       specialAllowance: { type: Number, default: 0 },
-      professionalTax: { type: Number, default: 200 },
       epfDeduction: { type: Number, default: 0 },
       esiDeduction: { type: Number, default: 0 },
+      professionalTax: { type: Number, default: 0 },
       tds: { type: Number, default: 0 },
     },
 

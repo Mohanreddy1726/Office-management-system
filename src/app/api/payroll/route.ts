@@ -62,15 +62,13 @@ export async function POST(req: NextRequest) {
 
       for (const emp of employees) {
         const gross = Number(emp.salary?.monthlyGross) || 0;
-        const basic = emp.salary?.basic || Math.round(gross * 0.45);
-        const hra = emp.salary?.hra || Math.round(basic * 0.5);
-        const specialAllowance = Math.max(0, gross - (basic + hra));
-        const epf = 0; // Zero PF Policy
-        const esi = 0; // Zero ESI Policy
-        const pt = emp.salary?.professionalTax ?? 200;
-        const tds = emp.salary?.tds ?? (gross > 100000 ? Math.round(gross * 0.1) : 0);
-        const deductions = pt + tds;
-        const net = Math.max(0, gross - deductions);
+        const basic = gross;
+        const hra = 0;
+        const specialAllowance = 0;
+        const pt = 0;
+        const tds = 0;
+        const deductions = 0;
+        const net = gross;
 
         totalGross += gross;
         totalDeductions += deductions;
@@ -130,14 +128,13 @@ export async function POST(req: NextRequest) {
 
       for (const emp of employees) {
         const gross = Number(emp.salary?.monthlyGross) || 0;
-        const basic = emp.salary?.basic || Math.round(gross * 0.45);
-        const hra = emp.salary?.hra || Math.round(basic * 0.5);
-        const specialAllowance = Math.max(0, gross - (basic + hra));
-        const epf = 0; // Zero PF Policy
-        const pt = emp.salary?.professionalTax ?? 200;
-        const tds = emp.salary?.tds ?? (gross > 100000 ? Math.round(gross * 0.1) : 0);
-        const deductions = pt + tds;
-        const net = Math.max(0, gross - deductions);
+        const basic = gross;
+        const hra = 0;
+        const specialAllowance = 0;
+        const pt = 0;
+        const tds = 0;
+        const deductions = 0;
+        const net = gross;
 
         totalGross += gross;
         totalDeductions += deductions;

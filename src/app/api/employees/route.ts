@@ -341,12 +341,12 @@ export async function POST(req: NextRequest) {
         salary: {
           annualCtc,
           monthlyGross,
-          basic,
-          hra,
-          specialAllowance,
-          professionalTax: 200,
-          epfDeduction: 0, // Zero PF Policy
-          esiDeduction: 0, // Zero ESI Policy
+          basic: monthlyGross,
+          hra: 0,
+          specialAllowance: 0,
+          professionalTax: 0,
+          epfDeduction: 0,
+          esiDeduction: 0,
           tds: 0,
         },
 

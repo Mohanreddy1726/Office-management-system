@@ -1656,13 +1656,13 @@ function AddEmployeeDialog({
             <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-800 dark:text-emerald-300 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
-                <span>Zero PF and Zero ESI deductions applied. Total CTC directly drives gross take-home pay.</span>
+                <span>100% of salary goes to Basic Salary. Zero allowances and zero deductions (No PF, ESI, PT, or TDS).</span>
               </div>
-              <span className="font-semibold text-emerald-700 dark:text-emerald-400">Zero Statutory Cut</span>
+              <span className="font-semibold text-emerald-700 dark:text-emerald-400">100% Basic Pay</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Field label="Annual Cost to Company (CTC ₹)" required>
+              <Field label="Annual Basic Salary / CTC (₹)" required>
                 <Input
                   type="number"
                   value={ctc}
@@ -1672,24 +1672,13 @@ function AddEmployeeDialog({
                 />
               </Field>
 
-              <Field label="Calculated Monthly Gross (₹)" hint="Auto-computed: Annual CTC ÷ 12">
+              <Field label="Monthly Basic Salary (₹)" hint="Auto-computed: Annual Salary ÷ 12 (No Deductions / Allowances)">
                 <Input
                   value={calculatedMonthly ? inr(calculatedMonthly) : ""}
                   placeholder="₹0"
                   disabled
                   className="h-9 text-xs bg-muted/40 font-mono font-bold text-foreground"
                 />
-              </Field>
-
-              <Field label="Salary Structure Template">
-                <Select value={salaryStructureId} onValueChange={setSalaryStructureId}>
-                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select salary template" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="SS-STANDARD">Standard (No PF / No ESI) — Up to ₹8 LPA</SelectItem>
-                    <SelectItem value="SS-SENIOR">Senior Staff (No PF / No ESI) — ₹8 to ₹15 LPA</SelectItem>
-                    <SelectItem value="SS-EXEC">Executive Grade (No PF / No ESI) — Above ₹15 LPA</SelectItem>
-                  </SelectContent>
-                </Select>
               </Field>
 
               <Field label="Beneficiary Bank Name" required>

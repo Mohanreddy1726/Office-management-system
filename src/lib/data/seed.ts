@@ -271,22 +271,10 @@ function buildPayroll(): PayrollRun[] {
 
 const SALARY_STRUCTURES: SalaryStructure[] = [
   {
-    id: "SS-STANDARD", name: "Standard Structure (No PF / No ESI)", applicableTo: "All full-time staff up to ₹8 LPA", effectiveFrom: "2025-04-01",
-    earnings: [{ name: "Basic", calc: "40% of gross" }, { name: "HRA", calc: "50% of Basic" }, { name: "Special Allowance", calc: "Balance of gross" }],
-    deductions: [{ name: "Professional Tax", calc: "₹200 flat" }, { name: "TDS", calc: "As per income declaration" }, { name: "PF & ESI", calc: "₹0 (Exempted as per policy)" }],
-    employerContributions: [{ name: "PF & ESI", calc: "₹0 (Exempted)" }],
-  },
-  {
-    id: "SS-SENIOR", name: "Senior Staff Structure (No PF / No ESI)", applicableTo: "Senior staff above ₹8 LPA", effectiveFrom: "2025-04-01",
-    earnings: [{ name: "Basic", calc: "45% of gross" }, { name: "HRA", calc: "50% of Basic" }, { name: "Special Allowance", calc: "Balance of gross" }, { name: "Incentives", calc: "Variable bonus" }],
-    deductions: [{ name: "Professional Tax", calc: "₹200 flat" }, { name: "TDS", calc: "As per income declaration" }, { name: "PF & ESI", calc: "₹0 (Exempted as per policy)" }],
-    employerContributions: [{ name: "PF & ESI", calc: "₹0 (Exempted)" }],
-  },
-  {
-    id: "SS-EXEC", name: "Executive Structure (No PF / No ESI)", applicableTo: "Leadership and team leads", effectiveFrom: "2025-04-01",
-    earnings: [{ name: "Basic", calc: "50% of gross" }, { name: "HRA", calc: "50% of Basic" }, { name: "Performance Bonus", calc: "Target linked" }],
-    deductions: [{ name: "Professional Tax", calc: "₹200 flat" }, { name: "TDS", calc: "As per income declaration" }, { name: "PF & ESI", calc: "₹0 (Exempted as per policy)" }],
-    employerContributions: [{ name: "Gratuity Provision", calc: "4.81% of Basic" }, { name: "PF & ESI", calc: "₹0 (Exempted)" }],
+    id: "SS-STANDARD", name: "100% Basic Salary (Zero Allowances & Deductions)", applicableTo: "All Employees", effectiveFrom: "2025-04-01",
+    earnings: [{ name: "Basic Salary", calc: "100% of total salary" }],
+    deductions: [{ name: "Standard Deductions (PF / ESI / PT / TDS)", calc: "₹0 (None)" }],
+    employerContributions: [{ name: "PF & ESI", calc: "₹0 (None)" }],
   },
 ];
 

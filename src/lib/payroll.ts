@@ -27,20 +27,19 @@ export interface PayslipBreakdown {
 
 export function payslipFor(
   e: Employee,
-  structures: SalaryStructure[],
+  _structures: SalaryStructure[],
   unpaidDays = 0,
   incentives = 0,
   miscDeductions = 0,
   options?: { allowOver15DaysLop?: boolean }
 ): PayslipBreakdown {
-  const baseGross = e.monthlyGross;
-  const st = structures.find((s) => s.id === e.salaryStructureId) ?? structures[0]!;
-  const basicPct = st.id === "SS-EXEC" ? 0.5 : st.id === "SS-SENIOR" ? 0.45 : 0.4;
-  const basic = Math.round(baseGross * basicPct);
-  const hra = Math.round(basic * 0.5);
-  const special = Math.max(0, baseGross - basic - hra);
+  const baseGross = Number(e.monthlyGross) || 0;
+  // Complete salary goes to Basic Salary; zero allowances and zero standard deductions
+  const basic = baseGross;
+  const hra = 0;
+  const special = 0;
 
-  // Loss of Pay (LOP) calculation based on Gross Salary (30-day month).
+  // Loss of Pay (LOP) calculation based on Basic Salary (30-day month).
   // Policy: Except for maternity or personal medical emergency, LOP cannot exceed 15 days.
   const effectiveUnpaidDays = options?.allowOver15DaysLop
     ? Math.max(0, unpaidDays)
@@ -48,11 +47,11 @@ export function payslipFor(
   const perDay = Math.round(baseGross / 30);
   const lop = Math.round(perDay * effectiveUnpaidDays);
 
-  // Statutory: PF and ESI are 0 as per company policy
+  // Zero standard statutory deductions (No PF, No ESI, No PT, No TDS)
   const pf = 0;
   const esi = 0;
-  const pt = 200; // Standard professional tax
-  const tds = Math.max(0, Math.round((baseGross - 75000) * 0.1));
+  const pt = 0;
+  const tds = 0;
 
   const totalDeductions = pf + esi + pt + tds + lop + miscDeductions;
   const totalGross = baseGross + incentives;

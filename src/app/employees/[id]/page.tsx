@@ -418,18 +418,16 @@ export default function EmployeeDetailPage() {
                 <div className="mb-3 flex items-center justify-between border-b border-border/60 pb-2">
                   <h4 className="font-semibold text-sm text-foreground">Compensation Breakdown</h4>
                   <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
-                    Zero PF & ESI Exempt
+                    100% Basic · Zero Allowances &amp; Deductions
                   </span>
                 </div>
                 <Grid>
-                  <Stat label="Annual CTC" value={inr(e.annualCTC)} />
-                  <Stat label="Monthly gross" value={inr(e.monthlyGross)} />
-                  <Stat label="Net take-home" value={inr(slip.net)} />
-                  <Stat label="Basic Pay" value={inr(slip.basic)} />
-                  <Stat label="HRA" value={inr(slip.hra)} />
-                  <Stat label="Special Allowance" value={inr(slip.special)} />
-                  <Stat label="Provident Fund" value="₹0 (Exempted)" />
-                  <Stat label="ESI Deduction" value="₹0 (Exempted)" />
+                  <Stat label="Annual Salary" value={inr(e.annualCTC)} />
+                  <Stat label="Monthly Basic Pay" value={inr(slip.basic)} />
+                  <Stat label="Net Take-Home" value={inr(slip.net)} />
+                  <Stat label="Allowances (HRA / Special)" value="₹0 (None)" />
+                  <Stat label="Provident Fund / ESI" value="₹0 (None)" />
+                  <Stat label="Professional Tax / TDS" value="₹0 (None)" />
                 </Grid>
               </Card>
 
