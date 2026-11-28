@@ -28,7 +28,7 @@ import {
 import { cn } from "@/lib/utils";
 
 export default function EmployeesPage() {
-  const { data, session, addEmployee, updateEmployee, deleteEmployee, setAttendanceRecords, refreshDocuments } = useStore();
+  const { data, session, addEmployee, updateEmployee, deleteEmployee, setAttendanceRecords, refreshDocuments, refreshEmployees } = useStore();
   const router = useRouter();
   const role = session?.role;
   const isSuperAdmin = role === "super_admin";
@@ -452,6 +452,7 @@ export default function EmployeesPage() {
                 })
                 .catch(() => {});
               refreshDocuments().catch(() => {});
+              refreshEmployees().catch(() => {});
             } catch (err: any) {
               console.error("[AddEmployee Error]", err);
               // Do NOT swallow the error and do NOT add a ghost employee to store!

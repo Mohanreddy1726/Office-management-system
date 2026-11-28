@@ -144,7 +144,7 @@ const EmployeeSchema = new Schema<IEmployee>(
     employmentType: { type: String },
     status: {
       type: String,
-      enum: ["Active", "Probation", "Notice", "Inactive", "Pending Verification"],
+      enum: ["Active", "Probation", "Notice", "On Notice", "Resigned", "Inactive", "Pending Verification"],
       default: "Pending Verification",
     },
     joiningDate: { type: String, required: true },
@@ -222,6 +222,10 @@ const EmployeeSchema = new Schema<IEmployee>(
   },
   { timestamps: true }
 );
+
+if (process.env.NODE_ENV !== "production" && mongoose.models.Employee) {
+  delete mongoose.models.Employee;
+}
 
 export const Employee: Model<IEmployee> =
   mongoose.models.Employee ||

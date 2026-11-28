@@ -315,10 +315,10 @@ export async function POST(req: NextRequest) {
 
         qualification: body.qualification || undefined,
         institution: body.institution || undefined,
-        graduationYear: body.graduationYear ? Number(body.graduationYear) : undefined,
+        graduationYear: body.graduationYear !== undefined && body.graduationYear !== "" ? Number(body.graduationYear) : undefined,
         grade: body.grade || undefined,
         education:
-          body.qualification || body.institution
+          body.qualification || body.institution || body.graduationYear || body.grade
             ? [
                 {
                   degree: body.qualification || "",
@@ -329,7 +329,10 @@ export async function POST(req: NextRequest) {
               ]
             : [],
 
-        experienceYears: body.experienceYears !== undefined ? Number(body.experienceYears) : undefined,
+        experienceYears:
+          body.experienceYears !== undefined && body.experienceYears !== "" && body.experienceYears !== null
+            ? Number(body.experienceYears)
+            : undefined,
         previousCompany: body.previousCompany || undefined,
         previousDesignation: body.previousDesignation || undefined,
         skills: body.skills || undefined,
@@ -555,64 +558,92 @@ export async function PATCH(req: NextRequest) {
     if (conn) {
       const updateData: any = {};
       const unsetData: any = {};
-      if (patch.designation) updateData.designation = patch.designation.trim();
+      const setOptionalString = (field: string, value: any, transform?: (s: string) => string) => {
+        if (value === undefined) return;
+        const cleaned = String(value ?? "").trim();
+        if (cleaned) updateData[field] = transform ? transform(cleaned) : cleaned;
+        else unsetData[field] = 1;
+      };
+
+      if (patch.designation !== undefined && String(patch.designation).trim()) {
+        updateData.designation = String(patch.designation).trim();
+      }
       if (patch.department) {
         updateData.department = patch.department;
         updateData.team = patch.department;
       }
       if (patch.team) updateData.team = patch.team;
-      if (patch.phone) updateData.phone = patch.phone.trim();
-      if (patch.branch) updateData.branch = patch.branch;
-      if (patch.employmentType !== undefined) updateData.employmentType = patch.employmentType;
-      if (patch.joiningDate !== undefined) updateData.joiningDate = patch.joiningDate;
-      if (patch.dob !== undefined) updateData.dateOfBirth = patch.dob;
-      if (patch.gender !== undefined) updateData.gender = patch.gender || undefined;
-      if (patch.bloodGroup !== undefined) updateData.bloodGroup = patch.bloodGroup;
-      if (patch.maritalStatus !== undefined) updateData.maritalStatus = patch.maritalStatus;
-      if (patch.personalEmail !== undefined) updateData.personalEmail = patch.personalEmail.toLowerCase().trim();
-      if (patch.address !== undefined) updateData.address = patch.address.trim();
+      if (patch.phone !== undefined && String(patch.phone).trim()) {
+        updateData.phone = String(patch.phone).trim();
+      }
+      setOptionalString("branch", patch.branch);
+      setOptionalString("employmentType", patch.employmentType);
+      setOptionalString("joiningDate", patch.joiningDate);
+      setOptionalString("dateOfBirth", patch.dob);
+      setOptionalString("gender", patch.gender);
+      setOptionalString("bloodGroup", patch.bloodGroup);
+      setOptionalString("maritalStatus", patch.maritalStatus);
+      setOptionalString("personalEmail", patch.personalEmail, (s) => s.toLowerCase());
+      setOptionalString("address", patch.address);
       if (patch.emergencyContact !== undefined) {
-        updateData.emergencyContact = { name: "", relationship: "", phone: String(patch.emergencyContact).trim() };
+        const cleanEc = String(patch.emergencyContact ?? "").trim();
+        if (cleanEc) {
+          updateData.emergencyContact = { name: "", relationship: "", phone: cleanEc };
+        } else {
+          unsetData.emergencyContact = 1;
+        }
       }
       if (patch.pan !== undefined) {
-        const cleanPan = patch.pan.trim().toUpperCase();
-        updateData.panNumber = cleanPan;
-        updateData["bankDetails.panNumber"] = cleanPan;
+        const cleanPan = String(patch.pan ?? "").trim().toUpperCase();
+        if (cleanPan) {
+          updateData.panNumber = cleanPan;
+          updateData["bankDetails.panNumber"] = cleanPan;
+        } else {
+          unsetData.panNumber = 1;
+          unsetData["bankDetails.panNumber"] = 1;
+        }
       }
       if (patch.aadhaarNumber !== undefined) {
-        const cleanAadh = patch.aadhaarNumber.replace(/\s+/g, "").trim();
-        updateData.aadhaarNumber = cleanAadh;
-        updateData["bankDetails.aadhaarNumber"] = cleanAadh;
+        const cleanAadh = String(patch.aadhaarNumber ?? "").replace(/\s+/g, "").trim();
+        if (cleanAadh) {
+          updateData.aadhaarNumber = cleanAadh;
+          updateData["bankDetails.aadhaarNumber"] = cleanAadh;
+        } else {
+          unsetData.aadhaarNumber = 1;
+          unsetData["bankDetails.aadhaarNumber"] = 1;
+        }
       }
-      if (patch.qualification !== undefined) updateData.qualification = patch.qualification.trim();
-      if (patch.institution !== undefined) updateData.institution = patch.institution.trim();
-      if (patch.graduationYear !== undefined) updateData.graduationYear = patch.graduationYear ? Number(patch.graduationYear) : undefined;
-      if (patch.grade !== undefined) updateData.grade = patch.grade.trim();
+      setOptionalString("qualification", patch.qualification);
+      setOptionalString("institution", patch.institution);
+      if (patch.graduationYear !== undefined) {
+        const yr = patch.graduationYear !== "" && patch.graduationYear !== null ? Number(patch.graduationYear) : NaN;
+        if (!Number.isNaN(yr) && yr > 0) updateData.graduationYear = yr;
+        else unsetData.graduationYear = 1;
+      }
+      setOptionalString("grade", patch.grade);
       if (patch.qualification !== undefined || patch.institution !== undefined || patch.graduationYear !== undefined || patch.grade !== undefined) {
-        updateData.education = [
-          {
-            degree: (patch.qualification ?? "").trim(),
-            institution: (patch.institution ?? "").trim(),
-            yearOfPassing: patch.graduationYear ? String(patch.graduationYear) : "",
-            percentageOrCgpa: (patch.grade ?? "").trim(),
-          },
-        ];
+        const deg = String(patch.qualification ?? "").trim();
+        const inst = String(patch.institution ?? "").trim();
+        const yr = patch.graduationYear ? String(patch.graduationYear) : "";
+        const gr = String(patch.grade ?? "").trim();
+        updateData.education = deg || inst || yr || gr
+          ? [{ degree: deg, institution: inst, yearOfPassing: yr, percentageOrCgpa: gr }]
+          : [];
       }
       if (patch.experienceYears !== undefined) {
-        updateData.experienceYears = patch.experienceYears !== "" && patch.experienceYears !== null ? Number(patch.experienceYears) : undefined;
+        const expVal = patch.experienceYears !== "" && patch.experienceYears !== null ? Number(patch.experienceYears) : NaN;
+        if (!Number.isNaN(expVal)) updateData.experienceYears = expVal;
+        else unsetData.experienceYears = 1;
       }
-      if (patch.previousCompany !== undefined) updateData.previousCompany = patch.previousCompany.trim();
-      if (patch.previousDesignation !== undefined) updateData.previousDesignation = patch.previousDesignation.trim();
-      if (patch.skills !== undefined) updateData.skills = patch.skills.trim();
+      setOptionalString("previousCompany", patch.previousCompany);
+      setOptionalString("previousDesignation", patch.previousDesignation);
+      setOptionalString("skills", patch.skills);
       if (patch.previousCompany !== undefined || patch.previousDesignation !== undefined) {
-        updateData.experience = [
-          {
-            companyName: (patch.previousCompany ?? "").trim(),
-            designation: (patch.previousDesignation ?? "").trim(),
-            fromDate: "",
-            toDate: "",
-          },
-        ];
+        const comp = String(patch.previousCompany ?? "").trim();
+        const desig = String(patch.previousDesignation ?? "").trim();
+        updateData.experience = comp || desig
+          ? [{ companyName: comp, designation: desig, fromDate: "", toDate: "" }]
+          : [];
       }
       if (patch.annualCTC !== undefined) {
         const annual = Number(patch.annualCTC) || 0;
@@ -835,15 +866,22 @@ export async function DELETE(req: NextRequest) {
           await Notification.deleteMany({ targetUserId: empId });
         }
 
-        // 8. Audit log
-        await AuditLog.create({
-          user: session?.name || "Super Admin",
-          role: "super_admin",
-          action: "Employee Deleted",
-          module: "Employees",
-          details: `Super Admin permanently deleted employee ${emp.name} (${empId}).`,
-          status: "Success",
-        });
+        // 8. Audit log (best-effort)
+        try {
+          await AuditLog.create({
+            auditId: `AUD-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            user: session?.name || "Super Admin",
+            userId: session?.userId,
+            role: "super_admin",
+            action: "Employee Deleted",
+            module: "Employees",
+            record: `${emp.name} (${empId})`,
+            outcome: "Success",
+            details: `Super Admin permanently deleted employee ${emp.name} (${empId}).`,
+          });
+        } catch (auditErr) {
+          console.warn("[Employee Delete Audit Error]", auditErr);
+        }
 
         return NextResponse.json({
           success: true,

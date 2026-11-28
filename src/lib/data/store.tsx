@@ -31,6 +31,7 @@ export interface Store {
   can: (module: string, action: string) => boolean;
   audit: (e: Omit<AuditEntry, "id" | "timestamp">) => void;
   // employees
+  refreshEmployees: () => Promise<void>;
   addEmployee: (e: Omit<Employee, "id"> & { id?: string }) => string;
   updateEmployee: (id: string, patch: Partial<Employee>, auditNote?: string) => void;
   deleteEmployee: (id: string, skipApi?: boolean) => void;
@@ -502,80 +503,89 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, [session]);
 
+  const syncEmployeesAsync = useCallback(async () => {
+    if (!session) return;
+    try {
+      const res = await fetch("/api/employees", { cache: "no-store" });
+      if (!res.ok) return;
+      const resData = await res.json();
+      if (resData?.success && Array.isArray(resData.employees)) {
+        setData((d) => {
+          const authoritativeEmployees = resData.employees.map((dbEmp: any) => {
+            const id = dbEmp.employeeId;
+            const b = dbEmp.bankDetails;
+            const edu0 = Array.isArray(dbEmp.education) && dbEmp.education.length > 0 ? dbEmp.education[0] : null;
+            const exp0 = Array.isArray(dbEmp.experience) && dbEmp.experience.length > 0 ? dbEmp.experience[0] : null;
+            const ec = dbEmp.emergencyContact;
+            const emergencyStr =
+              typeof ec === "string"
+                ? ec
+                : [ec?.name, ec?.phone].filter(Boolean).join(" • ");
+            return {
+              id,
+              name: dbEmp.name || "",
+              workEmail: dbEmp.workEmail ?? dbEmp.email ?? "",
+              personalEmail: dbEmp.personalEmail ?? "",
+              phone: dbEmp.phone ?? "",
+              dob: dbEmp.dateOfBirth ?? "",
+              gender: dbEmp.gender || undefined,
+              maritalStatus: dbEmp.maritalStatus ?? undefined,
+              address: dbEmp.address ?? "",
+              emergencyContact: emergencyStr || "",
+              joiningDate: dbEmp.joiningDate ?? "",
+              branch: (dbEmp.branch ?? "") as Branch,
+              department: dbEmp.department ?? "",
+              team: dbEmp.department ?? dbEmp.team ?? "",
+              designation: dbEmp.designation ?? "",
+              role: (dbEmp.role || undefined) as Role | undefined,
+              employmentType: dbEmp.employmentType ?? "",
+              managerId: dbEmp.reportingManagerId || null,
+              probationMonths:
+                dbEmp.probationMonths !== undefined
+                  ? dbEmp.probationMonths
+                  : dbEmp.status === "Probation"
+                    ? 3
+                    : 0,
+              status: dbEmp.status || "Pending Verification",
+              annualCTC: dbEmp.salary?.annualCtc ?? dbEmp.salary?.ctc ?? 0,
+              monthlyGross: dbEmp.salary?.monthlyGross ?? 0,
+              salaryStructureId: dbEmp.salaryStructureId || undefined,
+              qualification: dbEmp.qualification || edu0?.degree || undefined,
+              institution: dbEmp.institution || edu0?.institution || undefined,
+              graduationYear:
+                dbEmp.graduationYear !== undefined && dbEmp.graduationYear !== null
+                  ? Number(dbEmp.graduationYear)
+                  : edu0?.yearOfPassing
+                    ? Number(edu0.yearOfPassing)
+                    : undefined,
+              grade: dbEmp.grade || edu0?.percentageOrCgpa || undefined,
+              experienceYears:
+                dbEmp.experienceYears !== undefined && dbEmp.experienceYears !== null
+                  ? Number(dbEmp.experienceYears)
+                  : undefined,
+              previousCompany: dbEmp.previousCompany || exp0?.companyName || undefined,
+              previousDesignation: dbEmp.previousDesignation || exp0?.designation || undefined,
+              skills: dbEmp.skills || undefined,
+              aadhaarNumber: dbEmp.aadhaarNumber ?? undefined,
+              aadharLast4: dbEmp.aadhaarNumber ? String(dbEmp.aadhaarNumber).slice(-4) : undefined,
+              pan: dbEmp.panNumber || b?.panNumber || undefined,
+              bloodGroup: dbEmp.bloodGroup ?? undefined,
+              bankName: b?.bankName || dbEmp.bankName || undefined,
+              accountNumber: b?.accountNumber || dbEmp.accountNumber || undefined,
+              ifscCode: b?.ifscCode || dbEmp.ifscCode || undefined,
+              bankLast4: b?.bankLast4 || (b?.accountNumber ? b.accountNumber.slice(-4) : undefined) || dbEmp.bankLast4 || undefined,
+              paymentMethod: dbEmp.paymentMethod || undefined,
+            };
+          });
+          return { ...d, employees: authoritativeEmployees };
+        });
+      }
+    } catch {}
+  }, [session]);
+
   useEffect(() => {
     const syncEmployees = () => {
-      fetch("/api/employees")
-        .then((res) => (res.ok ? res.json() : null))
-        .then((resData) => {
-          if (resData?.success && Array.isArray(resData.employees)) {
-            setData((d) => {
-              const existingMap = new Map(d.employees.map((e) => [e.id, e]));
-              const authoritativeEmployees = resData.employees.map((dbEmp: any) => {
-                const id = dbEmp.employeeId;
-                const b = dbEmp.bankDetails;
-                const edu0 = Array.isArray(dbEmp.education) && dbEmp.education.length > 0 ? dbEmp.education[0] : null;
-                const exp0 = Array.isArray(dbEmp.experience) && dbEmp.experience.length > 0 ? dbEmp.experience[0] : null;
-                return {
-                  id,
-                  name: dbEmp.name || "",
-                  workEmail: dbEmp.workEmail ?? dbEmp.email ?? "",
-                  personalEmail: dbEmp.personalEmail ?? "",
-                  phone: dbEmp.phone ?? "",
-                  dob: dbEmp.dateOfBirth ?? "",
-                  gender: dbEmp.gender || undefined,
-                  maritalStatus: dbEmp.maritalStatus ?? undefined,
-                  address: dbEmp.address ?? "",
-                  emergencyContact:
-                    (typeof dbEmp.emergencyContact === "string"
-                      ? dbEmp.emergencyContact
-                      : dbEmp.emergencyContact?.phone) || "",
-                  joiningDate: dbEmp.joiningDate ?? "",
-                  branch: (dbEmp.branch ?? "") as Branch,
-                  department: dbEmp.department ?? "",
-                  team: dbEmp.department ?? dbEmp.team ?? "",
-                  designation: dbEmp.designation ?? "",
-                  role: (dbEmp.role || undefined) as Role | undefined,
-                  employmentType: dbEmp.employmentType ?? "",
-                  managerId: dbEmp.reportingManagerId || null,
-                  probationMonths:
-                    dbEmp.probationMonths !== undefined
-                      ? dbEmp.probationMonths
-                      : dbEmp.status === "Probation"
-                        ? 3
-                        : 0,
-                  status: dbEmp.status || "Pending Verification",
-                  annualCTC: dbEmp.salary?.annualCtc ?? dbEmp.salary?.ctc ?? 0,
-                  monthlyGross: dbEmp.salary?.monthlyGross ?? 0,
-                  salaryStructureId: dbEmp.salaryStructureId || undefined,
-                  qualification: dbEmp.qualification || edu0?.degree || undefined,
-                  institution: dbEmp.institution || edu0?.institution || undefined,
-                  graduationYear:
-                    dbEmp.graduationYear !== undefined
-                      ? dbEmp.graduationYear
-                      : edu0?.yearOfPassing
-                        ? Number(edu0.yearOfPassing)
-                        : undefined,
-                  grade: dbEmp.grade || edu0?.percentageOrCgpa || undefined,
-                  experienceYears: dbEmp.experienceYears !== undefined ? dbEmp.experienceYears : undefined,
-                  previousCompany: dbEmp.previousCompany || exp0?.companyName || undefined,
-                  previousDesignation: dbEmp.previousDesignation || exp0?.designation || undefined,
-                  skills: dbEmp.skills || undefined,
-                  aadhaarNumber: dbEmp.aadhaarNumber ?? undefined,
-                  aadharLast4: dbEmp.aadhaarNumber ? String(dbEmp.aadhaarNumber).slice(-4) : undefined,
-                  pan: dbEmp.panNumber || b?.panNumber || undefined,
-                  bloodGroup: dbEmp.bloodGroup ?? undefined,
-                  bankName: b?.bankName || dbEmp.bankName || undefined,
-                  accountNumber: b?.accountNumber || dbEmp.accountNumber || undefined,
-                  ifscCode: b?.ifscCode || dbEmp.ifscCode || undefined,
-                  bankLast4: b?.bankLast4 || (b?.accountNumber ? b.accountNumber.slice(-4) : undefined) || dbEmp.bankLast4 || undefined,
-                  paymentMethod: dbEmp.paymentMethod || undefined,
-                };
-              });
-              return { ...d, employees: authoritativeEmployees };
-            });
-          }
-        })
-        .catch(() => {});
+      syncEmployeesAsync();
     };
 
     const syncAttendance = () => {
@@ -693,7 +703,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [session, fetchLeavesAsync, syncNotificationsAsync, syncDocumentsAsync, syncAssetsAsync, syncHolidaysAsync]);
+  }, [session, syncEmployeesAsync, fetchLeavesAsync, syncNotificationsAsync, syncDocumentsAsync, syncAssetsAsync, syncHolidaysAsync]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -721,6 +731,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     const s: Store = {
       data, session, prefs, hydrated, attendanceSynced, pendingDocumentsCount,
+      refreshEmployees: syncEmployeesAsync,
       refreshDocuments: syncDocumentsAsync,
       refreshAssets: syncAssetsAsync,
       refreshHolidays: syncHolidaysAsync,
@@ -1693,7 +1704,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
     };
     return s;
-  }, [data, session, prefs, hydrated, attendanceSynced, pendingDocumentsCount, syncDocumentsAsync, syncAssetsAsync, syncHolidaysAsync]);
+  }, [data, session, prefs, hydrated, attendanceSynced, pendingDocumentsCount, syncEmployeesAsync, syncDocumentsAsync, syncAssetsAsync, syncHolidaysAsync]);
 
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>;
 }

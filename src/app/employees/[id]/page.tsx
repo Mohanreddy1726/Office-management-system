@@ -38,7 +38,7 @@ export default function EmployeeDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = params?.id as string;
-  const { data, session, updateEmployee, setAttendanceRecords } = useStore();
+  const { data, session, updateEmployee, setAttendanceRecords, refreshEmployees } = useStore();
   const { isAdmin, isManager, isEmployee, uid, inScope } = useScope();
   const isSuperAdmin = session?.role === "super_admin";
   const [tab, setTab] = useState("overview");
@@ -554,15 +554,27 @@ export default function EmployeeDetailPage() {
           <EditDialog
             e={e}
             onClose={() => setEdit(false)}
-            onSave={(patch) => {
-              updateEmployee(e.id, patch, "Profile edited");
-              fetch("/api/employees", {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ employeeId: e.id, patch }),
-              }).catch(() => {});
-              setEdit(false);
-              toast.success("Profile updated");
+            onSave={async (patch) => {
+              try {
+                const res = await fetch("/api/employees", {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ employeeId: e.id, patch }),
+                });
+                const resData = await res.json().catch(() => null);
+                if (!res.ok || !resData?.success) {
+                  toast.error(resData?.error || "Failed to save employee profile to database");
+                  return false;
+                }
+                updateEmployee(e.id, patch, "Profile edited");
+                await refreshEmployees();
+                setEdit(false);
+                toast.success("Profile updated");
+                return true;
+              } catch (err: any) {
+                toast.error(err?.message || "Network error saving profile");
+                return false;
+              }
             }}
           />
         )}
@@ -619,9 +631,10 @@ function EditDialog({
 }: {
   e: Employee;
   onClose: () => void;
-  onSave: (p: Partial<Employee>) => void;
+  onSave: (p: Partial<Employee>) => Promise<boolean>;
 }) {
   const { data } = useStore();
+  const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<"personal" | "job" | "edu" | "bank">("personal");
   const [dob, setDob] = useState(e.dob || "");
   const [gender, setGender] = useState(e.gender || "");
@@ -819,52 +832,57 @@ function EditDialog({
         )}
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
           <Button
-            disabled={designation.length < 2}
-            onClick={() => {
-              const annualNum = Number(annualCTC) || 0;
-              onSave({
-                dob,
-                gender: gender || undefined,
-                bloodGroup: bloodGroup || undefined,
-                maritalStatus: (maritalStatus as any) || undefined,
-                personalEmail: personalEmail.trim(),
-                emergencyContact: emergencyContact.trim(),
-                address: address.trim(),
-                pan: pan.trim().toUpperCase() || undefined,
-                aadhaarNumber: aadhaarNumber.trim() || undefined,
-                aadharLast4: aadhaarNumber ? aadhaarNumber.slice(-4) : e.aadharLast4,
-                designation,
-                department,
-                branch: (branch || e.branch) as any,
-                employmentType: employmentType as any,
-                joiningDate,
-                phone,
-                team: department,
-                managerId: managerId || null,
-                status: status as EmploymentStatus,
-                qualification: qualification.trim() || undefined,
-                institution: institution.trim() || undefined,
-                graduationYear: graduationYear ? Number(graduationYear) : undefined,
-                grade: grade.trim() || undefined,
-                experienceYears: experienceYears !== "" ? Number(experienceYears) : undefined,
-                previousCompany: previousCompany.trim() || undefined,
-                previousDesignation: previousDesignation.trim() || undefined,
-                skills: skills.trim() || undefined,
-                annualCTC: annualNum,
-                monthlyGross: Math.round(annualNum / 12),
-                bankName: bankName.trim(),
-                accountNumber: accountNumber.trim(),
-                bankLast4: accountNumber ? accountNumber.trim().slice(-4) : e.bankLast4,
-                ifscCode: ifscCode.trim().toUpperCase(),
-                paymentMethod: paymentMethod || undefined,
-              });
+            disabled={designation.length < 2 || saving}
+            onClick={async () => {
+              setSaving(true);
+              try {
+                const annualNum = Number(annualCTC) || 0;
+                await onSave({
+                  dob,
+                  gender: gender || "",
+                  bloodGroup: bloodGroup || "",
+                  maritalStatus: (maritalStatus || "") as any,
+                  personalEmail: personalEmail.trim(),
+                  emergencyContact: emergencyContact.trim(),
+                  address: address.trim(),
+                  pan: pan.trim().toUpperCase(),
+                  aadhaarNumber: aadhaarNumber.trim(),
+                  aadharLast4: aadhaarNumber ? aadhaarNumber.slice(-4) : undefined,
+                  designation,
+                  department,
+                  branch: (branch || e.branch) as any,
+                  employmentType: employmentType as any,
+                  joiningDate,
+                  phone,
+                  team: department,
+                  managerId: managerId || null,
+                  status: status as EmploymentStatus,
+                  qualification: qualification.trim(),
+                  institution: institution.trim(),
+                  graduationYear: graduationYear ? Number(graduationYear) : undefined,
+                  grade: grade.trim(),
+                  experienceYears: experienceYears !== "" ? Number(experienceYears) : undefined,
+                  previousCompany: previousCompany.trim(),
+                  previousDesignation: previousDesignation.trim(),
+                  skills: skills.trim(),
+                  annualCTC: annualNum,
+                  monthlyGross: Math.round(annualNum / 12),
+                  bankName: bankName.trim(),
+                  accountNumber: accountNumber.trim(),
+                  bankLast4: accountNumber ? accountNumber.trim().slice(-4) : e.bankLast4,
+                  ifscCode: ifscCode.trim().toUpperCase(),
+                  paymentMethod: paymentMethod || "",
+                });
+              } finally {
+                setSaving(false);
+              }
             }}
           >
-            Save changes
+            {saving ? "Saving..." : "Save changes"}
           </Button>
         </DialogFooter>
       </DialogContent>
