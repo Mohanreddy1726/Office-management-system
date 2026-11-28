@@ -307,15 +307,9 @@ export default function PayrollPage() {
               />
               <KpiCard
                 label="Net In-Hand Salary"
-                value={waitForAttendance ? "Calculating..." : inr(selfItem?.breakdown.net ?? self.monthlyGross)}
+                value={inr((self?.monthlyGross ?? 0) + (selfItem?.totalIncentives ?? 0) - (selfItem?.totalMiscDed ?? 0))}
                 icon={<IndianRupee className="h-4 w-4 text-emerald-600" />}
-                hint={
-                  waitForAttendance
-                    ? "Syncing monthly attendance..."
-                    : selfItem && selfItem.unpaidDays > 0
-                      ? `After ${selfItem.unpaidDays}d policy LOP (-${inr(selfItem.breakdown.lop)})`
-                      : "100% Basic · Zero Deductions"
-                }
+                hint="100% Basic · Zero Deductions"
               />
               <KpiCard
                 label="Salary Account"
@@ -357,13 +351,13 @@ export default function PayrollPage() {
               <div>
                 <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Total Deductions (-)</span>
                 <span className="font-bold text-rose-600 text-sm">
-                  {waitForAttendance ? "—" : inr((selfItem?.totalMiscDed ?? 0) + (selfItem?.breakdown.lop ?? 0))}
+                  {inr(selfItem?.totalMiscDed ?? 0)}
                 </span>
               </div>
               <div>
                 <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Net Bank Transfer</span>
                 <span className="font-bold text-emerald-600 text-base">
-                  {waitForAttendance ? "Calculating..." : inr(selfItem?.breakdown.net ?? 0)}
+                  {inr((self?.monthlyGross ?? 0) + (selfItem?.totalIncentives ?? 0) - (selfItem?.totalMiscDed ?? 0))}
                 </span>
               </div>
             </div>
@@ -2057,7 +2051,14 @@ function PayslipDialog({
   if (!slip) return null;
 
   const emp = slip.e;
-  const p = payrollItem?.breakdown ?? payslipFor(emp, data.salaryStructures);
+  // Net salary = gross + incentives - miscDeductions only (no LOP, no statutory deductions per company policy)
+  const rawBreakdown = payrollItem?.breakdown ?? payslipFor(emp, data.salaryStructures);
+  const p = {
+    ...rawBreakdown,
+    lop: 0,
+    totalDeductions: rawBreakdown.miscDeductions,
+    net: rawBreakdown.gross - rawBreakdown.miscDeductions,
+  };
   const bank = payrollItem?.bank ?? getBankDetails(emp);
   const periodDate = new Date(slip.period + "-01");
   const periodMonthYear = periodDate.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
