@@ -3,6 +3,8 @@ export type OnboardingLetterType = "loi" | "offer" | "appointment";
 export interface OnboardingLetterPayload {
   employeeId: string;
   name: string;
+  gender?: string;
+  maritalStatus?: string;
   designation: string;
   department: string;
   branch: string;
@@ -18,6 +20,14 @@ export interface OnboardingLetterPayload {
   allowances: number; // TA & DA / HRA + Special Allowance
   netMonthly: number;
   issuedBy?: string;
+}
+
+export function getSalutationTitle(gender?: string, maritalStatus?: string): string {
+  const g = (gender || "").trim().toLowerCase();
+  const m = (maritalStatus || "").trim().toLowerCase();
+  if (g === "male") return "Mr.";
+  if (g === "female") return m === "married" ? "Mrs." : "Ms.";
+  return "Mr./Ms.";
 }
 
 export interface OnboardingLetterApproval {
@@ -172,6 +182,8 @@ export function buildLetterPayloadFromEmployee(emp: any, issuedBy = "HR / Super 
   return {
     employeeId: emp.employeeId || emp.id || "",
     name: emp.name || "Employee",
+    gender: emp.gender || "",
+    maritalStatus: emp.maritalStatus || "",
     designation: emp.designation || "Associate",
     department: emp.department || "Operations",
     branch,
@@ -310,6 +322,7 @@ function renderLetterOfIntentHtml(
   approval: OnboardingLetterApproval
 ): string {
   const issueDate = escHtml(formatDateDDMMYYYY(payload.issueDate));
+  const salutation = escHtml(getSalutationTitle(payload.gender, payload.maritalStatus));
   const empName = escHtml(payload.name);
   const designation = escHtml(payload.designation);
   const department = escHtml(payload.department);
@@ -401,7 +414,7 @@ body{font-family:'Poppins',sans-serif;background:#e2e8f0;margin:0;padding:20px 0
   </div>
   <div class="content">
     <div class="top-row">
-      <p>Dear <span class="highlight">${empName}</span>,</p>
+      <p>Dear <span class="highlight">${salutation} ${empName}</span>,</p>
       <p>Date: <span class="highlight">${issueDate}</span></p>
     </div>
     <p>
@@ -533,6 +546,7 @@ function renderOfferLetterHtml(
 ): string {
   const issueDate = escHtml(formatDateDDMMYYYY(payload.issueDate));
   const joiningDate = escHtml(formatDateDDMMYYYY(payload.joiningDate));
+  const salutation = escHtml(getSalutationTitle(payload.gender, payload.maritalStatus));
   const empName = escHtml(payload.name);
   const designation = escHtml(payload.designation);
   const department = escHtml(payload.department);
@@ -612,7 +626,7 @@ body{font-family:'Poppins',sans-serif;background:#e2e8f0;margin:0;padding:20px 0
   </div>
   <div class="content">
     <p>Date: <span class="highlight">${issueDate}</span></p>
-    <p>Dear <span class="highlight">Mr./Ms. ${empName}</span>,</p>
+    <p>Dear <span class="highlight">${salutation} ${empName}</span>,</p>
     <p>
       We are pleased to offer you the position of
       <span class="highlight">${designation}</span>
@@ -653,6 +667,7 @@ function renderAppointmentLetterHtml(
   const issueDate = escHtml(formatDateDDMMYYYY(payload.issueDate));
   const joiningDate = escHtml(formatDateDDMMYYYY(payload.joiningDate));
   const dob = escHtml(formatDateDDMMYYYY(payload.dateOfBirth));
+  const salutation = escHtml(getSalutationTitle(payload.gender, payload.maritalStatus));
   const empName = escHtml(payload.name);
   const designation = escHtml(payload.designation);
   const department = escHtml(payload.department);
@@ -762,7 +777,7 @@ body{font-family:'Poppins',sans-serif;background:#e2e8f0;margin:0;padding:20px 0
     </div>
   </div>
   <div class="content">
-    <p>Dear <span class="highlight">Mr./Ms. ${empName}</span>,</p>
+    <p>Dear <span class="highlight">${salutation} ${empName}</span>,</p>
     <p>
       We are pleased to appoint you as
       <span class="highlight">${designation}</span>

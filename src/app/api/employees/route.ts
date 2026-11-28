@@ -98,9 +98,28 @@ export async function GET(req: NextRequest) {
         }
       }
 
+      // Attach system role from User collection so frontend knows Managers & HR Admins
+      const userDocs = await User.find({}, "employeeId email role").lean();
+      const roleByEmpId = new Map<string, string>();
+      const roleByEmail = new Map<string, string>();
+      for (const u of userDocs as any[]) {
+        if (u.employeeId && u.role) roleByEmpId.set(String(u.employeeId), String(u.role));
+        if (u.email && u.role) roleByEmail.set(String(u.email).toLowerCase().trim(), String(u.role));
+      }
+
+      const enriched = employees.map((e: any) => {
+        const empEmail = (e.workEmail || e.email || e.personalEmail || "").toLowerCase().trim();
+        const resolvedRole =
+          (e.employeeId && roleByEmpId.get(e.employeeId)) ||
+          (empEmail && roleByEmail.get(empEmail)) ||
+          e.role ||
+          "employee";
+        return { ...e, role: resolvedRole };
+      });
+
       if (session?.role === "employee") {
         const myEmpId = session.employeeId || session.userId;
-        const sanitized = employees.map((e: any) => {
+        const sanitized = enriched.map((e: any) => {
           if (e.employeeId === myEmpId) return e;
           const obj = { ...e };
           delete obj.salary;
@@ -113,7 +132,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ success: true, employees: sanitized });
       }
 
-      return NextResponse.json({ success: true, employees });
+      return NextResponse.json({ success: true, employees: enriched });
     } else {
       const store = getMockStore();
       let emps = store.employees;
@@ -544,6 +563,10 @@ export async function PATCH(req: NextRequest) {
       if (patch.team) updateData.team = patch.team;
       if (patch.phone) updateData.phone = patch.phone.trim();
       if (patch.branch) updateData.branch = patch.branch;
+      if (patch.managerId !== undefined) {
+        if (patch.managerId) updateData.reportingManagerId = patch.managerId;
+        else unsetData.reportingManagerId = 1;
+      }
 
       if (patch.status) {
         updateData.status = patch.status;

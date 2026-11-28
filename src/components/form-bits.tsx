@@ -25,7 +25,11 @@ export function Sel({ value, onChange, options, placeholder, className }: {
 
 export function useNames() {
   const { data } = useStore();
-  return (id: string | null | undefined) => (id ? data.employees.find((e) => e.id === id)?.name ?? id : "—");
+  return (id: string | null | undefined) => {
+    if (!id) return "—";
+    if (id === "ADM-001") return "Super Admin";
+    return data.employees.find((e) => e.id === id)?.name ?? id;
+  };
 }
 
 export function Person({ id }: { id: string | null | undefined }) {

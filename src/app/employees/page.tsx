@@ -1389,18 +1389,24 @@ function AddEmployeeDialog({
                 </Select>
               </Field>
 
-              <Field label="Reporting Manager / Team Lead">
+              <Field label="Reporting Manager / HR / Lead">
                 <select
                   value={managerId}
                   onChange={(e) => setManagerId(e.target.value)}
                   className="w-full h-9 rounded-md border border-input bg-background px-3 py-1.5 text-xs text-foreground"
                 >
-                  <option value="">Select reporting manager (or None)</option>
+                  <option value="">Select reporting manager or HR (or None)</option>
+                  <option value="ADM-001">Super Admin (Primary Administrator)</option>
                   {data.employees
-                    .filter((emp) => emp.designation.includes("Lead") || emp.designation.includes("Manager") || emp.designation.includes("Director"))
+                    .filter((emp) => {
+                      const isLeadershipRole = emp.role === "manager" || emp.role === "hr_admin" || emp.role === "super_admin";
+                      const titleOrDept = `${emp.designation || ""} ${emp.department || ""}`;
+                      const hasLeadershipTitle = /\b(lead|manager|director|head|hr|human resources|admin|chief|vp|supervisor)\b/i.test(titleOrDept);
+                      return isLeadershipRole || hasLeadershipTitle;
+                    })
                     .map((m) => (
                       <option key={m.id} value={m.id}>
-                        {m.name} ({m.designation} • {m.department})
+                        {m.name} ({m.designation || "Staff"} • {m.role === "hr_admin" ? "HR Admin" : m.role === "manager" ? "Manager" : m.department || "Leadership"})
                       </option>
                     ))}
                 </select>

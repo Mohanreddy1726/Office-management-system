@@ -533,6 +533,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                   department: dbEmp.department ?? "",
                   team: dbEmp.department ?? dbEmp.team ?? "",
                   designation: dbEmp.designation ?? "",
+                  role: (dbEmp.role || undefined) as Role | undefined,
                   employmentType: dbEmp.employmentType ?? "",
                   managerId: dbEmp.reportingManagerId || null,
                   probationMonths:

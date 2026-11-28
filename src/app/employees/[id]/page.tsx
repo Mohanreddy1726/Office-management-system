@@ -620,13 +620,23 @@ function EditDialog({
   onClose: () => void;
   onSave: (p: Partial<Employee>) => void;
 }) {
+  const { data } = useStore();
   const [designation, setDesignation] = useState(e.designation);
   const [department, setDepartment] = useState(e.department);
   const [phone, setPhone] = useState(e.phone);
   const [status, setStatus] = useState<string>(e.status);
+  const [managerId, setManagerId] = useState<string>(e.managerId || "");
   const [bankName, setBankName] = useState(e.bankName || "");
   const [accountNumber, setAccountNumber] = useState(e.accountNumber || "");
   const [ifscCode, setIfscCode] = useState(e.ifscCode || "");
+
+  const managerOptions = data.employees.filter((emp) => {
+    if (emp.id === e.id) return false;
+    const isLeadershipRole = emp.role === "manager" || emp.role === "hr_admin" || emp.role === "super_admin";
+    const titleOrDept = `${emp.designation || ""} ${emp.department || ""}`;
+    const hasLeadershipTitle = /\b(lead|manager|director|head|hr|human resources|admin|chief|vp|supervisor)\b/i.test(titleOrDept);
+    return isLeadershipRole || hasLeadershipTitle;
+  });
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
@@ -681,6 +691,23 @@ function EditDialog({
             />
           </Field>
           <div className="col-span-2">
+            <Field label="Reporting Manager / HR / Lead">
+              <select
+                value={managerId}
+                onChange={(x) => setManagerId(x.target.value)}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 py-1.5 text-xs text-foreground"
+              >
+                <option value="">None / Unassigned</option>
+                <option value="ADM-001">Super Admin (Primary Administrator)</option>
+                {managerOptions.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} ({m.designation || "Staff"} • {m.role === "hr_admin" ? "HR Admin" : m.role === "manager" ? "Manager" : m.department || "Leadership"})
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <div className="col-span-2">
             <Field label="Bank IFSC Code">
               <Input
                 value={ifscCode}
@@ -703,6 +730,7 @@ function EditDialog({
                 department,
                 phone,
                 team: department,
+                managerId: managerId || null,
                 status: status as EmploymentStatus,
                 bankName: bankName.trim(),
                 accountNumber: accountNumber.trim(),

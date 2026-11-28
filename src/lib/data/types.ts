@@ -29,6 +29,7 @@ export interface Employee {
   department: string;
   team: string;
   designation: string;
+  role?: Role;
   employmentType: "Full-time" | "Part-time" | "Contract" | "Intern";
   managerId: string | null;
   probationMonths: number;
