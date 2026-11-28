@@ -8,6 +8,7 @@ import { LeaveRequest, LeaveBalance } from "@/models/Leave";
 import { Attendance } from "@/models/Attendance";
 import { Asset } from "@/models/Asset";
 import { reconcileEmployeePunches } from "@/lib/biometric-sync";
+import { ensureOnboardingLettersForEmployee } from "@/lib/onboarding-letters";
 import { getCurrentUser } from "@/lib/auth";
 import { getMockStore } from "@/lib/mock-db";
 import { sendVerificationEmail, getAppUrl } from "@/lib/email";
@@ -343,6 +344,20 @@ export async function POST(req: NextRequest) {
         details: `Aadhaar: ${cleanAadhaar ? cleanAadhaar.slice(0, 4) + " **** " + cleanAadhaar.slice(-4) : "N/A"} | Role: ${userRole} | Login: ${loginEmail} | Verification Dispatched: ${shouldSendVerification ? "Yes (gvkdigital01@gmail.com)" : "No"}`,
       });
 
+      // Auto-generate onboarding letters (Letter of Intent, Offer Letter, Appointment Letter)
+      let generatedLettersCount = 0;
+      try {
+        const lettersRes = await ensureOnboardingLettersForEmployee(
+          employee,
+          session.name || "HR / Super Admin",
+          session.userId,
+          session.role
+        );
+        generatedLettersCount = lettersRes.created;
+      } catch (docErr) {
+        console.warn("[Onboarding Letters Generation Error]", docErr);
+      }
+
       // Automatic Biometric Mapping & Immediate Attendance Pull
       let reconciledAttendanceCount = 0;
       if (body.biometricId) {
@@ -399,6 +414,7 @@ export async function POST(req: NextRequest) {
         emailSent: emailResult?.success ?? false,
         emailError: emailResult?.error,
         reconciledAttendanceCount,
+        generatedLettersCount,
       });
     } else {
       // In-memory fallback

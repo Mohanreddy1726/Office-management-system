@@ -28,7 +28,7 @@ import {
 import { cn } from "@/lib/utils";
 
 export default function EmployeesPage() {
-  const { data, session, addEmployee, updateEmployee, deleteEmployee, setAttendanceRecords } = useStore();
+  const { data, session, addEmployee, updateEmployee, deleteEmployee, setAttendanceRecords, refreshDocuments } = useStore();
   const router = useRouter();
   const role = session?.role;
   const isSuperAdmin = role === "super_admin";
@@ -425,6 +425,8 @@ export default function EmployeesPage() {
               if (data.emailSent) {
                 toast.success(
                   `Employee ${newEmp.name} created! Verification link sent to ${newEmp.personalEmail || newEmp.workEmail}${
+                    data.generatedLettersCount ? ` · ${data.generatedLettersCount} onboarding letters attached` : ""
+                  }${
                     data.reconciledAttendanceCount ? ` (${data.reconciledAttendanceCount} attendance records loaded)` : ""
                   }`
                 );
@@ -433,12 +435,14 @@ export default function EmployeesPage() {
               } else {
                 toast.success(
                   `Employee ${newEmp.name} (${newId}) added successfully!${
+                    data.generatedLettersCount ? ` ${data.generatedLettersCount} onboarding letters attached.` : ""
+                  }${
                     data.reconciledAttendanceCount ? ` (${data.reconciledAttendanceCount} biometric attendance records loaded)` : ""
                   }`
                 );
               }
 
-              // Refresh attendance records to immediately reflect newly reconciled records
+              // Refresh attendance & auto-generated onboarding letters
               fetch("/api/attendance?all=true")
                 .then((res) => (res.ok ? res.json() : null))
                 .then((resData) => {
@@ -447,6 +451,7 @@ export default function EmployeesPage() {
                   }
                 })
                 .catch(() => {});
+              refreshDocuments().catch(() => {});
             } catch (err: any) {
               console.error("[AddEmployee Error]", err);
               // Do NOT swallow the error and do NOT add a ghost employee to store!

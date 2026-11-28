@@ -35,6 +35,9 @@ import { toast } from "sonner";
 import { AppShell } from "@/components/shell";
 import { useStore } from "@/lib/data/store";
 import type { DocumentRecord } from "@/lib/data/types";
+import { decodeHtmlDataUrl, downloadHtmlLetterAsPdf } from "@/lib/letter-pdf";
+import { ONBOARDING_LETTER_META, type OnboardingLetterType } from "@/lib/letter-templates";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   PageHeader,
   KpiCard,
@@ -188,6 +191,12 @@ function dataUrlToBlob(dataUrl: string): Blob | null {
   }
 }
 
+function isHtmlDocument(fileUrl?: string, fileType?: string): boolean {
+  if (fileType?.includes("text/html")) return true;
+  if (fileUrl?.startsWith("data:text/html")) return true;
+  return false;
+}
+
 function extensionFromType(fileUrl?: string, fileType?: string): string {
   const t = fileType || fileUrl?.match(/^data:([^;]+)/i)?.[1] || "";
   if (t.includes("pdf")) return ".pdf";
@@ -200,9 +209,35 @@ function extensionFromType(fileUrl?: string, fileType?: string): string {
   return "";
 }
 
-function downloadDocumentFile(doc: Pick<DocumentRecord, "name" | "fileUrl" | "fileType">) {
+async function downloadDocumentFile(
+  doc: Pick<DocumentRecord, "name" | "fileUrl" | "fileType" | "letterType" | "status">
+) {
   if (!doc.fileUrl) {
     toast.error("No file binary attached to this record.");
+    return;
+  }
+
+  if (isHtmlDocument(doc.fileUrl, doc.fileType)) {
+    const html = decodeHtmlDataUrl(doc.fileUrl);
+    if (!html) {
+      toast.error("Unable to read letter HTML content for PDF generation.");
+      return;
+    }
+    const toastId = `pdf-${Date.now()}`;
+    toast.loading("Preparing A4 PDF...", { id: toastId });
+    try {
+      const baseName = doc.letterType
+        ? ONBOARDING_LETTER_META[doc.letterType].pdfFilename
+        : `${doc.name.replace(/[\\/:*?"<>|]+/g, "_").trim() || "document"}.pdf`;
+      const finalName =
+        doc.status === "Verified" && doc.letterType
+          ? baseName.replace(/\.pdf$/i, "_Approved.pdf")
+          : baseName;
+      await downloadHtmlLetterAsPdf(html, finalName);
+      toast.success(`Downloaded ${finalName}`, { id: toastId });
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to generate PDF.", { id: toastId });
+    }
     return;
   }
 
@@ -236,6 +271,16 @@ function downloadDocumentFile(doc: Pick<DocumentRecord, "name" | "fileUrl" | "fi
 
 function openDocumentInNewTab(fileUrl?: string) {
   if (!fileUrl) return;
+  if (fileUrl.startsWith("data:text/html")) {
+    const html = decodeHtmlDataUrl(fileUrl);
+    if (html) {
+      const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, "_blank", "noopener,noreferrer");
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+      return;
+    }
+  }
   if (fileUrl.startsWith("data:")) {
     const blob = dataUrlToBlob(fileUrl);
     if (blob) {
@@ -410,6 +455,77 @@ function PdfCanvasPreview({
   );
 }
 
+function HtmlLetterFrame({
+  html,
+  fileName,
+  maxHeightClass = "max-h-[420px]",
+}: {
+  html: string;
+  fileName: string;
+  maxHeightClass?: string;
+}) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [scale, setScale] = useState(0.65);
+  const [docHeight, setDocHeight] = useState(1180);
+
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    const updateScale = () => {
+      const available = Math.max(260, el.clientWidth - 16);
+      setScale(Math.min(1, available / 820));
+    };
+    updateScale();
+    const obs = new ResizeObserver(updateScale);
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  const handleLoad = () => {
+    const doc = iframeRef.current?.contentDocument;
+    if (!doc) return;
+    const measure = () => {
+      const h = Math.max(doc.body?.scrollHeight || 0, doc.documentElement?.scrollHeight || 0, 1140);
+      setDocHeight(h + 24);
+    };
+    measure();
+    setTimeout(measure, 350);
+  };
+
+  return (
+    <div
+      ref={wrapperRef}
+      className={cn(
+        "overflow-y-auto overflow-x-hidden rounded-b-2xl bg-slate-200/80 p-2 dark:bg-slate-900/70",
+        maxHeightClass
+      )}
+    >
+      <div
+        className="mx-auto"
+        style={{
+          width: `${Math.round(820 * scale)}px`,
+          height: `${Math.round(docHeight * scale)}px`,
+        }}
+      >
+        <iframe
+          ref={iframeRef}
+          srcDoc={html}
+          title={fileName}
+          onLoad={handleLoad}
+          style={{
+            width: "820px",
+            height: `${docHeight}px`,
+            transform: `scale(${scale})`,
+            transformOrigin: "top left",
+            border: "0",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function DocumentPreviewFrame({
   fileUrl,
   fileType,
@@ -424,6 +540,8 @@ function DocumentPreviewFrame({
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const isImg = isImageDocument(fileUrl, fileType, fileName);
   const isPdf = isPdfDocument(fileUrl, fileType, fileName);
+  const isHtml = isHtmlDocument(fileUrl, fileType);
+  const decodedHtml = useMemo(() => (isHtml ? decodeHtmlDataUrl(fileUrl) : null), [isHtml, fileUrl]);
 
   useEffect(() => {
     if (!fileUrl || !isPdf) {
@@ -514,6 +632,28 @@ function DocumentPreviewFrame({
     );
   }
 
+  if (isHtml && decodedHtml) {
+    return (
+      <div className="overflow-hidden rounded-2xl border border-border bg-muted/20 shadow-xs">
+        <div className="flex items-center justify-between border-b border-border bg-muted/40 px-3.5 py-2">
+          <span className="truncate text-[11px] font-medium text-muted-foreground">
+            Official Letter Preview · {fileName}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-6 gap-1 px-2 text-[11px]"
+            onClick={() => openDocumentInNewTab(fileUrl)}
+          >
+            <ExternalLink className="h-3 w-3" /> Open Tab
+          </Button>
+        </div>
+        <HtmlLetterFrame html={decodedHtml} fileName={fileName} maxHeightClass={heightClass} />
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center justify-between rounded-2xl border border-border bg-muted/25 px-4 py-4">
       <div className="flex min-w-0 items-center gap-3">
@@ -545,7 +685,7 @@ function DocumentsPageInner() {
   const openParam = searchParams.get("open");
   const tabParam = searchParams.get("tab");
 
-  const { data, pendingDocumentsCount, addDocument, decideDocument, refreshDocuments } = useStore();
+  const { data, session, pendingDocumentsCount, addDocument, decideDocument, acceptOnboardingLetter, refreshDocuments } = useStore();
   const { isAdmin, isEmployee, uid, inScope } = useScope();
   const nameOf = useNames();
 
@@ -559,6 +699,7 @@ function DocumentsPageInner() {
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
   const [uploadOpen, setUploadOpen] = useState(openParam === "upload");
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+  const [reviewDocId, setReviewDocId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
@@ -590,9 +731,24 @@ function DocumentsPageInner() {
     () => employeeDocuments.filter((d) => d.status === "Verified"),
     [employeeDocuments]
   );
-  const pendingDocs = useMemo(
+  const awaitingAcceptanceDocs = useMemo(
+    () =>
+      employeeDocuments
+        .filter((d) => d.status === "Pending Acceptance")
+        .sort((a, b) => {
+          const orderA = a.letterType ? ONBOARDING_LETTER_META[a.letterType]?.order ?? 99 : 99;
+          const orderB = b.letterType ? ONBOARDING_LETTER_META[b.letterType]?.order ?? 99 : 99;
+          return orderA - orderB;
+        }),
+    [employeeDocuments]
+  );
+  const pendingVerificationDocs = useMemo(
     () => employeeDocuments.filter((d) => d.status === "Pending Verification"),
     [employeeDocuments]
+  );
+  const pendingDocs = useMemo(
+    () => [...awaitingAcceptanceDocs, ...pendingVerificationDocs],
+    [awaitingAcceptanceDocs, pendingVerificationDocs]
   );
   const rejectedDocs = useMemo(
     () => employeeDocuments.filter((d) => d.status === "Rejected"),
@@ -607,12 +763,19 @@ function DocumentsPageInner() {
     [approvedDocs, todayIso]
   );
 
-  // Default HR / Super Admin view directly to Pending Approval when employee submissions are waiting
+  // Default to Pending tab when HR has verification queue OR Employee has letters requiring T&C acceptance
   useEffect(() => {
-    if (isAdmin && !tabParam && !userChangedTabRef.current && pendingDocs.length > 0 && tab === "approved") {
-      setTab("pending");
+    if (!tabParam && !userChangedTabRef.current && tab === "approved") {
+      if ((isAdmin && pendingDocs.length > 0) || (isEmployee && awaitingAcceptanceDocs.length > 0)) {
+        setTab("pending");
+      }
     }
-  }, [isAdmin, tabParam, pendingDocs.length, tab]);
+  }, [isAdmin, isEmployee, tabParam, pendingDocs.length, awaitingAcceptanceDocs.length, tab]);
+
+  const reviewDoc = useMemo(
+    () => employeeDocuments.find((d) => d.id === reviewDocId) ?? null,
+    [employeeDocuments, reviewDocId]
+  );
 
   const handleTabChange = (nextTab: string) => {
     userChangedTabRef.current = true;
@@ -794,6 +957,20 @@ function DocumentsPageInner() {
             >
               <Download className="h-3.5 w-3.5" />
             </Button>
+          )}
+          {isEmployee && r.status === "Pending Acceptance" && r.ownerId === uid && (
+            <Button
+              size="sm"
+              className="h-7 gap-1 bg-amber-600 px-2.5 text-xs font-medium text-white hover:bg-amber-700"
+              onClick={() => setReviewDocId(r.id)}
+            >
+              <ShieldCheck className="h-3.5 w-3.5" /> Review &amp; Agree T&amp;Cs
+            </Button>
+          )}
+          {isAdmin && r.status === "Pending Acceptance" && (
+            <span className="rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
+              Awaiting Employee
+            </span>
           )}
           {isAdmin && r.status === "Pending Verification" && (
             <>
@@ -1020,7 +1197,7 @@ function DocumentsPageInner() {
           />
         </div>
 
-        {/* Pending approval banner */}
+        {/* Pending approval / acceptance banner */}
         {visiblePendingCount > 0 && tab !== "pending" && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-900 dark:text-amber-200 sm:mb-5 sm:rounded-xl">
             <div className="flex items-center gap-2.5">
@@ -1031,7 +1208,14 @@ function DocumentsPageInner() {
                     <strong>
                       {visiblePendingCount} employee document{visiblePendingCount > 1 ? "s" : ""}
                     </strong>{" "}
-                    awaiting your approval.
+                    pending approval or employee T&amp;C acceptance.
+                  </>
+                ) : awaitingAcceptanceDocs.length > 0 ? (
+                  <>
+                    <strong>
+                      {awaitingAcceptanceDocs.length} employment letter{awaitingAcceptanceDocs.length > 1 ? "s" : ""}
+                    </strong>{" "}
+                    require your review &amp; Terms &amp; Conditions confirmation (review and confirm one at a time).
                   </>
                 ) : (
                   <>
@@ -1051,7 +1235,7 @@ function DocumentsPageInner() {
               onClick={() => handleTabChange("pending")}
               className="h-7 border-amber-500/40 bg-background/70 text-xs font-medium text-amber-900 hover:bg-amber-500/15 dark:text-amber-200"
             >
-              {isAdmin ? "Review Pending" : "View Pending Documents"}
+              {isAdmin ? "Review Pending" : awaitingAcceptanceDocs.length > 0 ? "Review & Confirm Letters" : "View Pending Documents"}
             </Button>
           </div>
         )}
@@ -1182,6 +1366,7 @@ function DocumentsPageInner() {
                     options={[
                       { value: "all", label: "All Statuses" },
                       { value: "Verified", label: "Verified" },
+                      { value: "Pending Acceptance", label: "Awaiting Employee T&C" },
                       { value: "Pending Verification", label: "Pending Approval" },
                       { value: "Rejected", label: "Rejected" },
                     ]}
@@ -1236,6 +1421,7 @@ function DocumentsPageInner() {
                     options={[
                       { value: "all", label: "All Statuses" },
                       { value: "Verified", label: "Verified" },
+                      { value: "Pending Acceptance", label: "Awaiting Employee T&C" },
                       { value: "Pending Verification", label: "Pending Approval" },
                       { value: "Rejected", label: "Rejected" },
                     ]}
@@ -1279,6 +1465,36 @@ function DocumentsPageInner() {
               </div>
             </div>
 
+            {/* Sequential Onboarding Letters Prompt inside Pending Tab for Employees */}
+            {isEmployee && tab === "pending" && awaitingAcceptanceDocs.length > 0 && (
+              <div className="rounded-2xl border border-primary/25 bg-primary/5 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-start gap-2.5">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
+                      <ShieldCheck className="h-4.5 w-4.5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground">
+                        Onboarding Letters Awaiting Your Approval ({awaitingAcceptanceDocs.length} remaining)
+                      </h3>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Review each letter one at a time and agree to all Terms &amp; Conditions. Once confirmed, it will automatically be replaced by the final system-generated approved copy (no physical signature required).
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setReviewDocId(awaitingAcceptanceDocs[0].id)}
+                    className="h-9 gap-1.5 rounded-xl bg-primary text-xs font-semibold text-primary-foreground shadow-sm"
+                  >
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    Review Next: {awaitingAcceptanceDocs[0].name}
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {/* Content Area */}
             {filteredDocs.length === 0 ? (
               <EmptyState
@@ -1309,9 +1525,12 @@ function DocumentsPageInner() {
                       doc={doc}
                       todayIso={todayIso}
                       isAdmin={isAdmin}
+                      isEmployee={isEmployee}
+                      uid={uid}
                       onSelect={() => setSelectedDocId(doc.id)}
                       onVerify={() => handleApprove(doc)}
                       onReject={() => handleReject(doc)}
+                      onReviewAccept={() => setReviewDocId(doc.id)}
                     />
                   ))}
                 </div>
@@ -1333,9 +1552,12 @@ function DocumentsPageInner() {
                           doc={doc}
                           todayIso={todayIso}
                           isAdmin={isAdmin}
+                          isEmployee={isEmployee}
+                          uid={uid}
                           onSelect={() => setSelectedDocId(doc.id)}
                           onVerify={() => handleApprove(doc)}
                           onReject={() => handleReject(doc)}
+                          onReviewAccept={() => setReviewDocId(doc.id)}
                         />
                       ))}
                     </div>
@@ -1379,9 +1601,12 @@ function DocumentsPageInner() {
                       doc={doc}
                       todayIso={todayIso}
                       isAdmin={false}
+                      isEmployee={isEmployee}
+                      uid={uid}
                       onSelect={() => setSelectedDocId(doc.id)}
                       onVerify={() => {}}
                       onReject={() => {}}
+                      onReviewAccept={() => setReviewDocId(doc.id)}
                     />
                   ))}
                 </div>
@@ -1392,18 +1617,44 @@ function DocumentsPageInner() {
 
         {/* Document Preview & Detail Drawer */}
         <Sheet open={!!selectedDoc} onOpenChange={(o) => !o && setSelectedDocId(null)}>
-          <SheetContent className="w-full max-w-none overflow-y-auto overscroll-contain p-4 sm:max-w-xl sm:p-6">
+          <SheetContent className="w-full max-w-none overflow-y-auto overscroll-contain p-4 sm:max-w-2xl sm:p-6">
             {selectedDoc && (
               <DocumentDetailSheetContent
                 doc={selectedDoc}
                 todayIso={todayIso}
                 isAdmin={isAdmin}
+                isEmployee={isEmployee}
+                uid={uid}
                 onVerify={() => handleApprove(selectedDoc)}
                 onReject={() => handleReject(selectedDoc)}
+                onReviewAccept={() => {
+                  setSelectedDocId(null);
+                  setReviewDocId(selectedDoc.id);
+                }}
               />
             )}
           </SheetContent>
         </Sheet>
+
+        {/* Sequential Onboarding Letter T&C Acceptance Modal */}
+        <LetterAcceptanceModal
+          doc={reviewDoc}
+          employeeName={session?.name || nameOf(uid)}
+          remainingCount={awaitingAcceptanceDocs.length}
+          onClose={() => setReviewDocId(null)}
+          onConfirm={async (docId, signatureName) => {
+            const res = await acceptOnboardingLetter(docId, signatureName);
+            if (res.ok) {
+              toast.success(
+                `${reviewDoc?.name || "Document"} approved & replaced with the final system-generated copy (signatures not required).`
+              );
+              setReviewDocId(null);
+            } else {
+              toast.error(res.error || "Unable to confirm letter Terms & Conditions.");
+            }
+            return res;
+          }}
+        />
 
         {/* Upload Employee Document Modal */}
         <UploadDialog
@@ -1440,16 +1691,22 @@ function DocumentCard({
   doc,
   todayIso,
   isAdmin,
+  isEmployee,
+  uid,
   onSelect,
   onVerify,
   onReject,
+  onReviewAccept,
 }: {
   doc: DocumentRecord;
   todayIso: string;
   isAdmin: boolean;
+  isEmployee: boolean;
+  uid: string;
   onSelect: () => void;
   onVerify: () => void;
   onReject: () => void;
+  onReviewAccept?: () => void;
 }) {
   const meta = getCategoryMeta(doc.category);
   const Icon = meta.icon;
@@ -1457,6 +1714,8 @@ function DocumentCard({
   const expiringSoon = diff !== null && diff <= 60;
   const isImg = isImageDocument(doc.fileUrl, doc.fileType, doc.name);
   const isPdf = isPdfDocument(doc.fileUrl, doc.fileType, doc.name);
+  const isHtml = isHtmlDocument(doc.fileUrl, doc.fileType);
+  const canEmployeeAccept = isEmployee && doc.status === "Pending Acceptance" && doc.ownerId === uid && !!onReviewAccept;
 
   return (
     <Card
@@ -1484,7 +1743,14 @@ function DocumentCard({
       ) : (
         <div className="flex items-center justify-between border-b border-border/70 bg-gradient-to-r from-muted/40 via-muted/20 to-transparent px-4 py-3">
           <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
-            {doc.fileUrl && isPdf ? (
+            {doc.fileUrl && isHtml ? (
+              <>
+                <span className="inline-flex items-center rounded-md bg-primary/15 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                  LETTER
+                </span>
+                <span>{doc.acceptanceStatus === "Accepted" ? "System-Generated · Final" : `Draft · ${doc.size}`}</span>
+              </>
+            ) : doc.fileUrl && isPdf ? (
               <>
                 <span className="inline-flex items-center rounded-md bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400">
                   PDF
@@ -1529,6 +1795,12 @@ function DocumentCard({
             {doc.name}
           </h3>
 
+          {doc.systemGenerated && doc.acceptanceStatus === "Accepted" && (
+            <p className="mt-1.5 inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+              <ShieldCheck className="h-3 w-3 shrink-0" /> System-generated · No signature required
+            </p>
+          )}
+
           <div className="mt-3 flex items-center justify-between border-t border-border/70 pt-2.5">
             <Person id={doc.ownerId} />
             <span className="text-[11px] text-muted-foreground">{doc.uploadedAt}</span>
@@ -1553,7 +1825,17 @@ function DocumentCard({
             </div>
           )}
 
-          {isAdmin && doc.status === "Pending Verification" ? (
+          {canEmployeeAccept ? (
+            <div className="flex gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
+              <Button
+                size="sm"
+                className="h-9 flex-1 gap-1.5 rounded-xl bg-amber-600 text-xs font-semibold text-white hover:bg-amber-700 sm:h-8 sm:rounded-lg"
+                onClick={onReviewAccept}
+              >
+                <ShieldCheck className="h-3.5 w-3.5" /> Review &amp; Agree T&amp;Cs
+              </Button>
+            </div>
+          ) : isAdmin && doc.status === "Pending Verification" ? (
             <div className="flex gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
               <Button
                 size="sm"
@@ -1588,7 +1870,7 @@ function DocumentCard({
                   className="h-9 gap-1.5 rounded-xl px-3 text-xs font-medium sm:h-8 sm:rounded-lg"
                   onClick={() => downloadDocumentFile(doc)}
                 >
-                  <Download className="h-3.5 w-3.5" /> Download
+                  <Download className="h-3.5 w-3.5" /> {isHtml ? "PDF" : "Download"}
                 </Button>
               )}
             </div>
@@ -1605,17 +1887,25 @@ function DocumentDetailSheetContent({
   doc,
   todayIso,
   isAdmin,
+  isEmployee,
+  uid,
   onVerify,
   onReject,
+  onReviewAccept,
 }: {
   doc: DocumentRecord;
   todayIso: string;
   isAdmin: boolean;
+  isEmployee: boolean;
+  uid: string;
   onVerify: () => void;
   onReject: () => void;
+  onReviewAccept?: () => void;
 }) {
   const meta = getCategoryMeta(doc.category);
   const diff = daysUntil(doc.expiresAt, todayIso);
+  const isHtml = isHtmlDocument(doc.fileUrl, doc.fileType);
+  const canEmployeeAccept = isEmployee && doc.status === "Pending Acceptance" && doc.ownerId === uid && !!onReviewAccept;
 
   return (
     <div className="space-y-5">
@@ -1637,12 +1927,43 @@ function DocumentDetailSheetContent({
         </SheetDescription>
       </SheetHeader>
 
+      {doc.systemGenerated && doc.acceptanceStatus === "Accepted" && (
+        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs text-emerald-900 dark:text-emerald-200">
+          <div className="flex items-center gap-2 font-semibold">
+            <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            Final Approved System-Generated Letter
+          </div>
+          <p className="mt-1 opacity-90">
+            Accepted by <strong>{doc.acceptedBy || "Employee"}</strong>
+            {doc.acceptedAt ? ` on ${new Date(doc.acceptedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}` : ""}. All approvals are recorded digitally and physical signatures are not required.
+          </p>
+        </div>
+      )}
+
+      {canEmployeeAccept && (
+        <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-amber-500/35 bg-amber-500/10 p-3.5 text-xs text-amber-900 dark:text-amber-200">
+          <div>
+            <p className="font-semibold">Action Required: Review &amp; Accept Terms &amp; Conditions</p>
+            <p className="mt-0.5 opacity-90">
+              After confirmation, this letter will be replaced with the final system-generated copy without signatures.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            onClick={onReviewAccept}
+            className="h-8 gap-1.5 rounded-lg bg-amber-600 text-xs font-semibold text-white hover:bg-amber-700"
+          >
+            <ShieldCheck className="h-3.5 w-3.5" /> Agree &amp; Confirm
+          </Button>
+        </div>
+      )}
+
       {/* Interactive Document Preview */}
       <DocumentPreviewFrame
         fileUrl={doc.fileUrl}
         fileType={doc.fileType}
         fileName={doc.name}
-        heightClass="h-[300px] sm:h-[360px]"
+        heightClass="h-[340px] sm:h-[420px]"
       />
 
       {diff !== null && diff <= 60 && (
@@ -1671,14 +1992,15 @@ function DocumentDetailSheetContent({
       <div className="grid grid-cols-2 gap-4 rounded-2xl border border-border bg-muted/20 p-4">
         <Stat label="Employee" value={<Person id={doc.ownerId} />} />
         <Stat label="Category" value={meta.label} />
-        <Stat label="Uploaded By" value={doc.uploadedBy} />
-        <Stat label="Uploaded On" value={doc.uploadedAt} />
+        <Stat label="Issued / Uploaded By" value={doc.uploadedBy} />
+        <Stat label="Issued On" value={doc.uploadedAt} />
         {doc.issueDate && <Stat label="Issue Date" value={doc.issueDate} />}
         <Stat label="Expiry Date" value={doc.expiresAt || "No expiry"} />
         {doc.docNumber && (
           <Stat label="Document No." value={<span className="font-mono-num">{doc.docNumber}</span>} />
         )}
         <Stat label="File Size" value={<span className="font-mono-num">{doc.size}</span>} />
+        {doc.acceptedBy && <Stat label="Accepted By" value={doc.acceptedBy} />}
         {doc.verifiedBy && <Stat label="Approved By" value={doc.verifiedBy} />}
       </div>
 
@@ -1697,7 +2019,7 @@ function DocumentDetailSheetContent({
             onClick={() => downloadDocumentFile(doc)}
           >
             <Download className="h-4 w-4" />
-            Download Document
+            {isHtml ? "Download PDF" : "Download Document"}
           </Button>
           {doc.fileUrl && (
             <Button
@@ -1709,6 +2031,15 @@ function DocumentDetailSheetContent({
             </Button>
           )}
         </div>
+
+        {canEmployeeAccept && (
+          <Button
+            className="h-10 w-full gap-1.5 rounded-xl bg-amber-600 text-xs font-semibold text-white hover:bg-amber-700 sm:h-9 sm:rounded-lg"
+            onClick={onReviewAccept}
+          >
+            <ShieldCheck className="h-4 w-4" /> Review &amp; Agree All Terms &amp; Conditions
+          </Button>
+        )}
 
         {isAdmin && doc.status === "Pending Verification" && (
           <div className="flex gap-2">
@@ -1729,6 +2060,222 @@ function DocumentDetailSheetContent({
         )}
       </div>
     </div>
+  );
+}
+
+/* ---------- Sequential Onboarding Letter Review & T&C Acceptance Modal ---------- */
+
+function LetterAcceptanceModal({
+  doc,
+  employeeName,
+  remainingCount,
+  onClose,
+  onConfirm,
+}: {
+  doc: DocumentRecord | null;
+  employeeName: string;
+  remainingCount: number;
+  onClose: () => void;
+  onConfirm: (docId: string, signatureName: string) => Promise<{ ok: boolean; error?: string }>;
+}) {
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+  const [systemDocAck, setSystemDocAck] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const letterType = (doc?.letterType || "offer") as OnboardingLetterType;
+  const meta = ONBOARDING_LETTER_META[letterType] || ONBOARDING_LETTER_META.offer;
+  const decodedHtml = useMemo(() => (doc?.fileUrl ? decodeHtmlDataUrl(doc.fileUrl) : null), [doc?.fileUrl]);
+
+  useEffect(() => {
+    setCheckedIds(new Set());
+    setSystemDocAck(false);
+    setSubmitting(false);
+  }, [doc?.id]);
+
+  if (!doc) return null;
+
+  const allClausesChecked = meta.terms.every((t) => checkedIds.has(t.id));
+  const canConfirm = allClausesChecked && systemDocAck && !submitting;
+
+  const toggleClause = (id: string) => {
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = (checked: boolean) => {
+    if (checked) {
+      setCheckedIds(new Set(meta.terms.map((t) => t.id)));
+      setSystemDocAck(true);
+    } else {
+      setCheckedIds(new Set());
+      setSystemDocAck(false);
+    }
+  };
+
+  const handleConfirm = async () => {
+    if (!canConfirm) return;
+    setSubmitting(true);
+    try {
+      await onConfirm(doc.id, employeeName);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={!!doc} onOpenChange={(o) => !o && !submitting && onClose()}>
+      <DialogContent className="flex max-h-[92vh] w-[96vw] max-w-4xl flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="shrink-0 border-b border-border px-4 py-3.5 sm:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-2 pr-6">
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-[11px] font-semibold text-amber-800 dark:text-amber-300">
+                Letter Review · {remainingCount} remaining
+              </Badge>
+              <span className="text-[11px] text-muted-foreground font-mono-num">{doc.id}</span>
+            </div>
+            {doc.fileUrl && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1 text-[11px]"
+                onClick={() => downloadDocumentFile(doc)}
+              >
+                <Download className="h-3 w-3" /> Download Draft PDF
+              </Button>
+            )}
+          </div>
+          <DialogTitle className="mt-1 text-base font-bold sm:text-lg">
+            Review &amp; Accept: {doc.name}
+          </DialogTitle>
+          <DialogDescription className="text-xs">
+            Carefully read all pages of this document below and confirm every Terms &amp; Conditions clause before finalizing.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-6">
+          {/* Exact Document Pages Preview */}
+          {decodedHtml ? (
+            <div className="overflow-hidden rounded-xl border border-border">
+              <div className="flex items-center justify-between border-b border-border bg-muted/40 px-3 py-1.5 text-[11px] font-medium text-muted-foreground">
+                <span>Full Document Preview ({doc.name})</span>
+                <button
+                  type="button"
+                  onClick={() => openDocumentInNewTab(doc.fileUrl)}
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  <ExternalLink className="h-3 w-3" /> Open Full View
+                </button>
+              </div>
+              <HtmlLetterFrame html={decodedHtml} fileName={doc.name} maxHeightClass="max-h-[42vh]" />
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
+              Preview unavailable. You may proceed to review terms below.
+            </div>
+          )}
+
+          {/* Mandatory Terms & Conditions Checklist */}
+          <div className="space-y-3 rounded-xl border border-border bg-muted/20 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-foreground">
+                  Mandatory Terms &amp; Conditions Agreement
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Check each box after reading the letter above
+                </p>
+              </div>
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-medium">
+                <Checkbox
+                  checked={allClausesChecked && systemDocAck}
+                  onCheckedChange={(v) => toggleAll(Boolean(v))}
+                />
+                <span>Agree to All</span>
+              </label>
+            </div>
+
+            <div className="space-y-2.5">
+              {meta.terms.map((clause) => {
+                const checked = checkedIds.has(clause.id);
+                return (
+                  <label
+                    key={clause.id}
+                    className={cn(
+                      "flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors",
+                      checked
+                        ? "border-emerald-500/40 bg-emerald-500/5"
+                        : "border-border bg-card hover:bg-muted/30"
+                    )}
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={() => toggleClause(clause.id)}
+                      className="mt-0.5"
+                    />
+                    <div className="space-y-0.5 text-xs">
+                      <p className="font-semibold text-foreground">{clause.title}</p>
+                      <p className="leading-relaxed text-muted-foreground">{clause.text}</p>
+                    </div>
+                  </label>
+                );
+              })}
+
+              <label
+                className={cn(
+                  "flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors",
+                  systemDocAck
+                    ? "border-emerald-500/40 bg-emerald-500/5"
+                    : "border-amber-500/40 bg-amber-500/5"
+                )}
+              >
+                <Checkbox
+                  checked={systemDocAck}
+                  onCheckedChange={(v) => setSystemDocAck(Boolean(v))}
+                  className="mt-0.5"
+                />
+                <div className="space-y-0.5 text-xs">
+                  <p className="font-semibold text-foreground">
+                    Digital Approval &amp; System-Generated Final Letter Notice
+                  </p>
+                  <p className="leading-relaxed text-muted-foreground">
+                    I confirm my digital acceptance as <strong>{employeeName}</strong>. Upon confirmation, this draft will be permanently replaced with the final approved system-generated letter bearing all digital approvals and a caution notice that physical signatures are not required.
+                  </p>
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter className="shrink-0 flex-col-reverse gap-2 border-t border-border bg-muted/20 px-4 py-3 sm:flex-row sm:justify-between sm:px-6">
+          <Button type="button" variant="ghost" onClick={onClose} disabled={submitting} className="rounded-xl sm:rounded-lg">
+            Review Later
+          </Button>
+          <Button
+            type="button"
+            disabled={!canConfirm}
+            onClick={handleConfirm}
+            className="gap-1.5 rounded-xl bg-emerald-600 text-xs font-semibold text-white hover:bg-emerald-700 sm:rounded-lg"
+          >
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Finalizing System-Generated Letter...
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="h-4 w-4" />
+                I Agree to All T&amp;Cs &amp; Confirm Letter
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

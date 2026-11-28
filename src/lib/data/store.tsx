@@ -68,6 +68,8 @@ export interface Store {
   refreshDocuments: () => Promise<void>;
   addDocument: (d: Omit<DocumentRecord, "id" | "version">) => Promise<{ ok: boolean; error?: string; status?: DocumentRecord["status"] }>;
   decideDocument: (id: string, status: DocumentRecord["status"]) => Promise<void>;
+  acceptOnboardingLetter: (id: string, signatureName?: string) => Promise<{ ok: boolean; error?: string }>;
+  generateOnboardingLetters: (employeeId: string) => Promise<{ ok: boolean; created?: number; error?: string }>;
   // mail
   addMail: (m: Omit<MailEntry, "id" | "refNo" | "timeline" | "channel"> & { channel?: MailEntry["channel"] }) => void;
   updateMail: (id: string, patch: Partial<MailEntry>, event?: string) => void;
@@ -143,6 +145,12 @@ function mapApiDocument(doc: any): DocumentRecord | null {
     docNumber: doc.docNumber || undefined,
     confidentiality: doc.confidentiality || undefined,
     issueDate: doc.issueDate || undefined,
+    letterType: doc.letterType || undefined,
+    letterData: doc.letterData || undefined,
+    acceptanceStatus: doc.acceptanceStatus || undefined,
+    acceptedAt: doc.acceptedAt ? new Date(doc.acceptedAt).toISOString() : undefined,
+    acceptedBy: doc.acceptedBy || undefined,
+    systemGenerated: Boolean(doc.systemGenerated),
   };
 }
 
@@ -449,7 +457,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const dbDocs = resData.documents
           .map(mapApiDocument)
           .filter((x: DocumentRecord | null): x is DocumentRecord => x !== null);
-        const derivedPending = dbDocs.filter((x: DocumentRecord) => x.status === "Pending Verification").length;
+        const derivedPending = dbDocs.filter(
+          (x: DocumentRecord) =>
+            x.status === "Pending Verification" ||
+            (session?.role === "employee" && x.status === "Pending Acceptance")
+        ).length;
         setPendingDocumentsCount(typeof resData.pendingCount === "number" ? resData.pendingCount : derivedPending);
         setData((d) => ({ ...d, documents: dbDocs }));
       }
@@ -1205,6 +1217,55 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           record: doc?.name ?? id,
           outcome: "Success",
         });
+      },
+      acceptOnboardingLetter: async (id, signatureName) => {
+        try {
+          const res = await fetch("/api/documents", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              docId: id,
+              action: "accept_letter",
+              agreedToAllTerms: true,
+              signatureName,
+            }),
+          });
+          const resData = await res.json().catch(() => null);
+          if (!res.ok || !resData?.success) {
+            return { ok: false, error: resData?.error || "Failed to confirm letter terms." };
+          }
+          const updated = mapApiDocument(resData.document);
+          if (updated) {
+            setData((d) => ({
+              ...d,
+              documents: d.documents.map((x) => (x.id === id || x.id === updated.id ? updated : x)),
+            }));
+          }
+          await Promise.all([syncDocumentsAsync(), syncNotificationsAsync()]);
+          return { ok: true };
+        } catch {
+          return { ok: false, error: "Network error while confirming letter terms." };
+        }
+      },
+      generateOnboardingLetters: async (employeeId) => {
+        try {
+          const res = await fetch("/api/documents", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "generate_onboarding_letters",
+              employeeId,
+            }),
+          });
+          const resData = await res.json().catch(() => null);
+          if (!res.ok || !resData?.success) {
+            return { ok: false, error: resData?.error || "Failed to generate letters." };
+          }
+          await syncDocumentsAsync();
+          return { ok: true, created: resData.created ?? 0 };
+        } catch {
+          return { ok: false, error: "Network error while generating onboarding letters." };
+        }
       },
       addMail: (m) => {
         const n = data.mail.length + 1;

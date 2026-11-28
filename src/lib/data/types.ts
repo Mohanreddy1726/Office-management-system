@@ -260,7 +260,7 @@ export interface DocumentRecord {
   uploadedBy: string;
   uploadedAt: string;
   version: number;
-  status: "Verified" | "Pending Verification" | "Rejected";
+  status: "Verified" | "Pending Verification" | "Pending Acceptance" | "Rejected";
   expiresAt?: string;
   issueDate?: string;
   size: string;
@@ -268,6 +268,12 @@ export interface DocumentRecord {
   fileType?: string;
   verifiedBy?: string;
   notes?: string;
+  letterType?: "loi" | "offer" | "appointment";
+  letterData?: Record<string, any>;
+  acceptanceStatus?: "Pending" | "Accepted";
+  acceptedAt?: string;
+  acceptedBy?: string;
+  systemGenerated?: boolean;
 }
 
 export type MailDirection = "Incoming" | "Outgoing";
