@@ -11,9 +11,12 @@ export const inr = (n: number, opts?: { compact?: boolean }) =>
 
 export const fmtDate = (d?: string) => (d ? new Date(d + "T00:00:00Z").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" }) : "—");
 
-export const tenure = (from: string, to = "2026-10-22") => {
+export const tenure = (from: string, to?: string) => {
+  if (!from) return "—";
   const a = new Date(from + "T00:00:00Z");
-  const b = new Date(to + "T00:00:00Z");
+  const ref = to || new Date().toISOString().slice(0, 10);
+  const b = new Date(ref + "T00:00:00Z");
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return "—";
   const months = (b.getUTCFullYear() - a.getUTCFullYear()) * 12 + (b.getUTCMonth() - a.getUTCMonth());
   if (months < 1) return "<1 mo";
   return months >= 12 ? `${Math.floor(months / 12)} yr ${months % 12} mo` : `${months} mo`;

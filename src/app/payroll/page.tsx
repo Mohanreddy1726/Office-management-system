@@ -86,36 +86,17 @@ interface LopOverride {
   status: "Calculated" | "Adjusted" | "Confirmed";
 }
 
-// Deterministic bank details generator for realistic statement
 function getBankDetails(e: Employee) {
-  if (e.bankName) {
-    const accNo = e.accountNumber || (e.bankLast4 ? `•••• •••• ${e.bankLast4}` : "50100412345678");
-    const ifsc = e.ifscCode || "HDFC0001844";
-    return { bankName: e.bankName, accNo, ifsc };
-  }
-  const bankNames = ["ICICI Bank", "State Bank of India", "HDFC Bank", "Axis Bank", "Kotak Mahindra Bank"];
-  const numId = parseInt(e.id.replace(/\D/g, "")) || 1000;
-  const bankName = bankNames[numId % bankNames.length];
-  const last4 = e.bankLast4 ?? String(1000 + (numId % 9000));
-  const accNo = e.accountNumber || `501004${String(numId).padStart(4, "0")}${last4}`;
-  const ifsc =
-    e.ifscCode || (
-      bankName === "HDFC Bank"
-        ? "HDFC0001844"
-        : bankName === "ICICI Bank"
-        ? "ICIC0000047"
-        : bankName === "State Bank of India"
-        ? "SBIN0001234"
-        : bankName === "Axis Bank"
-        ? "UTIB0000123"
-        : "KKBK0000456"
-    );
-
-  return { bankName, accNo, ifsc };
+  const accNo = e.accountNumber || (e.bankLast4 ? `•••• •••• ${e.bankLast4}` : "");
+  return {
+    bankName: e.bankName || "",
+    accNo,
+    ifsc: e.ifscCode || "",
+  };
 }
 
 export default function PayrollPage() {
-  const { data, me, advancePayroll, reopenPayroll, createPayrollRun } = useStore();
+  const { data, me, attendanceSynced, advancePayroll, reopenPayroll, createPayrollRun } = useStore();
   const { isEmployee, uid, role, isAdmin } = useScope();
   const nameOf = useNames();
 
@@ -297,6 +278,10 @@ export default function PayrollPage() {
   if (!isAdmin) {
     const self = data.employees.find((e) => e.id === uid);
     const selfItem = payrollItems.find((p) => p.employee.id === uid);
+    const waitForAttendance = !attendanceSynced && data.attendance.length === 0;
+    const bankAccDisplay = selfItem?.bank.accNo
+      ? `A/c ${selfItem.bank.accNo.startsWith("••••") ? selfItem.bank.accNo : `•••• ${selfItem.bank.accNo.slice(-4)}`}`
+      : "No bank account on file";
 
     return (
       <AppShell>
@@ -309,10 +294,10 @@ export default function PayrollPage() {
           {self && (
             <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
               <KpiCard
-                label="Base Monthly Gross"
+                label="Base Monthly Basic"
                 value={inr(self.monthlyGross)}
                 icon={<Wallet className="h-4 w-4 text-primary" />}
-                hint="Fixed compensation structure"
+                hint="100% Basic Salary"
               />
               <KpiCard
                 label="Current Month Incentives"
@@ -322,15 +307,21 @@ export default function PayrollPage() {
               />
               <KpiCard
                 label="Net In-Hand Salary"
-                value={inr(selfItem?.breakdown.net ?? self.monthlyGross)}
+                value={waitForAttendance ? "Calculating..." : inr(selfItem?.breakdown.net ?? self.monthlyGross)}
                 icon={<IndianRupee className="h-4 w-4 text-emerald-600" />}
-                hint="Zero PF & ESI deducted"
+                hint={
+                  waitForAttendance
+                    ? "Syncing monthly attendance..."
+                    : selfItem && selfItem.unpaidDays > 0
+                      ? `After ${selfItem.unpaidDays}d policy LOP (-${inr(selfItem.breakdown.lop)})`
+                      : "100% Basic · Zero Deductions"
+                }
               />
               <KpiCard
                 label="Salary Account"
-                value={selfItem?.bank.bankName ?? "HDFC Bank"}
+                value={selfItem?.bank.bankName || "Not Provided"}
                 icon={<Landmark className="h-4 w-4 text-blue-500" />}
-                hint={`A/c •••• ${selfItem?.bank.accNo.slice(-4) ?? "1234"}`}
+                hint={bankAccDisplay}
               />
             </div>
           )}
@@ -340,7 +331,7 @@ export default function PayrollPage() {
               <div>
                 <h3 className="font-semibold text-foreground text-base">{activePeriodLabel} Salary Statement</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Gross-based LOP (max {GVK_POLICY.maxMonthlyLopDays} days/mo) · Zero PF/ESI · Annual salary/bonus discussions in {GVK_POLICY.salaryDiscussionMonth} only
+                  Basic-based LOP (max {GVK_POLICY.maxMonthlyLopDays} days/mo) · 100% Basic Salary · Zero Deductions
                 </p>
               </div>
               {self && (
@@ -366,12 +357,14 @@ export default function PayrollPage() {
               <div>
                 <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Total Deductions (-)</span>
                 <span className="font-bold text-rose-600 text-sm">
-                  {inr((selfItem?.totalMiscDed ?? 0) + (selfItem?.breakdown.lop ?? 0) + (selfItem?.breakdown.pt ?? 0))}
+                  {waitForAttendance ? "—" : inr((selfItem?.totalMiscDed ?? 0) + (selfItem?.breakdown.lop ?? 0))}
                 </span>
               </div>
               <div>
                 <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Net Bank Transfer</span>
-                <span className="font-bold text-emerald-600 text-base">{inr(selfItem?.breakdown.net ?? 0)}</span>
+                <span className="font-bold text-emerald-600 text-base">
+                  {waitForAttendance ? "Calculating..." : inr(selfItem?.breakdown.net ?? 0)}
+                </span>
               </div>
             </div>
           </div>

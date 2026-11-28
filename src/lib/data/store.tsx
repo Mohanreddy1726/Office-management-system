@@ -18,6 +18,7 @@ export interface Store {
   session: Session | null;
   prefs: Prefs;
   hydrated: boolean;
+  attendanceSynced: boolean;
   // session & prefs
   signIn: (role: Role, details?: Partial<Session>) => void;
   signOut: () => void;
@@ -191,6 +192,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [prefs, setPrefs] = useState<Prefs>({ sidebarCollapsed: false, branch: "All Branches" });
   const [pendingDocumentsCount, setPendingDocumentsCount] = useState(0);
+  const [attendanceSynced, setAttendanceSynced] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -223,8 +225,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           parsed.data.shifts = [generalShift];
           parsed.data.leavePolicies = GVK_LEAVE_POLICIES;
 
-          // Authoritative collections always come from MongoDB Atlas
-          parsed.data.attendance = [];
+          // Keep cached attendance across reload so Net In-Hand Salary never flickers to 0-LOP before sync; syncAttendance overwrites cleanly from MongoDB
           parsed.data.leaves = [];
           parsed.data.assets = [];
           parsed.data.notifications = [];
@@ -585,7 +586,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             setData((d) => ({ ...d, attendance: resData.records }));
           }
         })
-        .catch(() => {});
+        .catch(() => {})
+        .finally(() => setAttendanceSynced(true));
     };
 
 
@@ -718,7 +720,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setData((d) => ({ ...d, audit: [{ id: `AU-${Date.now()}`, timestamp: stamp(), ...e }, ...d.audit] }));
 
     const s: Store = {
-      data, session, prefs, hydrated, pendingDocumentsCount,
+      data, session, prefs, hydrated, attendanceSynced, pendingDocumentsCount,
       refreshDocuments: syncDocumentsAsync,
       refreshAssets: syncAssetsAsync,
       refreshHolidays: syncHolidaysAsync,
@@ -737,7 +739,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           originalName: origName,
         });
       },
-      signOut: () => setSession(null),
+      signOut: () => {
+        setAttendanceSynced(false);
+        setSession(null);
+      },
       switchRole: (role, targetUser) => {
         setSession((prev) => {
           const origRole = prev?.originalRole || prev?.role || "super_admin";
@@ -1688,7 +1693,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
     };
     return s;
-  }, [data, session, prefs, hydrated, pendingDocumentsCount, syncDocumentsAsync, syncAssetsAsync, syncHolidaysAsync]);
+  }, [data, session, prefs, hydrated, attendanceSynced, pendingDocumentsCount, syncDocumentsAsync, syncAssetsAsync, syncHolidaysAsync]);
 
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>;
 }

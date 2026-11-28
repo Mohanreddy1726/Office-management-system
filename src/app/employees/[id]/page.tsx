@@ -17,6 +17,7 @@ import { Stat, Person, useScope, Sel } from "@/components/form-bits";
 import { fmtDate, inr, tenure, attColor } from "@/lib/format";
 import { payslipFor } from "@/lib/payroll";
 import { DEPARTMENTS } from "@/lib/data/seed";
+import { BRANCHES } from "@/lib/data/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
@@ -621,14 +622,40 @@ function EditDialog({
   onSave: (p: Partial<Employee>) => void;
 }) {
   const { data } = useStore();
+  const [tab, setTab] = useState<"personal" | "job" | "edu" | "bank">("personal");
+  const [dob, setDob] = useState(e.dob || "");
+  const [gender, setGender] = useState(e.gender || "");
+  const [bloodGroup, setBloodGroup] = useState(e.bloodGroup || "");
+  const [maritalStatus, setMaritalStatus] = useState(e.maritalStatus || "");
+  const [personalEmail, setPersonalEmail] = useState(e.personalEmail || "");
+  const [emergencyContact, setEmergencyContact] = useState(e.emergencyContact || "");
+  const [address, setAddress] = useState(e.address || "");
+  const [pan, setPan] = useState(e.pan || "");
+  const [aadhaarNumber, setAadhaarNumber] = useState(e.aadhaarNumber || "");
+
   const [designation, setDesignation] = useState(e.designation);
   const [department, setDepartment] = useState(e.department);
+  const [branch, setBranch] = useState<string>(e.branch || "");
+  const [employmentType, setEmploymentType] = useState<string>(e.employmentType || "Full-time");
+  const [joiningDate, setJoiningDate] = useState(e.joiningDate || "");
   const [phone, setPhone] = useState(e.phone);
   const [status, setStatus] = useState<string>(e.status);
   const [managerId, setManagerId] = useState<string>(e.managerId || "");
+
+  const [qualification, setQualification] = useState(e.qualification || "");
+  const [institution, setInstitution] = useState(e.institution || "");
+  const [graduationYear, setGraduationYear] = useState(e.graduationYear ? String(e.graduationYear) : "");
+  const [grade, setGrade] = useState(e.grade || "");
+  const [experienceYears, setExperienceYears] = useState(e.experienceYears !== undefined ? String(e.experienceYears) : "");
+  const [previousCompany, setPreviousCompany] = useState(e.previousCompany || "");
+  const [previousDesignation, setPreviousDesignation] = useState(e.previousDesignation || "");
+  const [skills, setSkills] = useState(e.skills || "");
+
+  const [annualCTC, setAnnualCTC] = useState(e.annualCTC ? String(e.annualCTC) : "");
   const [bankName, setBankName] = useState(e.bankName || "");
   const [accountNumber, setAccountNumber] = useState(e.accountNumber || "");
   const [ifscCode, setIfscCode] = useState(e.ifscCode || "");
+  const [paymentMethod, setPaymentMethod] = useState(e.paymentMethod || "");
 
   const managerOptions = data.employees.filter((emp) => {
     if (emp.id === e.id) return false;
@@ -640,57 +667,88 @@ function EditDialog({
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Edit {e.name}</DialogTitle>
+          <DialogTitle>Edit Profile: {e.name}</DialogTitle>
         </DialogHeader>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Designation">
-            <Input
-              value={designation}
-              onChange={(x) => setDesignation(x.target.value)}
-              placeholder="e.g. Senior Software Engineer"
-            />
-          </Field>
-          <Field label="Department">
-            <Sel
-              value={department}
-              onChange={setDepartment}
-              options={DEPARTMENTS}
-            />
-          </Field>
-          <Field
-            label="Phone"
-            error={phone && !/^[+\d\s-]{8,}$/.test(phone) ? "Invalid phone" : undefined}
-          >
-            <Input
-              value={phone}
-              onChange={(x) => setPhone(x.target.value)}
-              placeholder="+91 98765 43210"
-            />
-          </Field>
-          <Field label="Status">
-            <Sel
-              value={status}
-              onChange={setStatus}
-              options={["Active", "Probation", "On Notice", "Resigned", "Inactive"]}
-            />
-          </Field>
-          <Field label="Bank Name">
-            <Input
-              value={bankName}
-              onChange={(x) => setBankName(x.target.value)}
-              placeholder="e.g. ICICI Bank, SBI, HDFC"
-            />
-          </Field>
-          <Field label="Account Number">
-            <Input
-              value={accountNumber}
-              onChange={(x) => setAccountNumber(x.target.value)}
-              placeholder="e.g. 123456789012"
-            />
-          </Field>
-          <div className="col-span-2">
+
+        <div className="grid grid-cols-2 gap-1.5 rounded-lg bg-muted/40 p-1 sm:grid-cols-4">
+          {[
+            { k: "personal" as const, l: "1. Personal" },
+            { k: "job" as const, l: "2. Job & Manager" },
+            { k: "edu" as const, l: "3. Edu & Exp" },
+            { k: "bank" as const, l: "4. Salary & Bank" },
+          ].map((t) => (
+            <button
+              key={t.k}
+              type="button"
+              onClick={() => setTab(t.k)}
+              className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition ${
+                tab === t.k ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {t.l}
+            </button>
+          ))}
+        </div>
+
+        {tab === "personal" && (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Date of Birth">
+              <Input type="date" value={dob} onChange={(x) => setDob(x.target.value)} />
+            </Field>
+            <Field label="Gender">
+              <Sel value={gender} onChange={setGender} placeholder="Select gender" options={["Male", "Female", "Other", "Prefer not to say"]} />
+            </Field>
+            <Field label="Blood Group">
+              <Sel value={bloodGroup} onChange={setBloodGroup} placeholder="Select blood group" options={["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"]} />
+            </Field>
+            <Field label="Marital Status">
+              <Sel value={maritalStatus} onChange={setMaritalStatus} placeholder="Select status" options={["Single", "Married", "Other"]} />
+            </Field>
+            <Field label="Personal Email">
+              <Input type="email" value={personalEmail} onChange={(x) => setPersonalEmail(x.target.value)} placeholder="name@gmail.com" />
+            </Field>
+            <Field label="Emergency Contact">
+              <Input value={emergencyContact} onChange={(x) => setEmergencyContact(x.target.value)} placeholder="Name & phone number" />
+            </Field>
+            <Field label="PAN Card">
+              <Input value={pan} onChange={(x) => setPan(x.target.value.toUpperCase())} placeholder="ABCDE1234F" className="font-mono uppercase" maxLength={10} />
+            </Field>
+            <Field label="Aadhaar Number (12 Digits)">
+              <Input value={aadhaarNumber} onChange={(x) => setAadhaarNumber(x.target.value.replace(/\D/g, "").slice(0, 12))} placeholder="12 digits" className="font-mono" maxLength={12} />
+            </Field>
+            <div className="sm:col-span-2">
+              <Field label="Residential Address">
+                <Input value={address} onChange={(x) => setAddress(x.target.value)} placeholder="Current residential address" />
+              </Field>
+            </div>
+          </div>
+        )}
+
+        {tab === "job" && (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Designation">
+              <Input value={designation} onChange={(x) => setDesignation(x.target.value)} placeholder="e.g. UI/UX Designer" />
+            </Field>
+            <Field label="Department">
+              <Sel value={department} onChange={setDepartment} options={DEPARTMENTS} />
+            </Field>
+            <Field label="Branch">
+              <Sel value={branch} onChange={setBranch} placeholder="Select branch" options={BRANCHES} />
+            </Field>
+            <Field label="Employment Type">
+              <Sel value={employmentType} onChange={setEmploymentType} options={["Full-time", "Part-time", "Contract", "Intern"]} />
+            </Field>
+            <Field label="Date of Joining">
+              <Input type="date" value={joiningDate} onChange={(x) => setJoiningDate(x.target.value)} />
+            </Field>
+            <Field label="Phone" error={phone && !/^[+\d\s-]{8,}$/.test(phone) ? "Invalid phone" : undefined}>
+              <Input value={phone} onChange={(x) => setPhone(x.target.value)} placeholder="+91 98765 43210" />
+            </Field>
+            <Field label="Status">
+              <Sel value={status} onChange={setStatus} options={["Active", "Probation", "On Notice", "Resigned", "Inactive"]} />
+            </Field>
             <Field label="Reporting Manager / HR / Lead">
               <select
                 value={managerId}
@@ -707,37 +765,104 @@ function EditDialog({
               </select>
             </Field>
           </div>
-          <div className="col-span-2">
-            <Field label="Bank IFSC Code">
-              <Input
-                value={ifscCode}
-                onChange={(x) => setIfscCode(x.target.value.toUpperCase())}
-                placeholder="e.g. SBIN0001234"
-                className="font-mono uppercase"
-              />
+        )}
+
+        {tab === "edu" && (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Highest Qualification">
+              <Input value={qualification} onChange={(x) => setQualification(x.target.value)} placeholder="e.g. B.Tech / MBA / Degree" />
+            </Field>
+            <Field label="University / Institute">
+              <Input value={institution} onChange={(x) => setInstitution(x.target.value)} placeholder="e.g. Osmania University" />
+            </Field>
+            <Field label="Graduation Year">
+              <Input type="number" value={graduationYear} onChange={(x) => setGraduationYear(x.target.value)} placeholder="e.g. 2022" />
+            </Field>
+            <Field label="Grade / CGPA">
+              <Input value={grade} onChange={(x) => setGrade(x.target.value)} placeholder="e.g. 8.2 CGPA / 78%" />
+            </Field>
+            <Field label="Total Prior Experience (Years)">
+              <Input type="number" step="0.5" value={experienceYears} onChange={(x) => setExperienceYears(x.target.value)} placeholder="e.g. 2" />
+            </Field>
+            <Field label="Previous Organization">
+              <Input value={previousCompany} onChange={(x) => setPreviousCompany(x.target.value)} placeholder="Company name" />
+            </Field>
+            <Field label="Previous Designation">
+              <Input value={previousDesignation} onChange={(x) => setPreviousDesignation(x.target.value)} placeholder="Role title" />
+            </Field>
+            <Field label="Core Skills">
+              <Input value={skills} onChange={(x) => setSkills(x.target.value)} placeholder="e.g. Figma, UI/UX, Photoshop" />
             </Field>
           </div>
-        </div>
+        )}
+
+        {tab === "bank" && (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Annual Basic Salary (₹)">
+              <Input type="number" value={annualCTC} onChange={(x) => setAnnualCTC(x.target.value)} placeholder="e.g. 240000" />
+            </Field>
+            <Field label="Payment Mode">
+              <Sel value={paymentMethod} onChange={setPaymentMethod} placeholder="Select payment mode" options={["Corporate NEFT", "RTGS Direct", "Bank Account Transfer"]} />
+            </Field>
+            <Field label="Bank Name">
+              <Input value={bankName} onChange={(x) => setBankName(x.target.value)} placeholder="e.g. Union Bank of India" />
+            </Field>
+            <Field label="Account Number">
+              <Input value={accountNumber} onChange={(x) => setAccountNumber(x.target.value)} placeholder="e.g. 425402010893827" />
+            </Field>
+            <div className="sm:col-span-2">
+              <Field label="Bank IFSC Code">
+                <Input value={ifscCode} onChange={(x) => setIfscCode(x.target.value.toUpperCase())} placeholder="e.g. UBIN0542547" className="font-mono uppercase" />
+              </Field>
+            </div>
+          </div>
+        )}
+
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
           <Button
             disabled={designation.length < 2}
-            onClick={() =>
+            onClick={() => {
+              const annualNum = Number(annualCTC) || 0;
               onSave({
+                dob,
+                gender: gender || undefined,
+                bloodGroup: bloodGroup || undefined,
+                maritalStatus: (maritalStatus as any) || undefined,
+                personalEmail: personalEmail.trim(),
+                emergencyContact: emergencyContact.trim(),
+                address: address.trim(),
+                pan: pan.trim().toUpperCase() || undefined,
+                aadhaarNumber: aadhaarNumber.trim() || undefined,
+                aadharLast4: aadhaarNumber ? aadhaarNumber.slice(-4) : e.aadharLast4,
                 designation,
                 department,
+                branch: (branch || e.branch) as any,
+                employmentType: employmentType as any,
+                joiningDate,
                 phone,
                 team: department,
                 managerId: managerId || null,
                 status: status as EmploymentStatus,
+                qualification: qualification.trim() || undefined,
+                institution: institution.trim() || undefined,
+                graduationYear: graduationYear ? Number(graduationYear) : undefined,
+                grade: grade.trim() || undefined,
+                experienceYears: experienceYears !== "" ? Number(experienceYears) : undefined,
+                previousCompany: previousCompany.trim() || undefined,
+                previousDesignation: previousDesignation.trim() || undefined,
+                skills: skills.trim() || undefined,
+                annualCTC: annualNum,
+                monthlyGross: Math.round(annualNum / 12),
                 bankName: bankName.trim(),
                 accountNumber: accountNumber.trim(),
                 bankLast4: accountNumber ? accountNumber.trim().slice(-4) : e.bankLast4,
                 ifscCode: ifscCode.trim().toUpperCase(),
-              })
-            }
+                paymentMethod: paymentMethod || undefined,
+              });
+            }}
           >
             Save changes
           </Button>

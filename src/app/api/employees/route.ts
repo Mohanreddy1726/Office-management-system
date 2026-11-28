@@ -563,6 +563,71 @@ export async function PATCH(req: NextRequest) {
       if (patch.team) updateData.team = patch.team;
       if (patch.phone) updateData.phone = patch.phone.trim();
       if (patch.branch) updateData.branch = patch.branch;
+      if (patch.employmentType !== undefined) updateData.employmentType = patch.employmentType;
+      if (patch.joiningDate !== undefined) updateData.joiningDate = patch.joiningDate;
+      if (patch.dob !== undefined) updateData.dateOfBirth = patch.dob;
+      if (patch.gender !== undefined) updateData.gender = patch.gender || undefined;
+      if (patch.bloodGroup !== undefined) updateData.bloodGroup = patch.bloodGroup;
+      if (patch.maritalStatus !== undefined) updateData.maritalStatus = patch.maritalStatus;
+      if (patch.personalEmail !== undefined) updateData.personalEmail = patch.personalEmail.toLowerCase().trim();
+      if (patch.address !== undefined) updateData.address = patch.address.trim();
+      if (patch.emergencyContact !== undefined) {
+        updateData.emergencyContact = { name: "", relationship: "", phone: String(patch.emergencyContact).trim() };
+      }
+      if (patch.pan !== undefined) {
+        const cleanPan = patch.pan.trim().toUpperCase();
+        updateData.panNumber = cleanPan;
+        updateData["bankDetails.panNumber"] = cleanPan;
+      }
+      if (patch.aadhaarNumber !== undefined) {
+        const cleanAadh = patch.aadhaarNumber.replace(/\s+/g, "").trim();
+        updateData.aadhaarNumber = cleanAadh;
+        updateData["bankDetails.aadhaarNumber"] = cleanAadh;
+      }
+      if (patch.qualification !== undefined) updateData.qualification = patch.qualification.trim();
+      if (patch.institution !== undefined) updateData.institution = patch.institution.trim();
+      if (patch.graduationYear !== undefined) updateData.graduationYear = patch.graduationYear ? Number(patch.graduationYear) : undefined;
+      if (patch.grade !== undefined) updateData.grade = patch.grade.trim();
+      if (patch.qualification !== undefined || patch.institution !== undefined || patch.graduationYear !== undefined || patch.grade !== undefined) {
+        updateData.education = [
+          {
+            degree: (patch.qualification ?? "").trim(),
+            institution: (patch.institution ?? "").trim(),
+            yearOfPassing: patch.graduationYear ? String(patch.graduationYear) : "",
+            percentageOrCgpa: (patch.grade ?? "").trim(),
+          },
+        ];
+      }
+      if (patch.experienceYears !== undefined) {
+        updateData.experienceYears = patch.experienceYears !== "" && patch.experienceYears !== null ? Number(patch.experienceYears) : undefined;
+      }
+      if (patch.previousCompany !== undefined) updateData.previousCompany = patch.previousCompany.trim();
+      if (patch.previousDesignation !== undefined) updateData.previousDesignation = patch.previousDesignation.trim();
+      if (patch.skills !== undefined) updateData.skills = patch.skills.trim();
+      if (patch.previousCompany !== undefined || patch.previousDesignation !== undefined) {
+        updateData.experience = [
+          {
+            companyName: (patch.previousCompany ?? "").trim(),
+            designation: (patch.previousDesignation ?? "").trim(),
+            fromDate: "",
+            toDate: "",
+          },
+        ];
+      }
+      if (patch.annualCTC !== undefined) {
+        const annual = Number(patch.annualCTC) || 0;
+        const gross = Math.round(annual / 12);
+        updateData["salary.annualCtc"] = annual;
+        updateData["salary.monthlyGross"] = gross;
+        updateData["salary.basic"] = gross;
+        updateData["salary.hra"] = 0;
+        updateData["salary.specialAllowance"] = 0;
+        updateData["salary.professionalTax"] = 0;
+        updateData["salary.epfDeduction"] = 0;
+        updateData["salary.esiDeduction"] = 0;
+        updateData["salary.tds"] = 0;
+      }
+      if (patch.paymentMethod !== undefined) updateData.paymentMethod = patch.paymentMethod;
       if (patch.managerId !== undefined) {
         if (patch.managerId) updateData.reportingManagerId = patch.managerId;
         else unsetData.reportingManagerId = 1;
