@@ -215,18 +215,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           parsed.data.shifts = [generalShift];
           parsed.data.leavePolicies = GVK_LEAVE_POLICIES;
 
-          if (Array.isArray(parsed.data.attendance)) {
-            parsed.data.attendance = parsed.data.attendance.map((rec: any) => {
-              const updatedRec = { ...rec, shiftId: "SH-GEN" };
-              if (rec.checkIn && !["Leave", "Absent", "Holiday", "Week Off"].includes(rec.status)) {
-                const cls = classifyLoginTime(rec.checkIn);
-                return { ...updatedRec, lateMinutes: cls.lateMinutes, status: cls.status };
-              }
-              return updatedRec;
-            });
-          }
-          // Authoritative leaves always come from MongoDB Atlas
+          // Authoritative collections always come from MongoDB Atlas
+          parsed.data.attendance = [];
           parsed.data.leaves = [];
+          parsed.data.assets = [];
+          parsed.data.notifications = [];
+          parsed.data.announcements = [];
+          parsed.data.mappings = [];
+          parsed.data.unmappedIds = [];
           // Filter out stale unverified employees lingering in localStorage
           if (Array.isArray(parsed.data.employees)) {
             parsed.data.employees = parsed.data.employees.filter((e: any) => e.status !== "Pending Verification");
@@ -432,16 +428,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             mappedWithEpoch.sort((a, b) => b.epoch - a.epoch);
             const authoritativeNotifications = mappedWithEpoch.map((x) => x.item);
 
-            const combinedAnnouncements = [...authoritativeAnnouncements];
-            for (const localAnn of d.announcements) {
-              if (!combinedAnnouncements.some((x) => x.id === localAnn.id || x.title === localAnn.title)) {
-                combinedAnnouncements.push(localAnn);
-              }
-            }
-
             return {
               ...d,
-              announcements: combinedAnnouncements,
+              announcements: authoritativeAnnouncements,
               notifications: authoritativeNotifications,
             };
           });
@@ -861,17 +850,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         audit({ user: session ? nameOf(data, session.userId) : "Demo", action: "Locked attendance period", module: "Attendance", record: `${ids.length} records`, outcome: "Success" });
       },
       setAttendanceRecords: (records) => {
-        setData((d) => {
-          const map = new Map<string, AttendanceRecord>();
-          for (const r of d.attendance) {
-            map.set(`${r.employeeId}_${r.date}`, r);
-          }
-          for (const r of records) {
-            const key = `${r.employeeId}_${r.date}`;
-            map.set(key, { ...(map.get(key) || {}), ...r });
-          }
-          return { ...d, attendance: Array.from(map.values()) };
-        });
+        setData((d) => ({ ...d, attendance: records }));
       },
       addImport: (b) => {
         setData((d) => ({ ...d, imports: [{ ...b, id: `IMP-${d.imports.length + 1}` }, ...d.imports] }));
