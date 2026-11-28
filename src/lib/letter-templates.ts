@@ -161,8 +161,8 @@ export function numberToIndianWords(numInput: number): string {
 export function buildLetterPayloadFromEmployee(emp: any, issuedBy = "HR / Super Admin"): OnboardingLetterPayload {
   const annualCtc = Number(emp.salary?.annualCtc || emp.salary?.annualCTC || emp.annualCTC) || 600000;
   const monthlyGross = Number(emp.salary?.monthlyGross) || Math.round(annualCtc / 12);
-  const basicSalary = Number(emp.salary?.basic) || Math.round(monthlyGross * 0.5);
-  const allowances = Math.max(0, monthlyGross - basicSalary);
+  const basicSalary = monthlyGross;
+  const allowances = 0;
   const branch = emp.branch || "Hyderabad";
   const workLocation =
     branch.toLowerCase().includes("hyderabad") || branch.toLowerCase().includes("headquarters")
@@ -185,7 +185,7 @@ export function buildLetterPayloadFromEmployee(emp: any, issuedBy = "HR / Super 
     monthlyGross,
     basicSalary,
     allowances,
-    netMonthly: monthlyGross,
+    netMonthly: 0,
     issuedBy,
   };
 }
@@ -314,14 +314,8 @@ function renderLetterOfIntentHtml(
   const designation = escHtml(payload.designation);
   const department = escHtml(payload.department);
   const branch = escHtml(payload.branch);
-  const basicM = formatInrNumber(payload.basicSalary);
-  const basicA = formatInrNumber(payload.basicSalary * 12);
-  const allowM = formatInrNumber(payload.allowances);
-  const allowA = formatInrNumber(payload.allowances * 12);
-  const grossM = formatInrNumber(payload.monthlyGross);
-  const grossA = formatInrNumber(payload.annualCtc);
-  const netM = formatInrNumber(payload.netMonthly);
-  const netA = formatInrNumber(payload.annualCtc);
+  const basicM = formatInrNumber(payload.monthlyGross || payload.basicSalary);
+  const basicA = formatInrNumber(payload.annualCtc);
 
   const page3Bottom = approval.accepted
     ? renderApprovalAndCautionBlock(payload, approval, false)
@@ -467,11 +461,11 @@ body{font-family:'Poppins',sans-serif;background:#e2e8f0;margin:0;padding:20px 0
     <table class="table">
       <tr><th>Details</th><th>Monthly</th><th>Annually</th></tr>
       <tr><td>Basic Salary</td><td>₹ ${basicM}</td><td>₹ ${basicA}</td></tr>
-      <tr><td>TA &amp; DA</td><td>₹ ${allowM}</td><td>₹ ${allowA}</td></tr>
+      <tr><td>TA &amp; DA</td><td>-</td><td>-</td></tr>
       <tr><td>Incentives</td><td>-</td><td>-</td></tr>
       <tr><td>Loss of Pay</td><td>-</td><td>-</td></tr>
-      <tr><td><strong>Gross Salary</strong></td><td><strong>₹ ${grossM}</strong></td><td><strong>₹ ${grossA}</strong></td></tr>
-      <tr><td><strong>Net Salary</strong></td><td><strong>₹ ${netM}</strong></td><td><strong>₹ ${netA}</strong></td></tr>
+      <tr><td><strong>Gross Salary</strong></td><td><strong>-</strong></td><td><strong>-</strong></td></tr>
+      <tr><td><strong>Net Salary</strong></td><td><strong>-</strong></td><td><strong>-</strong></td></tr>
     </table>
     <div class="section-title">Benefits</div>
     <ul class="list">
@@ -667,12 +661,8 @@ function renderAppointmentLetterHtml(
   const noticePeriod = escHtml(payload.noticePeriod);
   const annualCtc = formatInrNumber(payload.annualCtc);
   const ctcWords = escHtml(numberToIndianWords(payload.annualCtc));
-  const basicM = formatInrNumber(payload.basicSalary);
-  const basicA = formatInrNumber(payload.basicSalary * 12);
-  const allowM = formatInrNumber(payload.allowances);
-  const allowA = formatInrNumber(payload.allowances * 12);
-  const grossM = formatInrNumber(payload.monthlyGross);
-  const grossA = formatInrNumber(payload.annualCtc);
+  const basicM = formatInrNumber(payload.monthlyGross || payload.basicSalary);
+  const basicA = formatInrNumber(payload.annualCtc);
 
   const page1Closing = approval.accepted
     ? `<p>All details of this appointment and Annexures A, B &amp; C have been digitally reviewed and accepted through the GVK Edutech RenDesk Employee Portal. We are pleased to welcome you to the GVK Edutech family and look forward to a beneficial collaboration.</p>`
@@ -908,9 +898,9 @@ body{font-family:'Poppins',sans-serif;background:#e2e8f0;margin:0;padding:20px 0
   <table class="table">
     <tr><th>Salary Component</th><th>Monthly</th><th>Annual</th></tr>
     <tr><td>Basic Salary</td><td>₹ ${basicM}</td><td>₹ ${basicA}</td></tr>
-    <tr><td>Allowances</td><td>₹ ${allowM}</td><td>₹ ${allowA}</td></tr>
+    <tr><td>Allowances</td><td>-</td><td>-</td></tr>
     <tr><td>Performance Incentives</td><td>As Applicable</td><td>As Applicable</td></tr>
-    <tr><td><strong>Gross Salary</strong></td><td><strong>₹ ${grossM}</strong></td><td><strong>₹ ${grossA}</strong></td></tr>
+    <tr><td><strong>Gross Salary</strong></td><td><strong>-</strong></td><td><strong>-</strong></td></tr>
   </table>
   <div class="note-box">
     Any applicable tax will be borne by you. Incentives, bonuses, medical benefits and additional allowances are subject to company policy. Incentives for any employee shall not exceed ₹ 5,000/- for any company-related work.
