@@ -282,8 +282,8 @@ export default function EmployeeDetailPage() {
                     value={canSensitive ? fmtDate(e.dob) : "Restricted"}
                   />
                   <Stat label="Gender" value={e.gender || "—"} />
-                  <Stat label="Blood Group" value={e.bloodGroup || "O+"} />
-                  <Stat label="Marital Status" value={e.maritalStatus || "Single"} />
+                  <Stat label="Blood Group" value={e.bloodGroup || "—"} />
+                  <Stat label="Marital Status" value={e.maritalStatus || "—"} />
                   <Stat
                     label="Personal email"
                     value={canSensitive ? e.personalEmail || "—" : "Restricted"}
@@ -292,12 +292,12 @@ export default function EmployeeDetailPage() {
                     label="Emergency contact"
                     value={canSensitive ? e.emergencyContact || "—" : "Restricted"}
                   />
-                  <Stat label="PAN Card" value={canSensitive ? e.pan || "ABCDE1234F" : "Restricted"} />
+                  <Stat label="PAN Card" value={canSensitive ? e.pan || "—" : "Restricted"} />
                   <Stat label="Aadhaar Card Number" value={canSensitive ? (e.aadhaarNumber ? (e.aadhaarNumber.length === 12 ? `${e.aadhaarNumber.slice(0, 4)} ${e.aadhaarNumber.slice(4, 8)} ${e.aadhaarNumber.slice(8)}` : e.aadhaarNumber) : (e.aadharLast4 ? `•••• •••• ${e.aadharLast4}` : "—")) : "Restricted"} />
                   <div className="col-span-2 md:col-span-4">
                     <Stat
                       label="Residential Address"
-                      value={canSensitive ? e.address || "Hyderabad, Telangana" : "Restricted"}
+                      value={canSensitive ? e.address || "—" : "Restricted"}
                     />
                   </div>
                 </Grid>
@@ -310,10 +310,10 @@ export default function EmployeeDetailPage() {
                   <h4 className="font-semibold text-sm text-foreground">Education & Academic Qualifications</h4>
                 </div>
                 <Grid>
-                  <Stat label="Highest Qualification" value={e.qualification || "B.Tech in Computer Science"} />
-                  <Stat label="University / Institute" value={e.institution || "JNTU Hyderabad"} />
-                  <Stat label="Graduation Year" value={String(e.graduationYear || 2022)} />
-                  <Stat label="Final Grade / CGPA" value={e.grade || "First Class / 8.2 CGPA"} />
+                  <Stat label="Highest Qualification" value={e.qualification || "—"} />
+                  <Stat label="University / Institute" value={e.institution || "—"} />
+                  <Stat label="Graduation Year" value={e.graduationYear ? String(e.graduationYear) : "—"} />
+                  <Stat label="Final Grade / CGPA" value={e.grade || "—"} />
                 </Grid>
               </Card>
 
@@ -324,11 +324,11 @@ export default function EmployeeDetailPage() {
                   <h4 className="font-semibold text-sm text-foreground">Prior Work Experience & Core Expertise</h4>
                 </div>
                 <Grid>
-                  <Stat label="Total Experience" value={e.experienceYears ? `${e.experienceYears} Years` : "2+ Years"} />
-                  <Stat label="Previous Organization" value={e.previousCompany || "Established Technology Firm"} />
-                  <Stat label="Previous Designation" value={e.previousDesignation || "Software Engineer"} />
+                  <Stat label="Total Experience" value={e.experienceYears !== undefined ? `${e.experienceYears} Years` : "—"} />
+                  <Stat label="Previous Organization" value={e.previousCompany || "—"} />
+                  <Stat label="Previous Designation" value={e.previousDesignation || "—"} />
                   <div className="col-span-2 md:col-span-4">
-                    <Stat label="Core Skills & Domain Expertise" value={e.skills || "React, Next.js, TypeScript, Node.js, REST APIs"} />
+                    <Stat label="Core Skills & Domain Expertise" value={e.skills || "—"} />
                   </div>
                 </Grid>
               </Card>
@@ -341,8 +341,8 @@ export default function EmployeeDetailPage() {
                 <Stat label="Designation" value={e.designation} />
                 <Stat label="Department" value={e.department} />
                 <Stat label="Branch" value={e.branch} />
-                <Stat label="Employment type" value={e.employmentType} />
-                <Stat label="Probation" value={`${e.probationMonths} months`} />
+                <Stat label="Employment type" value={e.employmentType || "—"} />
+                <Stat label="Probation" value={e.probationMonths ? `${e.probationMonths} months` : "None (Confirmed)"} />
                 <Stat label="Status" value={<StatusBadge status={e.status} />} />
                 <Stat
                   label="Shift"

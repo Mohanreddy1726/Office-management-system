@@ -28,7 +28,7 @@ export function DeleteEmployeeDialog({
   onOpenChange,
   onDeleted,
 }: DeleteEmployeeDialogProps) {
-  const { session, deleteEmployee } = useStore();
+  const { session, deleteEmployee, refreshDocuments } = useStore();
   const [isDeleting, setIsDeleting] = useState(false);
 
   if (!emp) return null;
@@ -70,6 +70,7 @@ export function DeleteEmployeeDialog({
 
       // Immediately remove from client state
       deleteEmployee(emp.id, true);
+      refreshDocuments().catch(() => {});
       toast.success(resData.message || `Employee ${emp.name} (${emp.id}) permanently deleted`);
       onOpenChange(false);
       onDeleted?.(emp.id);

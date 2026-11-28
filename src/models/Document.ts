@@ -8,6 +8,18 @@ export interface IDocumentRecord extends MongooseDoc {
   fileUrl: string;
   fileSize?: string | number;
   fileType?: string;
+  docNumber?: string;
+  confidentiality?: string;
+  issueDate?: string;
+  uploadedBy?: string;
+  notes?: string;
+  version?: number;
+  letterType?: string;
+  letterData?: Record<string, any>;
+  acceptanceStatus?: string;
+  acceptedAt?: Date;
+  acceptedBy?: string;
+  systemGenerated?: boolean;
   employeeId?: string; // If employee-specific
   employeeName?: string;
   expiryDate?: string;
@@ -31,6 +43,18 @@ const DocumentRecordSchema = new Schema<IDocumentRecord>(
     fileUrl: { type: String, required: true },
     fileSize: { type: Schema.Types.Mixed },
     fileType: { type: String },
+    docNumber: { type: String },
+    confidentiality: { type: String },
+    issueDate: { type: String },
+    uploadedBy: { type: String },
+    notes: { type: String },
+    version: { type: Number, default: 1 },
+    letterType: { type: String },
+    letterData: { type: Schema.Types.Mixed },
+    acceptanceStatus: { type: String },
+    acceptedAt: { type: Date },
+    acceptedBy: { type: String },
+    systemGenerated: { type: Boolean },
     employeeId: { type: String, index: true },
     employeeName: { type: String },
     expiryDate: { type: String },

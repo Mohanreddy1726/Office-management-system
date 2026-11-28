@@ -513,31 +513,56 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 const id = dbEmp.employeeId;
                 const prev = existingMap.get(id);
                 const b = dbEmp.bankDetails;
+                const edu0 = Array.isArray(dbEmp.education) && dbEmp.education.length > 0 ? dbEmp.education[0] : null;
+                const exp0 = Array.isArray(dbEmp.experience) && dbEmp.experience.length > 0 ? dbEmp.experience[0] : null;
                 return {
-                  ...prev, // Base / mock defaults
+                  ...prev,
                   id,
                   name: dbEmp.name || prev?.name || "Employee",
-                  workEmail: dbEmp.workEmail || dbEmp.email || prev?.workEmail || "",
+                  workEmail: dbEmp.workEmail ?? dbEmp.email ?? prev?.workEmail ?? "",
                   personalEmail: dbEmp.personalEmail !== undefined ? dbEmp.personalEmail : (prev?.personalEmail || ""),
-                  phone: dbEmp.phone || prev?.phone || "+91 90000 00000",
-                  dob: dbEmp.dateOfBirth || prev?.dob || "2000-01-01",
-                  gender: dbEmp.gender || prev?.gender || "Other",
-                  address: dbEmp.address || prev?.address || "",
-                  emergencyContact: dbEmp.emergencyContact?.phone || prev?.emergencyContact || "+91 90000 00000",
-                  joiningDate: dbEmp.joiningDate || prev?.joiningDate || new Date().toISOString().slice(0, 10),
+                  phone: dbEmp.phone ?? prev?.phone ?? "",
+                  dob: dbEmp.dateOfBirth !== undefined ? dbEmp.dateOfBirth : (prev?.dob || ""),
+                  gender: dbEmp.gender || prev?.gender || undefined,
+                  maritalStatus: dbEmp.maritalStatus !== undefined ? dbEmp.maritalStatus : prev?.maritalStatus,
+                  address: dbEmp.address !== undefined ? dbEmp.address : (prev?.address || ""),
+                  emergencyContact:
+                    (typeof dbEmp.emergencyContact === "string"
+                      ? dbEmp.emergencyContact
+                      : dbEmp.emergencyContact?.phone) || prev?.emergencyContact || "",
+                  joiningDate: dbEmp.joiningDate || prev?.joiningDate || "",
                   branch: dbEmp.branch || prev?.branch || "Hyderabad",
                   department: dbEmp.department || prev?.department || "Operations",
                   team: dbEmp.department || dbEmp.team || prev?.department || "Operations",
-                  designation: dbEmp.designation || prev?.designation || "Staff",
-                  employmentType: "Full-time",
-                  managerId: dbEmp.reportingManagerId || prev?.managerId || null,
-                  probationMonths: dbEmp.probationEndDate ? 6 : (prev?.probationMonths || 3),
-                  status: dbEmp.status || "Active", // Authoritative status from database
-                  annualCTC: dbEmp.salary?.annualCtc || dbEmp.salary?.ctc || prev?.annualCTC || 600000,
-                  monthlyGross: dbEmp.salary?.monthlyGross || (dbEmp.salary?.basic ? dbEmp.salary.basic * 2 : 50000),
-                  aadhaarNumber: dbEmp.aadhaarNumber || prev?.aadhaarNumber,
+                  designation: dbEmp.designation || prev?.designation || "",
+                  employmentType: dbEmp.employmentType || prev?.employmentType || "Full-time",
+                  managerId: dbEmp.reportingManagerId !== undefined ? (dbEmp.reportingManagerId || null) : (prev?.managerId || null),
+                  probationMonths:
+                    dbEmp.probationMonths !== undefined
+                      ? dbEmp.probationMonths
+                      : dbEmp.status === "Probation"
+                        ? (prev?.probationMonths || 3)
+                        : 0,
+                  status: dbEmp.status || "Active",
+                  annualCTC: dbEmp.salary?.annualCtc ?? dbEmp.salary?.ctc ?? prev?.annualCTC ?? 0,
+                  monthlyGross: dbEmp.salary?.monthlyGross ?? prev?.monthlyGross ?? 0,
+                  salaryStructureId: dbEmp.salaryStructureId || prev?.salaryStructureId,
+                  qualification: dbEmp.qualification || edu0?.degree || prev?.qualification,
+                  institution: dbEmp.institution || edu0?.institution || prev?.institution,
+                  graduationYear:
+                    dbEmp.graduationYear !== undefined
+                      ? dbEmp.graduationYear
+                      : edu0?.yearOfPassing
+                        ? Number(edu0.yearOfPassing)
+                        : prev?.graduationYear,
+                  grade: dbEmp.grade || edu0?.percentageOrCgpa || prev?.grade,
+                  experienceYears: dbEmp.experienceYears !== undefined ? dbEmp.experienceYears : prev?.experienceYears,
+                  previousCompany: dbEmp.previousCompany || exp0?.companyName || prev?.previousCompany,
+                  previousDesignation: dbEmp.previousDesignation || exp0?.designation || prev?.previousDesignation,
+                  skills: dbEmp.skills || prev?.skills,
+                  aadhaarNumber: dbEmp.aadhaarNumber !== undefined ? dbEmp.aadhaarNumber : prev?.aadhaarNumber,
                   pan: dbEmp.panNumber || b?.panNumber || prev?.pan,
-                  bloodGroup: dbEmp.bloodGroup || prev?.bloodGroup,
+                  bloodGroup: dbEmp.bloodGroup !== undefined ? dbEmp.bloodGroup : prev?.bloodGroup,
                   bankName: b?.bankName || dbEmp.bankName || prev?.bankName,
                   accountNumber: b?.accountNumber || dbEmp.accountNumber || prev?.accountNumber,
                   ifscCode: b?.ifscCode || dbEmp.ifscCode || prev?.ifscCode,
@@ -803,6 +828,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           employees: d.employees.filter((e) => e.id !== id),
           leaves: d.leaves.filter((l) => l.employeeId !== id),
           attendance: d.attendance.filter((a) => a.employeeId !== id),
+          documents: d.documents.filter((doc) => doc.ownerId !== id),
           assets: d.assets.map((ast) =>
             ast.assignedTo === id ? { ...ast, assignedTo: null, status: "Available" } : ast
           ),

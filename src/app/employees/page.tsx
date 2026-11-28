@@ -1014,7 +1014,7 @@ function AddEmployeeDialog({
     }
   };
 
-  const calculatedMonthly = Math.round((Number(ctc) || 0) / 12 / 1000) * 1000;
+  const calculatedMonthly = Math.round((Number(ctc) || 0) / 12);
   const cleanAadhaar = aadhaarNumber.replace(/\s+/g, "");
   const valid =
     name.trim().length >= 2 &&
@@ -1022,6 +1022,50 @@ function AddEmployeeDialog({
     phone.trim().length >= 8 &&
     Number(ctc) > 0 &&
     cleanAadhaar.length === 12;
+
+  const resetForm = () => {
+    setActiveTab("personal");
+    setName("");
+    setDob("");
+    setGender("");
+    setBloodGroup("");
+    setMaritalStatus("");
+    setPhone("");
+    setPersonalEmail("");
+    setEmergencyContact("");
+    setAddress("");
+    setPan("");
+    setAadhaarNumber("");
+    setDesignation("");
+    setDepartment("");
+    setBranch("");
+    setEmploymentType("Full-time");
+    setManagerId("");
+    setJoining("");
+    setStatusChoice("Active");
+    setProbationMonths("3");
+    setWorkEmail("");
+    setBiometricId("");
+    setQualification("");
+    setInstitution("");
+    setGraduationYear("");
+    setGrade("");
+    setExperienceYears("");
+    setPreviousCompany("");
+    setPreviousDesignation("");
+    setSkills("");
+    setCtc("");
+    setSalaryStructureId("");
+    setBankName("");
+    setAccountNumber("");
+    setIfscCode("");
+    setPaymentMethod("");
+    setLoginEmail("");
+    setLoginPassword("");
+    setUserRole("employee");
+    setSendVerification(true);
+    setShowPassword(false);
+  };
 
   const tabsConfig = [
     { key: "personal" as const, label: "1. Personal", icon: <User className="h-3.5 w-3.5" /> },
@@ -1043,7 +1087,12 @@ function AddEmployeeDialog({
       return;
     }
 
-    const emailToUse = workEmail.trim() || `${name.toLowerCase().replace(/[^a-z0-9]+/g, ".")}@gvkedutech.com`;
+    const emailToUse = workEmail.trim() || personalEmail.trim();
+    if (!emailToUse) {
+      toast.error("Please enter either a Personal Email or Work Email.");
+      setActiveTab("job");
+      return;
+    }
     const acc = accountNumber.trim();
 
     setSubmitting(true);
@@ -1051,12 +1100,12 @@ function AddEmployeeDialog({
       await onSubmit({
         name: name.trim(),
         workEmail: emailToUse,
-        personalEmail: personalEmail.trim() || `${name.toLowerCase().replace(/[^a-z0-9]+/g, ".")}@gmail.com`,
+        personalEmail: personalEmail.trim(),
         phone: phone.trim(),
-        dob: dob || "2000-01-01",
-        gender: gender || "Other",
+        dob: dob || "",
+        gender: gender || undefined,
         bloodGroup: bloodGroup || undefined,
-        maritalStatus: (maritalStatus as any) || "Single",
+        maritalStatus: (maritalStatus as any) || undefined,
         address: address.trim(),
         emergencyContact: emergencyContact.trim(),
         pan: pan.trim().toUpperCase(),
@@ -1065,9 +1114,9 @@ function AddEmployeeDialog({
 
         // Job Details
         designation: designation.trim(),
-        department: department || DEPARTMENTS[0] || "Operations",
-        team: department || DEPARTMENTS[0] || "Operations",
-        branch: (branch as any) || BRANCHES[0] || "Headquarters",
+        department: department || "Operations",
+        team: department || "Operations",
+        branch: (branch as any) || "Hyderabad",
         employmentType: (employmentType as any) || "Full-time",
         managerId: managerId || null,
         joiningDate: joining || new Date().toISOString().slice(0, 10),
@@ -1084,7 +1133,7 @@ function AddEmployeeDialog({
         grade: grade.trim(),
 
         // Prior Experience
-        experienceYears: experienceYears ? Number(experienceYears) : 0,
+        experienceYears: experienceYears ? Number(experienceYears) : undefined,
         previousCompany: previousCompany.trim(),
         previousDesignation: previousDesignation.trim(),
         skills: skills.trim(),
@@ -1103,10 +1152,11 @@ function AddEmployeeDialog({
 
         // Login & Credentials
         loginEmail: loginEmail.trim() || emailToUse,
-        loginPassword: loginPassword.trim() || "GvkEmp@2026",
+        loginPassword: loginPassword.trim() || undefined,
         role: userRole,
         sendVerification,
       });
+      resetForm();
     } finally {
       setSubmitting(false);
     }

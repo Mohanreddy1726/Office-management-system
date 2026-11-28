@@ -7,6 +7,8 @@ import { BiometricMapping } from "@/models/Biometric";
 import { LeaveRequest, LeaveBalance } from "@/models/Leave";
 import { Attendance } from "@/models/Attendance";
 import { Asset } from "@/models/Asset";
+import { DocumentRecord } from "@/models/Document";
+import { Notification } from "@/models/Notification";
 import { reconcileEmployeePunches } from "@/lib/biometric-sync";
 import { ensureOnboardingLettersForEmployee } from "@/lib/onboarding-letters";
 import { getCurrentUser } from "@/lib/auth";
@@ -188,15 +190,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const annualCtc = Number(body.annualCTC || body.annualCtc) || 600000;
+    const annualCtc = Number(body.annualCTC || body.annualCtc) || 0;
     const monthlyGross = Math.round(annualCtc / 12);
-    const basic = Math.round(monthlyGross * 0.5);
-    const hra = Math.round(monthlyGross * 0.25);
-    const specialAllowance = monthlyGross - (basic + hra);
+    const basic = monthlyGross;
+    const hra = 0;
+    const specialAllowance = 0;
 
     const workEmail = (body.workEmail || body.email || "").toLowerCase().trim();
     const personalEmail = (body.personalEmail || "").toLowerCase().trim();
     const primaryEmail = workEmail || personalEmail;
+
+    if (!primaryEmail) {
+      return NextResponse.json(
+        { error: "Work email or personal email is required." },
+        { status: 400 }
+      );
+    }
 
     const loginEmail = (body.loginEmail || workEmail || personalEmail).toLowerCase().trim();
     const loginPassword = body.loginPassword || `GvkEmp@${Math.floor(1000 + Math.random() * 9000)}`;
@@ -241,8 +250,21 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      const count = await Employee.countDocuments();
-      const nextId = `OF-${1000 + count + 1}`;
+      const existingIds = await Employee.find({}, "employeeId").lean();
+      let maxNum = 1000;
+      for (const row of existingIds) {
+        const m = String(row.employeeId || "").match(/(\d+)$/);
+        if (m) {
+          const n = parseInt(m[1], 10);
+          if (!Number.isNaN(n) && n > maxNum) maxNum = n;
+        }
+      }
+      const nextId = `OF-${maxNum + 1}`;
+
+      const emergencyStr =
+        typeof body.emergencyContact === "string"
+          ? body.emergencyContact.trim()
+          : body.emergencyContact?.phone || "";
 
       const employee = await Employee.create({
         employeeId: nextId,
@@ -251,19 +273,61 @@ export async function POST(req: NextRequest) {
         workEmail,
         personalEmail,
         phone: body.phone.trim(),
-        gender: body.gender || "Other",
-        dateOfBirth: body.dob || body.dateOfBirth,
-        bloodGroup: body.bloodGroup,
-        address: body.address,
-        panNumber: (body.pan || body.panNumber || "").toUpperCase().trim(),
-        aadhaarNumber: cleanAadhaar,
+        gender: body.gender || undefined,
+        dateOfBirth: body.dob || body.dateOfBirth || undefined,
+        bloodGroup: body.bloodGroup || undefined,
+        maritalStatus: body.maritalStatus || undefined,
+        address: body.address || undefined,
+        panNumber: (body.pan || body.panNumber || "").toUpperCase().trim() || undefined,
+        aadhaarNumber: cleanAadhaar || undefined,
+        emergencyContact: emergencyStr
+          ? { name: "", relationship: "", phone: emergencyStr }
+          : undefined,
 
         designation: body.designation.trim(),
         department: body.department || "Operations",
         branch: body.branch || "Headquarters",
+        employmentType: body.employmentType || "Full-time",
+        reportingManagerId: body.managerId || body.reportingManagerId || undefined,
         status: shouldSendVerification ? "Pending Verification" : (isProbation ? "Probation" : "Active"),
         joiningDate: body.joiningDate || new Date().toISOString().slice(0, 10),
         probationEndDate,
+        probationMonths: isProbation ? probationMonths : 0,
+
+        qualification: body.qualification || undefined,
+        institution: body.institution || undefined,
+        graduationYear: body.graduationYear ? Number(body.graduationYear) : undefined,
+        grade: body.grade || undefined,
+        education:
+          body.qualification || body.institution
+            ? [
+                {
+                  degree: body.qualification || "",
+                  institution: body.institution || "",
+                  yearOfPassing: body.graduationYear ? String(body.graduationYear) : "",
+                  percentageOrCgpa: body.grade || "",
+                },
+              ]
+            : [],
+
+        experienceYears: body.experienceYears !== undefined ? Number(body.experienceYears) : undefined,
+        previousCompany: body.previousCompany || undefined,
+        previousDesignation: body.previousDesignation || undefined,
+        skills: body.skills || undefined,
+        experience:
+          body.previousCompany || body.previousDesignation
+            ? [
+                {
+                  companyName: body.previousCompany || "",
+                  designation: body.previousDesignation || "",
+                  fromDate: "",
+                  toDate: "",
+                },
+              ]
+            : [],
+
+        salaryStructureId: body.salaryStructureId || "SS-STANDARD",
+        paymentMethod: body.paymentMethod || "Corporate NEFT",
 
         bankDetails: {
           accountNumber: body.accountNumber || body.bankDetails?.accountNumber || "",
@@ -283,7 +347,7 @@ export async function POST(req: NextRequest) {
           professionalTax: 200,
           epfDeduction: 0, // Zero PF Policy
           esiDeduction: 0, // Zero ESI Policy
-          tds: Math.round(monthlyGross * 0.05),
+          tds: 0,
         },
 
         shift: {
@@ -659,12 +723,31 @@ export async function DELETE(req: NextRequest) {
         // 6. Release assigned assets back to inventory
         if (empId) {
           await Asset.updateMany(
-            { assignedTo: empId },
-            { $set: { assignedTo: null, status: "Available" } }
+            { $or: [{ "assignedTo.employeeId": empId }, { assignedTo: empId }] },
+            {
+              $set: { status: "Available", termsAccepted: false },
+              $unset: {
+                assignedTo: "",
+                assignedEmployeeName: "",
+                assignedAt: "",
+                assignedBy: "",
+                acceptanceStatus: "",
+                employeeSignature: "",
+                termsAcceptedAt: "",
+                termsVersion: "",
+                declineReason: "",
+              },
+            }
           );
         }
 
-        // 7. Audit log
+        // 7. Delete attached employee documents (including auto-generated onboarding letters) & notifications
+        if (empId) {
+          await DocumentRecord.deleteMany({ employeeId: empId });
+          await Notification.deleteMany({ targetUserId: empId });
+        }
+
+        // 8. Audit log
         await AuditLog.create({
           user: session?.name || "Super Admin",
           role: "super_admin",
@@ -686,6 +769,8 @@ export async function DELETE(req: NextRequest) {
       await LeaveRequest.deleteMany({ employeeId: id });
       await LeaveBalance.deleteMany({ employeeId: id });
       await Attendance.deleteMany({ employeeId: id });
+      await DocumentRecord.deleteMany({ employeeId: id });
+      await Notification.deleteMany({ targetUserId: id });
 
       return NextResponse.json({
         success: true,

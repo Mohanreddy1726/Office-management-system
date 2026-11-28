@@ -8,9 +8,10 @@ export interface IEmployee extends Document {
   personalEmail?: string;
   phone: string;
   avatarUrl?: string;
-  gender?: "Male" | "Female" | "Other";
+  gender?: "Male" | "Female" | "Other" | "Prefer not to say";
   dateOfBirth?: string;
   bloodGroup?: string;
+  maritalStatus?: string;
   address?: string;
   panNumber?: string;
   aadhaarNumber?: string; // Complete 12-digit Aadhaar Number
@@ -19,12 +20,26 @@ export interface IEmployee extends Document {
   designation: string;
   department: string;
   branch: string;
+  employmentType?: string;
   status: "Active" | "Probation" | "Notice" | "Inactive" | "Pending Verification";
   joiningDate: string;
   probationEndDate?: string;
+  probationMonths?: number;
   noticePeriodDays?: number;
   reportingManagerId?: string; // Links to another Employee
   reportingManagerName?: string;
+
+  // Flat convenience fields synced from onboarding form
+  qualification?: string;
+  institution?: string;
+  graduationYear?: number;
+  grade?: string;
+  experienceYears?: number;
+  previousCompany?: string;
+  previousDesignation?: string;
+  skills?: string;
+  salaryStructureId?: string;
+  paymentMethod?: string;
 
   // Emergency contact
   emergencyContact?: {
@@ -115,9 +130,10 @@ const EmployeeSchema = new Schema<IEmployee>(
       trim: true,
     },
     avatarUrl: { type: String },
-    gender: { type: String, enum: ["Male", "Female", "Other"] },
+    gender: { type: String, enum: ["Male", "Female", "Other", "Prefer not to say"] },
     dateOfBirth: { type: String },
     bloodGroup: { type: String },
+    maritalStatus: { type: String },
     address: { type: String },
     panNumber: { type: String, trim: true },
     aadhaarNumber: { type: String, trim: true, index: true },
@@ -125,6 +141,7 @@ const EmployeeSchema = new Schema<IEmployee>(
     designation: { type: String, required: true },
     department: { type: String, required: true },
     branch: { type: String, default: "Headquarters" },
+    employmentType: { type: String, default: "Full-time" },
     status: {
       type: String,
       enum: ["Active", "Probation", "Notice", "Inactive", "Pending Verification"],
@@ -132,9 +149,21 @@ const EmployeeSchema = new Schema<IEmployee>(
     },
     joiningDate: { type: String, required: true },
     probationEndDate: { type: String },
+    probationMonths: { type: Number },
     noticePeriodDays: { type: Number, default: 30 },
     reportingManagerId: { type: String },
     reportingManagerName: { type: String },
+
+    qualification: { type: String },
+    institution: { type: String },
+    graduationYear: { type: Number },
+    grade: { type: String },
+    experienceYears: { type: Number },
+    previousCompany: { type: String },
+    previousDesignation: { type: String },
+    skills: { type: String },
+    salaryStructureId: { type: String },
+    paymentMethod: { type: String },
 
     emergencyContact: {
       name: { type: String },
