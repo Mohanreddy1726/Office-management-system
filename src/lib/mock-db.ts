@@ -36,12 +36,7 @@ function getInitialStore(): MockStore {
     employees: [],
     attendances: [],
     leaves: [],
-    leaveBalances: {
-      "OF-1001": { casualLeave: { total: 12, used: 0, remaining: 12 }, sickLeave: { total: 10, used: 0, remaining: 10 }, compOff: { total: 2, used: 0, remaining: 2 } },
-      "OF-1010": { casualLeave: { total: 12, used: 0, remaining: 12 }, sickLeave: { total: 10, used: 0, remaining: 10 }, compOff: { total: 2, used: 0, remaining: 2 } },
-      "OF-1002": { casualLeave: { total: 12, used: 0, remaining: 12 }, sickLeave: { total: 10, used: 0, remaining: 10 }, compOff: { total: 2, used: 0, remaining: 2 } },
-      "OF-1011": { casualLeave: { total: 12, used: 0, remaining: 12 }, sickLeave: { total: 10, used: 0, remaining: 10 }, compOff: { total: 2, used: 0, remaining: 2 } },
-    },
+    leaveBalances: {},
     payrollRuns: [],
     payslips: [],
     devices: [],

@@ -44,10 +44,10 @@ export async function GET(req: NextRequest) {
 
       const employees = await Employee.find(query).sort({ employeeId: 1 }).lean();
 
-      // Auto-standardize departments to: Telecaller, Operations, Digital, Business Development
+      // Auto-standardize legacy department names only if explicitly matching old labels
       for (const emp of employees) {
         let normalizedDept = emp.department;
-        if (!emp.department || emp.department === "Engineering" || emp.department === "Design") {
+        if (emp.department === "Engineering" || emp.department === "Design") {
           normalizedDept = "Digital";
         } else if (emp.department === "Human Resources" || emp.department === "Finance" || emp.department === "Customer Support") {
           normalizedDept = "Operations";
@@ -285,9 +285,9 @@ export async function POST(req: NextRequest) {
           : undefined,
 
         designation: body.designation.trim(),
-        department: body.department || "Operations",
-        branch: body.branch || "Headquarters",
-        employmentType: body.employmentType || "Full-time",
+        department: body.department || "",
+        branch: body.branch || "",
+        employmentType: body.employmentType || "",
         reportingManagerId: body.managerId || body.reportingManagerId || undefined,
         status: shouldSendVerification ? "Pending Verification" : (isProbation ? "Probation" : "Active"),
         joiningDate: body.joiningDate || new Date().toISOString().slice(0, 10),
@@ -326,8 +326,8 @@ export async function POST(req: NextRequest) {
               ]
             : [],
 
-        salaryStructureId: body.salaryStructureId || "SS-STANDARD",
-        paymentMethod: body.paymentMethod || "Corporate NEFT",
+        salaryStructureId: body.salaryStructureId || undefined,
+        paymentMethod: body.paymentMethod || undefined,
 
         bankDetails: {
           accountNumber: body.accountNumber || body.bankDetails?.accountNumber || "",

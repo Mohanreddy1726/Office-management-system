@@ -451,7 +451,7 @@ export default function EmployeeDetailPage() {
                     }
                   />
                   <Stat label="IFSC Code" value={e.ifscCode || "—"} />
-                  <Stat label="Payment Method" value={e.paymentMethod || "Corporate NEFT"} />
+                  <Stat label="Payment Method" value={e.paymentMethod || "—"} />
                 </Grid>
               </Card>
             </div>

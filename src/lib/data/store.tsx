@@ -511,63 +511,62 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               const existingMap = new Map(d.employees.map((e) => [e.id, e]));
               const authoritativeEmployees = resData.employees.map((dbEmp: any) => {
                 const id = dbEmp.employeeId;
-                const prev = existingMap.get(id);
                 const b = dbEmp.bankDetails;
                 const edu0 = Array.isArray(dbEmp.education) && dbEmp.education.length > 0 ? dbEmp.education[0] : null;
                 const exp0 = Array.isArray(dbEmp.experience) && dbEmp.experience.length > 0 ? dbEmp.experience[0] : null;
                 return {
-                  ...prev,
                   id,
-                  name: dbEmp.name || prev?.name || "Employee",
-                  workEmail: dbEmp.workEmail ?? dbEmp.email ?? prev?.workEmail ?? "",
-                  personalEmail: dbEmp.personalEmail !== undefined ? dbEmp.personalEmail : (prev?.personalEmail || ""),
-                  phone: dbEmp.phone ?? prev?.phone ?? "",
-                  dob: dbEmp.dateOfBirth !== undefined ? dbEmp.dateOfBirth : (prev?.dob || ""),
-                  gender: dbEmp.gender || prev?.gender || undefined,
-                  maritalStatus: dbEmp.maritalStatus !== undefined ? dbEmp.maritalStatus : prev?.maritalStatus,
-                  address: dbEmp.address !== undefined ? dbEmp.address : (prev?.address || ""),
+                  name: dbEmp.name || "",
+                  workEmail: dbEmp.workEmail ?? dbEmp.email ?? "",
+                  personalEmail: dbEmp.personalEmail ?? "",
+                  phone: dbEmp.phone ?? "",
+                  dob: dbEmp.dateOfBirth ?? "",
+                  gender: dbEmp.gender || undefined,
+                  maritalStatus: dbEmp.maritalStatus ?? undefined,
+                  address: dbEmp.address ?? "",
                   emergencyContact:
                     (typeof dbEmp.emergencyContact === "string"
                       ? dbEmp.emergencyContact
-                      : dbEmp.emergencyContact?.phone) || prev?.emergencyContact || "",
-                  joiningDate: dbEmp.joiningDate || prev?.joiningDate || "",
-                  branch: dbEmp.branch || prev?.branch || "Hyderabad",
-                  department: dbEmp.department || prev?.department || "Operations",
-                  team: dbEmp.department || dbEmp.team || prev?.department || "Operations",
-                  designation: dbEmp.designation || prev?.designation || "",
-                  employmentType: dbEmp.employmentType || prev?.employmentType || "Full-time",
-                  managerId: dbEmp.reportingManagerId !== undefined ? (dbEmp.reportingManagerId || null) : (prev?.managerId || null),
+                      : dbEmp.emergencyContact?.phone) || "",
+                  joiningDate: dbEmp.joiningDate ?? "",
+                  branch: (dbEmp.branch ?? "") as Branch,
+                  department: dbEmp.department ?? "",
+                  team: dbEmp.department ?? dbEmp.team ?? "",
+                  designation: dbEmp.designation ?? "",
+                  employmentType: dbEmp.employmentType ?? "",
+                  managerId: dbEmp.reportingManagerId || null,
                   probationMonths:
                     dbEmp.probationMonths !== undefined
                       ? dbEmp.probationMonths
                       : dbEmp.status === "Probation"
-                        ? (prev?.probationMonths || 3)
+                        ? 3
                         : 0,
-                  status: dbEmp.status || "Active",
-                  annualCTC: dbEmp.salary?.annualCtc ?? dbEmp.salary?.ctc ?? prev?.annualCTC ?? 0,
-                  monthlyGross: dbEmp.salary?.monthlyGross ?? prev?.monthlyGross ?? 0,
-                  salaryStructureId: dbEmp.salaryStructureId || prev?.salaryStructureId,
-                  qualification: dbEmp.qualification || edu0?.degree || prev?.qualification,
-                  institution: dbEmp.institution || edu0?.institution || prev?.institution,
+                  status: dbEmp.status || "Pending Verification",
+                  annualCTC: dbEmp.salary?.annualCtc ?? dbEmp.salary?.ctc ?? 0,
+                  monthlyGross: dbEmp.salary?.monthlyGross ?? 0,
+                  salaryStructureId: dbEmp.salaryStructureId || undefined,
+                  qualification: dbEmp.qualification || edu0?.degree || undefined,
+                  institution: dbEmp.institution || edu0?.institution || undefined,
                   graduationYear:
                     dbEmp.graduationYear !== undefined
                       ? dbEmp.graduationYear
                       : edu0?.yearOfPassing
                         ? Number(edu0.yearOfPassing)
-                        : prev?.graduationYear,
-                  grade: dbEmp.grade || edu0?.percentageOrCgpa || prev?.grade,
-                  experienceYears: dbEmp.experienceYears !== undefined ? dbEmp.experienceYears : prev?.experienceYears,
-                  previousCompany: dbEmp.previousCompany || exp0?.companyName || prev?.previousCompany,
-                  previousDesignation: dbEmp.previousDesignation || exp0?.designation || prev?.previousDesignation,
-                  skills: dbEmp.skills || prev?.skills,
-                  aadhaarNumber: dbEmp.aadhaarNumber !== undefined ? dbEmp.aadhaarNumber : prev?.aadhaarNumber,
-                  pan: dbEmp.panNumber || b?.panNumber || prev?.pan,
-                  bloodGroup: dbEmp.bloodGroup !== undefined ? dbEmp.bloodGroup : prev?.bloodGroup,
-                  bankName: b?.bankName || dbEmp.bankName || prev?.bankName,
-                  accountNumber: b?.accountNumber || dbEmp.accountNumber || prev?.accountNumber,
-                  ifscCode: b?.ifscCode || dbEmp.ifscCode || prev?.ifscCode,
-                  bankLast4: b?.bankLast4 || (b?.accountNumber ? b.accountNumber.slice(-4) : undefined) || dbEmp.bankLast4 || prev?.bankLast4,
-                  paymentMethod: dbEmp.paymentMethod || prev?.paymentMethod || "Corporate NEFT",
+                        : undefined,
+                  grade: dbEmp.grade || edu0?.percentageOrCgpa || undefined,
+                  experienceYears: dbEmp.experienceYears !== undefined ? dbEmp.experienceYears : undefined,
+                  previousCompany: dbEmp.previousCompany || exp0?.companyName || undefined,
+                  previousDesignation: dbEmp.previousDesignation || exp0?.designation || undefined,
+                  skills: dbEmp.skills || undefined,
+                  aadhaarNumber: dbEmp.aadhaarNumber ?? undefined,
+                  aadharLast4: dbEmp.aadhaarNumber ? String(dbEmp.aadhaarNumber).slice(-4) : undefined,
+                  pan: dbEmp.panNumber || b?.panNumber || undefined,
+                  bloodGroup: dbEmp.bloodGroup ?? undefined,
+                  bankName: b?.bankName || dbEmp.bankName || undefined,
+                  accountNumber: b?.accountNumber || dbEmp.accountNumber || undefined,
+                  ifscCode: b?.ifscCode || dbEmp.ifscCode || undefined,
+                  bankLast4: b?.bankLast4 || (b?.accountNumber ? b.accountNumber.slice(-4) : undefined) || dbEmp.bankLast4 || undefined,
+                  paymentMethod: dbEmp.paymentMethod || undefined,
                 };
               });
               return { ...d, employees: authoritativeEmployees };

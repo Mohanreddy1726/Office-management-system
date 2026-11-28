@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
       await Payslip.deleteMany({ payrollRunId: runId });
 
       for (const emp of employees) {
-        const gross = emp.salary?.monthlyGross || 50000;
+        const gross = Number(emp.salary?.monthlyGross) || 0;
         const basic = emp.salary?.basic || Math.round(gross * 0.45);
         const hra = emp.salary?.hra || Math.round(basic * 0.5);
         const specialAllowance = Math.max(0, gross - (basic + hra));
@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
       const newPayslips: any[] = [];
 
       for (const emp of employees) {
-        const gross = emp.salary?.monthlyGross || 50000;
+        const gross = Number(emp.salary?.monthlyGross) || 0;
         const basic = emp.salary?.basic || Math.round(gross * 0.45);
         const hra = emp.salary?.hra || Math.round(basic * 0.5);
         const specialAllowance = Math.max(0, gross - (basic + hra));

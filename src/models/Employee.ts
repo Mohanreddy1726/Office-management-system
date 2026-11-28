@@ -140,8 +140,8 @@ const EmployeeSchema = new Schema<IEmployee>(
 
     designation: { type: String, required: true },
     department: { type: String, required: true },
-    branch: { type: String, default: "Headquarters" },
-    employmentType: { type: String, default: "Full-time" },
+    branch: { type: String },
+    employmentType: { type: String },
     status: {
       type: String,
       enum: ["Active", "Probation", "Notice", "Inactive", "Pending Verification"],
@@ -150,7 +150,7 @@ const EmployeeSchema = new Schema<IEmployee>(
     joiningDate: { type: String, required: true },
     probationEndDate: { type: String },
     probationMonths: { type: Number },
-    noticePeriodDays: { type: Number, default: 30 },
+    noticePeriodDays: { type: Number },
     reportingManagerId: { type: String },
     reportingManagerName: { type: String },
 

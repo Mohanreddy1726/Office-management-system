@@ -734,12 +734,16 @@ function EmployeeCard({
           </div>
           <div className="flex items-center gap-2">
             <Phone className="h-3.5 w-3.5 text-muted-foreground/80 shrink-0" />
-            <a
-              href={`tel:${emp.phone || "+919849000000"}`}
-              className="hover:text-foreground transition-colors"
-            >
-              {emp.phone || "+91 90000 00000"}
-            </a>
+            {emp.phone ? (
+              <a
+                href={`tel:${emp.phone}`}
+                className="hover:text-foreground transition-colors"
+              >
+                {emp.phone}
+              </a>
+            ) : (
+              <span>—</span>
+            )}
           </div>
         </div>
 
@@ -1001,17 +1005,9 @@ function AddEmployeeDialog({
     setAadhaarNumber(parts.join(" "));
   };
 
-  // Update auto-generated work email as name changes
+  // Legal name input (never auto-generates fake email domains)
   const handleNameChange = (val: string) => {
     setName(val);
-    const sanitized = val.toLowerCase().replace(/[^a-z0-9]+/g, ".").replace(/^\.+|\.+$/g, "");
-    const generated = sanitized ? `${sanitized}@gvkedutech.com` : "";
-    if (!workEmail || workEmail.includes("@gvkedutech.com") || workEmail.includes("@rendesk.example") || workEmail.includes("@officeflow.example")) {
-      setWorkEmail(generated);
-    }
-    if (!loginEmail || loginEmail.includes("@gvkedutech.com")) {
-      setLoginEmail(generated);
-    }
   };
 
   const calculatedMonthly = Math.round((Number(ctc) || 0) / 12);
@@ -1087,6 +1083,17 @@ function AddEmployeeDialog({
       return;
     }
 
+    if (!department) {
+      toast.error("Please select a Department in Tab 2 (Job & Org).");
+      setActiveTab("job");
+      return;
+    }
+    if (!branch) {
+      toast.error("Please select a Branch Office in Tab 2 (Job & Org).");
+      setActiveTab("job");
+      return;
+    }
+
     const emailToUse = workEmail.trim() || personalEmail.trim();
     if (!emailToUse) {
       toast.error("Please enter either a Personal Email or Work Email.");
@@ -1114,9 +1121,9 @@ function AddEmployeeDialog({
 
         // Job Details
         designation: designation.trim(),
-        department: department || "Operations",
-        team: department || "Operations",
-        branch: (branch as any) || "Hyderabad",
+        department,
+        team: department,
+        branch: branch as any,
         employmentType: (employmentType as any) || "Full-time",
         managerId: managerId || null,
         joiningDate: joining || new Date().toISOString().slice(0, 10),
@@ -1141,14 +1148,12 @@ function AddEmployeeDialog({
         // Compensation & Banking (No PF & No ESI)
         annualCTC: Number(ctc) || 0,
         monthlyGross: calculatedMonthly,
-        salaryStructureId:
-          salaryStructureId ||
-          (Number(ctc) > 1500000 ? "SS-EXEC" : Number(ctc) > 800000 ? "SS-SENIOR" : "SS-STANDARD"),
+        salaryStructureId: salaryStructureId || undefined,
         bankName: bankName.trim(),
         accountNumber: acc,
         bankLast4: acc ? acc.slice(-4) : undefined,
         ifscCode: ifscCode.trim().toUpperCase(),
-        paymentMethod: paymentMethod || "Corporate NEFT",
+        paymentMethod: paymentMethod || undefined,
 
         // Login & Credentials
         loginEmail: loginEmail.trim() || emailToUse,
@@ -1163,7 +1168,13 @@ function AddEmployeeDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) resetForm();
+        onOpenChange(v);
+      }}
+    >
       <DialogContent className="w-[96vw] max-w-5xl max-h-[92vh] overflow-y-auto overflow-x-hidden p-6 sm:p-8">
         <DialogHeader className="border-b border-border/80 pb-3">
           <div className="flex items-center justify-between">

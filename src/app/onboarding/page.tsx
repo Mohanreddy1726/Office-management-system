@@ -812,10 +812,10 @@ function ScheduleJoinerDialog({
 
   // Role & Placement
   const [designation, setDesignation] = useState("");
-  const [department, setDepartment] = useState(DEPARTMENTS[0] || "Operations");
+  const [department, setDepartment] = useState("");
   const [branch, setBranch] = useState<Branch>("Hyderabad");
-  const [joiningDate, setJoiningDate] = useState("2026-11-15");
-  const [ctc, setCtc] = useState("1200000");
+  const [joiningDate, setJoiningDate] = useState("");
+  const [ctc, setCtc] = useState("");
 
   // Pre-onboarding & Buddy
   const [buddy, setBuddy] = useState(data.employees[0]?.id || "");
@@ -824,9 +824,7 @@ function ScheduleJoinerDialog({
   const [allocBadge, setAllocBadge] = useState(true);
   const [allocWelcome, setAllocWelcome] = useState(true);
 
-  const workEmail = name
-    ? `${name.trim().toLowerCase().replace(/\s+/g, ".")}@gvkedutech.com`
-    : "employee@gvkedutech.com";
+  const workEmail = personalEmail.trim();
 
   const validCandidate = name.trim().length >= 3 && personalEmail.includes("@");
   const validRole = designation.trim().length >= 2 && joiningDate.length >= 8;

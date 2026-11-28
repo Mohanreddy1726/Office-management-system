@@ -159,7 +159,7 @@ export function numberToIndianWords(numInput: number): string {
 }
 
 export function buildLetterPayloadFromEmployee(emp: any, issuedBy = "HR / Super Admin"): OnboardingLetterPayload {
-  const annualCtc = Number(emp.salary?.annualCtc || emp.salary?.annualCTC || emp.annualCTC) || 600000;
+  const annualCtc = Number(emp.salary?.annualCtc || emp.salary?.annualCTC || emp.annualCTC) || 0;
   const monthlyGross = Number(emp.salary?.monthlyGross) || Math.round(annualCtc / 12);
   const basicSalary = monthlyGross;
   const allowances = 0;
