@@ -1,13 +1,13 @@
 // RenDesk Service Worker - PWA Offline & Mobile Performance
-const CACHE_NAME = "rendesk-pwa-v1";
+const CACHE_NAME = "rendesk-pwa-v2";
 const STATIC_ASSETS = [
   "/",
   "/favicon.svg",
-  "/manifest.json",
-  "/icons/icon.svg",
-  "/icons/icon-192x192.png",
-  "/icons/icon-512x512.png",
-  "/apple-touch-icon.png",
+  "/manifest.json?v=2",
+  "/icons/icon.svg?v=2",
+  "/icons/icon-192x192.png?v=2",
+  "/icons/icon-512x512.png?v=2",
+  "/apple-touch-icon.png?v=2",
 ];
 
 // Install: Cache static shell assets
@@ -132,8 +132,8 @@ self.addEventListener("push", (event) => {
 
   const options = {
     body: data.body || data.message || "New notification from RenDesk",
-    icon: "/icons/icon-192x192.png",
-    badge: "/icons/icon.svg",
+    icon: "/icons/icon-192x192.png?v=2",
+    badge: "/icons/icon.svg?v=2",
     vibrate: [100, 50, 100],
     data: {
       url: data.url || "/notifications",
